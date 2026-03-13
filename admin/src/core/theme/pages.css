@@ -1,0 +1,996 @@
+/* ==========================================================================
+   Forma Auth — Page Layouts
+   ─────────────────────────
+   Page-level layout CSS for public pages (login, onboarding, tenant login).
+   Depends on tokens.css + base.css + components.css.
+   ========================================================================== */
+
+
+/* ==========================================================================
+   Platform Login — Split Layout (.page)
+   ========================================================================== */
+
+.page {
+  display: grid;
+  grid-template-columns: 55fr 45fr;
+  grid-template-rows: 1fr auto;
+  min-height: 100vh;
+  position: relative;
+  z-index: 1;
+}
+
+.page > .hero {
+  grid-column: 1;
+  grid-row: 1;
+}
+
+.page > .auth {
+  grid-column: 2;
+  grid-row: 1;
+}
+
+.page > .page-footer {
+  grid-column: 1 / -1;
+  grid-row: 2;
+}
+
+
+/* ── Hero Section ──────────────────────────────────────────────────────── */
+
+.hero {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 3rem 2.5rem;
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+  position: relative;
+  overflow: hidden;
+}
+
+.hero::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(
+    ellipse at 30% 40%,
+    rgba(196, 162, 101, 0.06) 0%,
+    transparent 60%
+  );
+  pointer-events: none;
+}
+
+.hero-content {
+  max-width: 480px;
+  position: relative;
+  z-index: 1;
+}
+
+.hero-content h1 {
+  font-family: 'Instrument Serif', Georgia, serif;
+  font-size: 2rem;
+  font-weight: 400;
+  letter-spacing: -0.03em;
+  line-height: 1.15;
+  color: var(--text);
+  margin: 0 0 1rem;
+  animation: fade-up 0.5s var(--ease) 0.1s both;
+}
+
+.hero-content > p {
+  color: var(--text-dim);
+  font-size: 0.82rem;
+  line-height: 1.7;
+  margin: 0 0 1.75rem;
+  animation: fade-up 0.5s var(--ease) 0.2s both;
+}
+
+.hero-badge {
+  display: inline-block;
+  font-size: 0.6rem;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--accent);
+  border: 1px solid var(--accent-border);
+  background: var(--accent-glow);
+  padding: 0.25rem 0.65rem;
+  margin-bottom: 1.25rem;
+  animation: fade-up 0.5s var(--ease) both;
+}
+
+.hero-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+  animation: fade-up 0.5s var(--ease) 0.3s both;
+}
+
+.hero-stat {
+  border: 1px solid var(--border-accent);
+  background: var(--surface-raised);
+  padding: 0.65rem 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  transition: border-color var(--duration) ease;
+}
+
+.hero-stat:hover {
+  border-color: var(--border-strong);
+}
+
+.hero-stat .k {
+  font-size: 0.55rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text-muted);
+}
+
+.hero-stat .v {
+  font-size: 0.78rem;
+  color: var(--text-dim);
+  font-weight: 300;
+}
+
+
+/* ── Auth Section ──────────────────────────────────────────────────────── */
+
+.auth {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 3rem 2.5rem;
+}
+
+.auth > .card {
+  width: 100%;
+  max-width: 400px;
+  animation: card-in 0.45s var(--ease) 0.15s both;
+}
+
+.auth .card-head {
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.auth .card-head h2 {
+  margin: 0;
+}
+
+.auth .card-head p {
+  color: var(--text-dim);
+  font-size: 0.78rem;
+  margin: 0.25rem 0 0;
+  font-weight: 300;
+}
+
+
+/* ── Actions (OAuth buttons container) ─────────────────────────────────── */
+
+.actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.actions .btn {
+  width: 100%;
+  justify-content: center;
+}
+
+
+/* ── Form ──────────────────────────────────────────────────────────────── */
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+
+/* ── Page Footer ───────────────────────────────────────────────────────── */
+
+.page-footer {
+  text-align: center;
+  padding: 1.25rem 1rem;
+}
+
+.footer-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-size: 0.65rem;
+  color: var(--text-muted);
+  letter-spacing: 0.06em;
+}
+
+
+/* ── Platform Login — Responsive ───────────────────────────────────────── */
+
+@media (max-width: 768px) {
+  .page {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto 1fr auto;
+  }
+
+  .page > .hero {
+    grid-column: 1;
+    grid-row: 1;
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+    padding: 2rem 1.25rem;
+  }
+
+  .page > .auth {
+    grid-column: 1;
+    grid-row: 2;
+    padding: 2rem 1.25rem;
+  }
+
+  .page > .page-footer {
+    grid-column: 1;
+    grid-row: 3;
+  }
+
+  .hero-content h1 {
+    font-size: 1.5rem;
+  }
+
+  .hero-grid {
+    grid-template-columns: 1fr 1fr;
+    gap: 0.5rem;
+  }
+}
+
+
+/* ==========================================================================
+   Onboarding Page — Stacked Centered (.onboarding-page)
+   ========================================================================== */
+
+.onboarding-page {
+  max-width: 640px;
+  margin: 0 auto;
+  padding: 2.5rem 1.5rem 2rem;
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+  min-height: 100vh;
+}
+
+
+/* ── Brand Header ──────────────────────────────────────────────────────── */
+
+.brand-header {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.85rem;
+  color: var(--text-dim);
+  letter-spacing: 0.02em;
+  animation: fade-up 0.4s var(--ease) both;
+}
+
+.brand-header .brand-mark {
+  font-size: 1.1rem;
+  background: linear-gradient(135deg, #34d399, var(--accent));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+
+/* ── Hero Section (Onboarding) ─────────────────────────────────────────── */
+
+.hero-section {
+  text-align: center;
+  animation: fade-up 0.5s var(--ease) 0.1s both;
+}
+
+
+/* ── Capabilities Grid ─────────────────────────────────────────────────── */
+
+.capabilities {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+  animation: fade-up 0.5s var(--ease) 0.2s both;
+}
+
+.cap-card {
+  border: 1px solid var(--border);
+  background: var(--surface);
+  padding: 1rem 1.1rem;
+  transition: border-color var(--duration) ease;
+}
+
+.cap-card:hover {
+  border-color: var(--border-accent);
+}
+
+.cap-card h3 {
+  font-size: 0.85rem;
+  margin: 0 0 0.35rem;
+  color: var(--text);
+}
+
+.cap-card p {
+  font-size: 0.75rem;
+  color: var(--text-dim);
+  line-height: 1.6;
+  margin: 0;
+  font-weight: 300;
+}
+
+
+/* ── CTA Section ───────────────────────────────────────────────────────── */
+
+.cta-section {
+  text-align: center;
+  animation: fade-up 0.5s var(--ease) 0.3s both;
+}
+
+.cta-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--accent);
+  color: var(--bg);
+  border: 1px solid var(--accent);
+  padding: 0.65rem 2rem;
+  font-size: 0.82rem;
+  font-family: inherit;
+  font-weight: 400;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  transition: all var(--duration) ease;
+}
+
+.cta-btn:hover {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+  box-shadow: 0 0 24px var(--accent-dim);
+  color: var(--bg);
+}
+
+
+/* ── Auth Section (Onboarding) ─────────────────────────────────────────── */
+
+.auth-section {
+  animation: card-in 0.45s var(--ease) 0.35s both;
+}
+
+.auth-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+.oauth-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-bottom: 0.25rem;
+}
+
+.oauth-actions .btn {
+  width: 100%;
+  justify-content: center;
+}
+
+
+/* ── Onboarding — Responsive ──────────────────────────────────────────── */
+
+@media (max-width: 520px) {
+  .onboarding-page {
+    padding: 1.5rem 1rem;
+    gap: 1.5rem;
+  }
+
+  .capabilities {
+    grid-template-columns: 1fr;
+  }
+}
+
+
+/* ==========================================================================
+   Tenant Login — Centered Card (.tl-*)
+   ========================================================================== */
+
+.tl-page {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  padding: 2rem 1rem;
+  position: relative;
+  z-index: 1;
+}
+
+.tl-card {
+  width: 100%;
+  max-width: 400px;
+  background: var(--surface);
+  border: 1px solid var(--border-accent);
+  box-shadow: var(--shadow-lg);
+  padding: 2rem 1.75rem;
+  animation: card-in 0.4s var(--ease) both;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+
+/* ── Logo Area ─────────────────────────────────────────────────────────── */
+
+.tl-logo-area {
+  text-align: center;
+  margin-bottom: 0.5rem;
+}
+
+.tl-logo {
+  max-height: 48px;
+  max-width: 200px;
+  margin-bottom: 0.65rem;
+  object-fit: contain;
+}
+
+.tl-app-name {
+  font-family: 'Instrument Serif', Georgia, serif;
+  font-size: 1.35rem;
+  font-weight: 400;
+  letter-spacing: -0.02em;
+  color: var(--text);
+}
+
+.tl-subtitle {
+  font-size: 0.78rem;
+  color: var(--text-dim);
+  text-align: center;
+  margin-bottom: 0.5rem;
+  font-weight: 300;
+}
+
+
+/* ── Form Controls ─────────────────────────────────────────────────────── */
+
+.tl-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  margin-bottom: 0.75rem;
+}
+
+.tl-field label {
+  margin-bottom: 0.35rem;
+}
+
+.tl-password-wrap {
+  position: relative;
+}
+
+.tl-password-wrap input {
+  padding-right: 3rem;
+}
+
+.tl-password-toggle {
+  position: absolute;
+  right: 0.5rem;
+  top: 50%;
+  transform: translateY(-50%);
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 0.2rem;
+  display: flex;
+  align-items: center;
+}
+
+.tl-password-toggle:hover {
+  color: var(--text-dim);
+  border: none;
+}
+
+
+/* ── Buttons ───────────────────────────────────────────────────────────── */
+
+.tl-btn {
+  width: 100%;
+  border: 1px solid var(--border-accent);
+  background: transparent;
+  color: var(--text-dim);
+  padding: 0.55rem 0.8rem;
+  cursor: pointer;
+  font-size: 0.8rem;
+  font-family: inherit;
+  font-weight: 400;
+  letter-spacing: 0.04em;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  transition: all var(--duration) ease;
+}
+
+.tl-btn:hover {
+  color: var(--text);
+  border-color: var(--text-dim);
+}
+
+.tl-btn[disabled] {
+  opacity: 0.25;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+.tl-btn-primary {
+  background: var(--accent, var(--primary, #6366f1));
+  color: var(--bg);
+  border-color: var(--accent, var(--primary, #6366f1));
+  font-weight: 400;
+}
+
+.tl-btn-primary:hover {
+  filter: brightness(1.1);
+  box-shadow: 0 0 20px rgba(99, 102, 241, 0.2);
+  color: var(--bg);
+}
+
+.tl-btn-oauth {
+  background: var(--surface-raised);
+  border-color: var(--border-accent);
+  color: var(--text-dim);
+}
+
+.tl-btn-oauth:hover {
+  background: var(--surface-overlay);
+  color: var(--text);
+  border-color: var(--border-strong);
+}
+
+.tl-btn-oauth svg {
+  flex-shrink: 0;
+}
+
+
+/* ── OAuth Buttons Container ───────────────────────────────────────────── */
+
+.tl-oauth-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+
+/* ── Divider ───────────────────────────────────────────────────────────── */
+
+.tl-divider {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  font-size: 0.6rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text-muted);
+  margin: 0.75rem 0;
+}
+
+.tl-divider::before,
+.tl-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+
+
+/* ── Utility Classes ───────────────────────────────────────────────────── */
+
+.tl-forgot {
+  text-align: right;
+  margin-top: -0.25rem;
+  margin-bottom: 0.25rem;
+}
+
+.tl-forgot .tl-link {
+  font-size: 0.72rem;
+}
+
+.tl-remember {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.75rem;
+  color: var(--text-dim);
+  cursor: pointer;
+  user-select: none;
+  text-transform: none;
+  letter-spacing: 0;
+  font-weight: 300;
+  margin-bottom: 0.25rem;
+}
+
+.tl-remember input[type="checkbox"] {
+  width: auto;
+  margin: 0;
+  accent-color: var(--accent, var(--primary, #6366f1));
+}
+
+.tl-link {
+  color: var(--accent, var(--primary, #6366f1));
+  cursor: pointer;
+  text-decoration: none;
+  font-size: 0.78rem;
+  transition: color var(--duration) ease;
+}
+
+.tl-link:hover {
+  text-decoration: underline;
+}
+
+.tl-toggle {
+  text-align: center;
+  font-size: 0.78rem;
+  color: var(--text-dim);
+  margin-top: 0.75rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--border);
+  font-weight: 300;
+}
+
+.tl-notice {
+  font-size: 0.75rem;
+  color: var(--text-dim);
+  background: var(--surface-raised);
+  border: 1px solid var(--border-accent);
+  padding: 0.55rem 0.75rem;
+  line-height: 1.5;
+  font-weight: 300;
+  margin-bottom: 0.5rem;
+}
+
+.tl-message-view {
+  text-align: center;
+  padding: 1rem 0;
+  color: var(--text-dim);
+  font-size: 0.82rem;
+  line-height: 1.6;
+}
+
+.tl-message-view p {
+  margin: 0 0 1rem;
+}
+
+.tl-powered {
+  text-align: center;
+  font-size: 0.65rem;
+  color: var(--text-muted);
+  margin-top: 0.75rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--border);
+  letter-spacing: 0.04em;
+}
+
+.tl-powered a {
+  color: var(--text-dim);
+  text-decoration: none;
+}
+
+.tl-powered a:hover {
+  color: var(--text);
+}
+
+
+/* ── Tenant Login — Responsive ─────────────────────────────────────────── */
+
+@media (max-width: 480px) {
+  .tl-card {
+    padding: 1.5rem 1.25rem;
+  }
+}
+
+
+/* ==========================================================================
+   Benchmark Page — Data Table + WASM Performance (.benchmark-*)
+   ========================================================================== */
+
+.benchmark-page {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 2rem 1.5rem;
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  min-height: 100vh;
+}
+
+.benchmark-page .brand-separator {
+  color: var(--text-muted);
+  font-weight: 300;
+}
+
+.benchmark-page .brand-page-title {
+  color: var(--text-muted);
+  font-weight: 300;
+}
+
+
+/* ── Layout ───────────────────────────────────────────────────────────── */
+
+.benchmark-layout {
+  display: grid;
+  grid-template-columns: 1fr 260px;
+  grid-template-rows: auto 1fr;
+  gap: 1rem;
+}
+
+
+/* ── Filter Bar (Island 0) ────────────────────────────────────────────── */
+
+.benchmark-filter-bar {
+  grid-column: 1 / -1;
+  grid-row: 1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: flex-end;
+  padding: 0.75rem 1rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+}
+
+.filter-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.filter-label {
+  font-size: 0.6rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text-muted);
+}
+
+.filter-input {
+  background: var(--surface-raised);
+  border: 1px solid var(--border-accent);
+  color: var(--text);
+  padding: 0.4rem 0.6rem;
+  font-size: 0.78rem;
+  font-family: inherit;
+  min-width: 180px;
+  transition: border-color var(--duration) ease;
+}
+
+.filter-input:focus {
+  border-color: var(--accent);
+  outline: none;
+}
+
+.filter-input::placeholder {
+  color: var(--text-muted);
+}
+
+.filter-select {
+  background: var(--surface-raised);
+  border: 1px solid var(--border-accent);
+  color: var(--text);
+  padding: 0.4rem 0.6rem;
+  font-size: 0.78rem;
+  font-family: inherit;
+  cursor: pointer;
+  transition: border-color var(--duration) ease;
+}
+
+.filter-select:focus {
+  border-color: var(--accent);
+  outline: none;
+}
+
+.filter-btn {
+  background: var(--surface-raised);
+  border: 1px solid var(--border-accent);
+  color: var(--text-dim);
+  padding: 0.4rem 0.75rem;
+  font-size: 0.78rem;
+  font-family: 'DM Mono', monospace;
+  cursor: pointer;
+  letter-spacing: 0.06em;
+  transition: all var(--duration) ease;
+}
+
+.filter-btn:hover {
+  border-color: var(--border-strong);
+  color: var(--text);
+}
+
+
+/* ── Performance Panel (Island 1) ─────────────────────────────────────── */
+
+.benchmark-perf-panel {
+  grid-column: 2;
+  grid-row: 2;
+  padding: 0.75rem 1rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  align-self: start;
+}
+
+.perf-panel-title {
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text-muted);
+  margin: 0 0 0.75rem;
+  font-weight: 400;
+}
+
+.perf-stats-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.perf-stat {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.perf-stat-label {
+  font-size: 0.72rem;
+  color: var(--text-dim);
+  font-weight: 300;
+}
+
+.perf-stat-value {
+  font-size: 0.75rem;
+  font-family: 'DM Mono', monospace;
+  color: var(--text);
+}
+
+
+/* ── Data Table (Island 2) ────────────────────────────────────────────── */
+
+.benchmark-data-table {
+  grid-column: 1;
+  grid-row: 2;
+  min-height: 200px;
+}
+
+.benchmark-table-wrap {
+  overflow-x: auto;
+  max-width: 100%;
+  border: 1px solid var(--border);
+}
+
+.benchmark-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.78rem;
+}
+
+.benchmark-th {
+  text-align: left;
+  font-size: 0.6rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text-muted);
+  font-weight: 400;
+  padding: 0.55rem 0.75rem;
+  border-bottom: 1px solid var(--border-accent);
+  background: var(--surface);
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+  transition: color var(--duration) ease;
+}
+
+.benchmark-th:hover {
+  color: var(--text-dim);
+}
+
+.sort-indicator {
+  font-size: 0.55rem;
+  color: var(--accent);
+}
+
+/* content-visibility: auto — browser skips layout/paint for off-screen rows.
+   All rows are real DOM nodes (Ctrl+F works, a11y works), but only visible
+   rows trigger layout. 100K rows at 60fps, no virtualization. */
+.benchmark-table tbody tr {
+  content-visibility: auto;
+  contain-intrinsic-size: 0 33px;
+}
+
+.benchmark-table td {
+  padding: 0.4rem 0.75rem;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-dim);
+  font-weight: 300;
+}
+
+.benchmark-table tr:hover td {
+  background: var(--surface);
+}
+
+.text-right {
+  text-align: right;
+}
+
+.badge {
+  display: inline-block;
+  font-size: 0.65rem;
+  padding: 0.1rem 0.45rem;
+  letter-spacing: 0.04em;
+  border: 1px solid var(--border-accent);
+  background: var(--surface-raised);
+  color: var(--text-dim);
+}
+
+.badge-admin  { border-color: #e8596844; color: #e89858; }
+.badge-editor { border-color: #596de844; color: #7e96e8; }
+.badge-viewer { border-color: #59e88c44; color: #8ce8a8; }
+
+.badge-active   { border-color: #34d39944; color: #34d399; }
+.badge-inactive { border-color: #f59e0b44; color: #f59e0b; }
+.badge-pending  { border-color: #8b5cf644; color: #a78bfa; }
+
+
+/* ── Loading / Empty / Error States ───────────────────────────────────── */
+
+.benchmark-loading,
+.benchmark-empty,
+.benchmark-error {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 200px;
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.benchmark-error {
+  color: #e85858;
+  border-color: #e8585833;
+}
+
+
+/* ── Benchmark — Responsive ───────────────────────────────────────────── */
+
+@media (max-width: 768px) {
+  .benchmark-page {
+    padding: 1.25rem 1rem;
+  }
+
+  .benchmark-layout {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto auto 1fr;
+  }
+
+  .benchmark-filter-bar {
+    grid-column: 1;
+  }
+
+  .benchmark-perf-panel {
+    grid-column: 1;
+    grid-row: 2;
+  }
+
+  .benchmark-data-table {
+    grid-column: 1;
+    grid-row: 3;
+  }
+
+  .filter-input {
+    min-width: 120px;
+  }
+}

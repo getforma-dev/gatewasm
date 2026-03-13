@@ -1,0 +1,56 @@
+/* ==========================================================================
+   Forma Auth — Design Tokens
+   ──────────────────────────
+   Single source of truth for all CSS custom properties.
+   Consumed by both forma-platform.css (via concatenation) and main.css
+   (via @import). Ready for dark/light mode via :root overrides.
+   ========================================================================== */
+
+:root {
+  /* ── Palette ────────────────────────────────────────────────────────── */
+  --bg:             #0a0a0c;
+  --surface:        #111114;
+  --surface-raised: #16161a;
+  --surface-overlay:#1c1c21;
+
+  --border:         #1e1e24;
+  --border-accent:  #2a2a33;
+  --border-strong:  #38383f;
+
+  --text:           #e8e6e3;
+  --text-dim:       #6b6a72;
+  --text-muted:     #3d3d45;
+
+  /* ── Accent — Warm Gold ─────────────────────────────────────────────── */
+  --accent:         #c4a265;
+  --accent-hover:   #d4b275;
+  --accent-dim:     rgba(196, 162, 101, 0.19);
+  --accent-glow:    rgba(196, 162, 101, 0.09);
+  --accent-border:  rgba(196, 162, 101, 0.25);
+
+  /* ── Semantic ───────────────────────────────────────────────────────── */
+  --success:        #4ade80;
+  --success-dim:    rgba(74, 222, 128, 0.09);
+  --success-border: rgba(74, 222, 128, 0.19);
+  --warning:        #fbbf24;
+  --warning-dim:    rgba(251, 191, 36, 0.09);
+  --warning-border: rgba(251, 191, 36, 0.19);
+  --danger:         #f87171;
+  --danger-dim:     rgba(248, 113, 113, 0.09);
+  --danger-border:  rgba(248, 113, 113, 0.19);
+  --info:           #60a5fa;
+
+  /* ── Shadows ────────────────────────────────────────────────────────── */
+  --shadow-sm:      0 1px 4px rgba(0,0,0,0.3);
+  --shadow-md:      0 4px 16px rgba(0,0,0,0.35);
+  --shadow-lg:      0 8px 32px rgba(0,0,0,0.45);
+
+  /* ── Motion ─────────────────────────────────────────────────────────── */
+  --ease:           cubic-bezier(0.16, 1, 0.3, 1);
+  --duration:       200ms;
+
+  /* ── Stage personality — overrideable per page ──────────────────────── */
+  --grid-opacity:   0.25;
+  --glow-size:      900px;
+  --glow-intensity: 0.07;
+}
