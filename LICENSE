@@ -1,0 +1,29 @@
+Business Source License 1.1
+
+Parameters
+
+Licensor:             Forma
+Licensed Work:        GateWASM
+                      The Licensed Work is (c) 2026 Forma
+
+Additional Use Grant: You may make production use of the Licensed Work,
+                      provided such use does not include offering the
+                      Licensed Work to third parties on a hosted or
+                      embedded basis which is competitive with Forma's
+                      products. You may also use the Licensed Work for
+                      internal, non-production purposes, and for
+                      production use serving fewer than 100 monthly
+                      active users.
+
+Change Date:          Four years from each release date
+
+Change License:       MIT
+
+For information about alternative licensing arrangements for the
+Licensed Work, please contact licensing@getforma.dev.
+
+Notice
+
+The Business Source License (this document, or the "License") is not an
+Open Source license. However, the Licensed Work will eventually be made
+available under an Open Source License, as stated in this License.
