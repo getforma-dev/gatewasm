@@ -13,8 +13,7 @@ repo_uri="${ECR_REPOSITORY_URI:-877573132739.dkr.ecr.us-east-1.amazonaws.com/gat
 region="${AWS_REGION:-us-east-1}"
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-project_root="$(cd "${script_dir}/.." && pwd)"
-repo_root="$(cd "${project_root}/.." && pwd)"
+repo_root="$(cd "${script_dir}/.." && pwd)"
 
 echo "Logging in to ECR (${repo_uri})..."
 aws ecr get-login-password --region "${region}" | \
@@ -23,7 +22,7 @@ aws ecr get-login-password --region "${region}" | \
 echo "Building image ${repo_uri}:${tag}..."
 docker build \
   --platform linux/amd64 \
-  -f "${project_root}/crates/gatewasm-server/Dockerfile" \
+  -f "${repo_root}/crates/server/Dockerfile" \
   -t "${repo_uri}:${tag}" \
   "${repo_root}"
 
