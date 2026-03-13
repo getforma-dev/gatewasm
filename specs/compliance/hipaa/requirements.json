@@ -1,0 +1,263 @@
+{
+  "framework": "HIPAA",
+  "version": "Security Rule - 45 CFR 164.312 (Technical Safeguards)",
+  "description": "HIPAA Security Rule technical safeguards for protection of electronic Protected Health Information (ePHI). These controls govern access, audit, integrity, authentication, and transmission security for any system that stores, processes, or transmits ePHI.",
+  "controls": [
+    {
+      "id": "HIPAA-AC-1",
+      "section": "164.312(a)(1)",
+      "title": "Access Control",
+      "description": "Implement technical policies and procedures for electronic information systems that maintain ePHI to allow access only to those persons or software programs that have been granted access rights.",
+      "required": true,
+      "enforcement": [
+        {
+          "check": "rbac_enabled",
+          "operator": "eq",
+          "value": true,
+          "message": "Role-based access control must be enabled",
+          "fix": "RBAC is enabled by default. Ensure roles table has entries and users are assigned roles."
+        },
+        {
+          "check": "default_deny_policy",
+          "operator": "eq",
+          "value": true,
+          "message": "Default deny policy must be active (unauthenticated requests blocked)",
+          "fix": "This is enforced by the auth middleware. No action needed if middleware is active."
+        }
+      ],
+      "tests": [
+        "hipaa_ac1_unauthenticated_request_denied",
+        "hipaa_ac1_correct_role_allowed"
+      ]
+    },
+    {
+      "id": "HIPAA-AC-2",
+      "section": "164.312(a)(2)(i)",
+      "title": "Unique User Identification",
+      "description": "Assign a unique name and/or number for identifying and tracking user identity.",
+      "required": true,
+      "enforcement": [
+        {
+          "check": "unique_user_ids",
+          "operator": "eq",
+          "value": true,
+          "message": "Every user must have a unique UUID",
+          "fix": "UUIDs are generated automatically on registration. No action needed."
+        },
+        {
+          "check": "audit_includes_user_id",
+          "operator": "eq",
+          "value": true,
+          "message": "Audit log entries must include user_id for tracking",
+          "fix": "Ensure audit logging is enabled: AUDIT_LOG_ENABLED=true"
+        }
+      ],
+      "tests": [
+        "hipaa_ac2_users_have_unique_ids",
+        "hipaa_ac2_audit_entries_include_user_id"
+      ]
+    },
+    {
+      "id": "HIPAA-AC-3",
+      "section": "164.312(a)(2)(ii)",
+      "title": "Emergency Access Procedure",
+      "description": "Establish and implement as needed procedures for obtaining necessary ePHI during an emergency.",
+      "required": true,
+      "enforcement": [
+        {
+          "check": "emergency_access_configured",
+          "operator": "eq",
+          "value": true,
+          "message": "Emergency access procedure must be configured",
+          "fix": "Emergency access is available via the management API with admin credentials. Document your emergency access procedure."
+        }
+      ],
+      "tests": [
+        "hipaa_ac3_emergency_access_endpoint_exists"
+      ]
+    },
+    {
+      "id": "HIPAA-AC-4",
+      "section": "164.312(a)(2)(iii)",
+      "title": "Automatic Logoff",
+      "description": "Implement electronic procedures that terminate an electronic session after a predetermined time of inactivity.",
+      "required": false,
+      "enforcement": [
+        {
+          "check": "session_timeout_minutes",
+          "operator": "lte",
+          "value": 15,
+          "message": "Session timeout must be 15 minutes or less for HIPAA",
+          "fix": "Set SESSION_TIMEOUT_MINUTES=15 (or less) in your environment"
+        },
+        {
+          "check": "session_timeout_enforced",
+          "operator": "eq",
+          "value": true,
+          "message": "Session timeout must be actively enforced (not just token expiry)",
+          "fix": "Session timeout enforcement is automatic in HIPAA compliance mode"
+        }
+      ],
+      "tests": [
+        "hipaa_ac4_timeout_cannot_exceed_15_minutes"
+      ]
+    },
+    {
+      "id": "HIPAA-AC-5",
+      "section": "164.312(a)(2)(iv)",
+      "title": "Encryption and Decryption",
+      "description": "Implement a mechanism to encrypt and decrypt ePHI.",
+      "required": false,
+      "enforcement": [
+        {
+          "check": "jwt_algorithm",
+          "operator": "neq",
+          "value": "HS256",
+          "message": "JWT signing must use asymmetric cryptography (EdDSA or RS256), not HS256",
+          "fix": "Set JWT_ALGORITHM=EdDSA (default) or RS256"
+        },
+        {
+          "check": "password_hashing_algorithm",
+          "operator": "eq",
+          "value": "argon2id",
+          "message": "Passwords must be hashed with Argon2id",
+          "fix": "Argon2id is the default. No action needed."
+        },
+        {
+          "check": "tls_min_version",
+          "operator": "eq",
+          "value": "1.2",
+          "message": "TLS 1.2 or higher must be enforced for all connections",
+          "fix": "Set TLS_MIN_VERSION=1.2 and ensure your reverse proxy enforces TLS"
+        }
+      ],
+      "tests": [
+        "hipaa_ac5_jwt_not_hs256",
+        "hipaa_ac5_passwords_hashed_argon2id"
+      ]
+    },
+    {
+      "id": "HIPAA-AUDIT",
+      "section": "164.312(b)",
+      "title": "Audit Controls",
+      "description": "Implement hardware, software, and/or procedural mechanisms that record and examine activity in information systems that contain or use ePHI.",
+      "required": true,
+      "enforcement": [
+        {
+          "check": "audit_log_enabled",
+          "operator": "eq",
+          "value": true,
+          "message": "Audit logging must be enabled",
+          "fix": "Set AUDIT_LOG_ENABLED=true"
+        },
+        {
+          "check": "audit_log_immutable",
+          "operator": "eq",
+          "value": true,
+          "message": "Audit log must be append-only (no updates or deletes)",
+          "fix": "Audit log immutability is enforced at the application level. No action needed."
+        },
+        {
+          "check": "audit_log_fields_complete",
+          "operator": "eq",
+          "value": true,
+          "message": "Audit entries must include: timestamp, event_id, user_id, action, resource, ip_address, result",
+          "fix": "All required fields are logged automatically. No action needed."
+        }
+      ],
+      "tests": [
+        "hipaa_audit_all_auth_events_logged",
+        "hipaa_audit_entries_have_required_fields",
+        "hipaa_audit_login_failure_logged"
+      ]
+    },
+    {
+      "id": "HIPAA-INT",
+      "section": "164.312(c)(1)",
+      "title": "Integrity",
+      "description": "Implement policies and procedures to protect ePHI from improper alteration or destruction.",
+      "required": true,
+      "enforcement": [
+        {
+          "check": "jwt_signature_verification",
+          "operator": "eq",
+          "value": true,
+          "message": "JWT signatures must be verified on every request",
+          "fix": "JWT verification is automatic. No action needed."
+        },
+        {
+          "check": "refresh_token_rotation",
+          "operator": "eq",
+          "value": true,
+          "message": "Refresh tokens must be rotated on every use (one-time use)",
+          "fix": "Token rotation is automatic. No action needed."
+        },
+        {
+          "check": "token_replay_detection",
+          "operator": "eq",
+          "value": true,
+          "message": "Reuse of revoked refresh tokens must be detected and trigger family revocation",
+          "fix": "Token family tracking is automatic. No action needed."
+        }
+      ],
+      "tests": [
+        "hipaa_int_tampered_jwt_rejected",
+        "hipaa_int_refresh_token_rotated",
+        "hipaa_int_replay_detected_family_revoked"
+      ]
+    },
+    {
+      "id": "HIPAA-AUTH",
+      "section": "164.312(d)",
+      "title": "Person or Entity Authentication",
+      "description": "Implement procedures to verify that a person or entity seeking access to ePHI is the one claimed.",
+      "required": true,
+      "enforcement": [
+        {
+          "check": "mfa_required",
+          "operator": "eq",
+          "value": true,
+          "message": "Multi-factor authentication must be required for all users",
+          "fix": "Set MFA_REQUIRED=true"
+        },
+        {
+          "check": "password_min_length",
+          "operator": "gte",
+          "value": 8,
+          "message": "Passwords must be at least 8 characters",
+          "fix": "Set PASSWORD_MIN_LENGTH=8 (or higher)"
+        }
+      ],
+      "tests": [
+        "hipaa_auth_weak_password_rejected",
+        "hipaa_auth_identity_verified_before_access"
+      ]
+    },
+    {
+      "id": "HIPAA-TX",
+      "section": "164.312(e)(1)",
+      "title": "Transmission Security",
+      "description": "Implement technical security measures to guard against unauthorized access to ePHI that is being transmitted over an electronic communications network.",
+      "required": true,
+      "enforcement": [
+        {
+          "check": "tls_min_version",
+          "operator": "eq",
+          "value": "1.2",
+          "message": "TLS 1.2 or higher must be enforced",
+          "fix": "Set TLS_MIN_VERSION=1.2 and configure your reverse proxy"
+        },
+        {
+          "check": "secure_cookies",
+          "operator": "eq",
+          "value": true,
+          "message": "Cookies must have Secure flag (HTTPS only)",
+          "fix": "Secure cookies are automatic in compliance modes. No action needed."
+        }
+      ],
+      "tests": [
+        "hipaa_tx_secure_cookies_set"
+      ]
+    }
+  ]
+}

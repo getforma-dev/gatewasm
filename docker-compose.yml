@@ -1,0 +1,76 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: gatewasm
+      POSTGRES_USER: gatewasm
+      POSTGRES_PASSWORD: gatewasm
+    ports:
+      - "5434:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U gatewasm"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  db-test:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: gatewasm_test
+      POSTGRES_USER: gatewasm
+      POSTGRES_PASSWORD: gatewasm
+    ports:
+      - "5433:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U gatewasm"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  server:
+    build:
+      context: .
+      dockerfile: crates/server/Dockerfile
+    ports:
+      - "3001:3001"
+    environment:
+      - PORT=3001
+      - HOST=0.0.0.0
+      - DATABASE_URL=postgres://gatewasm:gatewasm@db:5432/gatewasm
+      - JWT_ISSUER=gatewasm
+      - JWT_AUDIENCE=gatewasm-app
+      - ALLOWED_ORIGINS=http://localhost:3000,http://localhost:5173
+      - SERVER_URL=http://localhost:3001
+      - PLATFORM_DOMAIN=localhost
+      - COMPLIANCE_MODE=standard
+      - RUST_LOG=info
+    depends_on:
+      db:
+        condition: service_healthy
+
+  pgweb:
+    image: sosedoff/pgweb:latest
+    ports:
+      - "8081:8081"
+    environment:
+      PGWEB_DATABASE_URL: postgres://gatewasm:gatewasm@db:5432/gatewasm?sslmode=disable
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  pgweb-test:
+    image: sosedoff/pgweb:latest
+    ports:
+      - "8082:8081"
+    environment:
+      PGWEB_DATABASE_URL: postgres://gatewasm:gatewasm@db-test:5432/gatewasm_test?sslmode=disable
+    depends_on:
+      db-test:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  pgdata:

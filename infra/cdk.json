@@ -1,0 +1,56 @@
+{
+  "app": "npx ts-node --prefer-ts-exts bin/gatewasm-infra.ts",
+  "watch": {
+    "include": ["**"],
+    "exclude": ["node_modules", "dist", "cdk.out", "**/*.js", "**/*.d.ts"]
+  },
+  "context": {
+    "@aws-cdk/aws-lambda:recognizeLayerVersion": true,
+    "@aws-cdk/core:checkSecretUsage": true,
+    "@aws-cdk/core:target-partitions": ["aws"],
+
+    "gatewasm:domainName": "getforma.dev",
+    "gatewasm:authSubdomain": "auth",
+    "gatewasm:platformOwnerEmails": "victor@getforma.dev",
+    "gatewasm:imageTag": "release-20260309-040251-92fa20cf7614",
+    "gatewasm:serviceName": "gatewasm-server",
+    "gatewasm:repositoryName": "gatewasm-server",
+    "gatewasm:rdsSecretName": "gatewasm/rds-credentials",
+    "gatewasm:alertsEmail": "",
+    "gatewasm:ownerSessionSecretArn": "",
+    "gatewasm:ownerSessionCanaryScheduleMinutes": 5,
+    "gatewasm:cdnSubdomain": "cdn",
+    "gatewasm:cdnCertificateArn": "arn:aws:acm:us-east-1:877573132739:certificate/211aa957-e398-45aa-8d81-6916cadce1c5",
+    "gatewasm:staging:enabled": false,
+    "gatewasm:staging:domainName": "getforma.dev",
+    "gatewasm:staging:authSubdomain": "auth-staging",
+    "gatewasm:staging:platformOwnerEmails": "victor@getforma.dev",
+    "gatewasm:staging:serviceName": "gatewasm-server-staging",
+    "gatewasm:staging:repositoryName": "gatewasm-server",
+    "gatewasm:staging:imageTag": "release-20260307-212301-34cd8af3314b",
+    "gatewasm:staging:rdsSecretName": "gatewasm-staging/rds-credentials",
+    "gatewasm:staging:databaseName": "gatewasm_staging",
+    "gatewasm:staging:alertsEmail": "",
+    "gatewasm:staging:ownerSessionSecretArn": "",
+    "gatewasm:staging:ownerSessionCanaryScheduleMinutes": 5,
+    "gatewasm:staging:secretArns": {
+      "Ed25519Key": "REPLACE_ME",
+      "CsrfSecret": "REPLACE_ME",
+      "PlatformAdminKey": "REPLACE_ME",
+      "OAuthGoogle": "REPLACE_ME",
+      "OAuthGithub": "REPLACE_ME",
+      "Smtp": "",
+      "SsfSigningKey": ""
+    },
+    "gatewasm:secretArns": {
+      "Ed25519Key": "arn:aws:secretsmanager:us-east-1:877573132739:secret:gatewasm/ed25519-key-l8JTmP",
+      "CsrfSecret": "arn:aws:secretsmanager:us-east-1:877573132739:secret:gatewasm/csrf-secret-NCZisI",
+      "PlatformAdminKey": "arn:aws:secretsmanager:us-east-1:877573132739:secret:gatewasm/platform-admin-key-vqaj0u",
+      "OAuthGoogle": "arn:aws:secretsmanager:us-east-1:877573132739:secret:gatewasm/oauth-google-WPVMOG",
+      "OAuthGithub": "arn:aws:secretsmanager:us-east-1:877573132739:secret:gatewasm/oauth-github-CAhDkJ",
+      "Smtp": "arn:aws:secretsmanager:us-east-1:877573132739:secret:gatewasm/smtp-nGIKBw",
+      "MfaEncryptionKey": "arn:aws:secretsmanager:us-east-1:877573132739:secret:gatewasm/mfa-encryption-key-yXXycq",
+      "SsfSigningKey": ""
+    }
+  }
+}
