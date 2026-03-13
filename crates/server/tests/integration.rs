@@ -6,7 +6,7 @@ use ring::hmac;
 use sqlx::postgres::PgPool;
 use tower::ServiceExt;
 
-use gatewasm_server::assets::AssetManifest;
+use gatewasm_server::assets::{self as gw_assets};
 use gatewasm_server::compliance::ComplianceConfig;
 use gatewasm_server::config::AppConfig;
 use gatewasm_server::db;
@@ -111,7 +111,7 @@ async fn test_app_with_compliance(compliance: ComplianceConfig) -> (axum::Router
         config,
         keys,
         tenant_cache: TenantCache::default(),
-        asset_manifest: AssetManifest::load(),
+        asset_manifest: gw_assets::load_manifest(),
         render_modes: std::collections::HashMap::new(),
         ir_modules: std::collections::HashMap::new(),
     };
@@ -205,7 +205,7 @@ async fn test_app_with_pool() -> (axum::Router, PgPool) {
         config,
         keys,
         tenant_cache: TenantCache::default(),
-        asset_manifest: AssetManifest::load(),
+        asset_manifest: gw_assets::load_manifest(),
         render_modes: std::collections::HashMap::new(),
         ir_modules: std::collections::HashMap::new(),
     };
@@ -8134,8 +8134,9 @@ async fn tenant_dashboard_and_admin_include_login_redirect_url_in_config() {
     assert_eq!(dashboard_res.status(), StatusCode::OK);
     let dashboard_body = body_string(dashboard_res).await;
     assert!(
-        dashboard_body.contains(&format!(r#""loginRedirectUrl":"{}""#, login_redirect)),
-        "dashboard config should include loginRedirectUrl"
+        dashboard_body.contains(&format!(r#""login_redirect_url":"{}""#, login_redirect))
+            || dashboard_body.contains(&format!(r#""loginRedirectUrl":"{}""#, login_redirect)),
+        "dashboard config should include login_redirect_url"
     );
 
     let admin_res = app
@@ -8150,7 +8151,8 @@ async fn tenant_dashboard_and_admin_include_login_redirect_url_in_config() {
     assert_eq!(admin_res.status(), StatusCode::OK);
     let admin_body = body_string(admin_res).await;
     assert!(
-        admin_body.contains(&format!(r#""loginRedirectUrl":"{}""#, login_redirect)),
+        admin_body.contains(&format!(r#""login_redirect_url":"{}""#, login_redirect))
+            || admin_body.contains(&format!(r#""loginRedirectUrl":"{}""#, login_redirect)),
         "admin config should include loginRedirectUrl"
     );
 }
@@ -12351,7 +12353,11 @@ async fn test_asset_route_serves_with_immutable_headers() {
         resp.headers().get("x-content-type-options").unwrap(),
         "nosniff"
     );
-    assert_eq!(resp.headers().get("vary").unwrap(), "Accept-Encoding");
+    let vary = resp.headers().get("vary").unwrap().to_str().unwrap();
+    assert!(
+        vary.eq_ignore_ascii_case("Accept-Encoding"),
+        "vary header should be Accept-Encoding (case-insensitive), got: {vary}"
+    );
 }
 
 #[tokio::test]

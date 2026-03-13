@@ -10,6 +10,7 @@
     "rootDir": "src",
     "baseUrl": ".",
     "paths": {
+      "formajs": ["node_modules/@getforma/core"],
       "@core/*": ["src/core/*"],
       "@platform/*": ["src/platform/*"],
       "@admin/*": ["src/admin/*"],
