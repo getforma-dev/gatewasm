@@ -1,0 +1,928 @@
+use axum::{
+    extract::{FromRequest, Path, State},
+    http::StatusCode,
+    response::{Html, IntoResponse},
+    Json,
+};
+use chrono::{Duration, Utc};
+use serde::Deserialize;
+
+use crate::error::AppError;
+use crate::html_template::{render_page, PageConfig, PageOutput};
+use crate::ir;
+use crate::jwt::signing;
+use crate::middleware::platform_user::PlatformUser;
+use crate::redirects::{
+    default_login_redirect, resolve_login_redirect, validate_login_redirect_input,
+};
+use crate::{AppState, RenderMode};
+
+/// Slugs reserved for system routes — cannot be used as tenant slugs.
+pub const RESERVED_SLUGS: &[&str] = &[
+    "platform",
+    "api",
+    "admin",
+    "manage",
+    "auth",
+    "health",
+    "docs",
+    "www",
+    "app",
+    "dashboard",
+    "billing",
+    "support",
+    "login",
+    "register",
+    "signup",
+    "get-started",
+    "bridge",
+    "openapi",
+    "t",
+    "static",
+    "assets",
+];
+
+const PLATFORM_LOGIN_CLIENT_ID: &str = "platform-login";
+const PLATFORM_ONBOARDING_CLIENT_ID: &str = "platform-onboarding";
+
+/// Slot ID constants — must match compiler output order.
+const SLOT_OAUTH_PROVIDERS: u16 = 0;
+
+/// Populate onboarding slot data from IR module defaults + server-side overrides.
+fn populate_onboarding_slots(state: &AppState, ir_module: &ir::parser::IrModule) -> ir::slot::SlotData {
+    let mut slots = ir::slot::SlotData::new_from_defaults(&ir_module.slots);
+
+    let google = state.config.google_client_id.is_some()
+        && state.config.google_client_secret.is_some();
+    let github = state.config.github_client_id.is_some()
+        && state.config.github_client_secret.is_some();
+
+    let mut providers = Vec::new();
+    if google {
+        providers.push(ir::slot::SlotValue::Object(vec![
+            ("provider".into(), ir::slot::SlotValue::Text("google".into())),
+            ("label".into(), ir::slot::SlotValue::Text("Continue with Google".into())),
+        ]));
+    }
+    if github {
+        providers.push(ir::slot::SlotValue::Object(vec![
+            ("provider".into(), ir::slot::SlotValue::Text("github".into())),
+            ("label".into(), ir::slot::SlotValue::Text("Continue with GitHub".into())),
+        ]));
+    }
+    slots.set(SLOT_OAUTH_PROVIDERS, ir::slot::SlotValue::Array(providers));
+
+    slots
+}
+
+fn render_get_started_page_html(state: &AppState) -> PageOutput {
+    let google_enabled = state.config.google_client_id.is_some()
+        && state.config.google_client_secret.is_some();
+    let github_enabled = state.config.github_client_id.is_some()
+        && state.config.github_client_secret.is_some();
+
+    let config_script = format!(
+        "window.__FORMA_SERVER_URL__=\"{}\";window.__PLATFORM_CONFIG__={};",
+        state.config.server_url,
+        serde_json::json!({
+            "google_enabled": google_enabled,
+            "github_enabled": github_enabled,
+            "client_id": PLATFORM_ONBOARDING_CLIENT_ID,
+        }),
+    );
+
+    let route_pattern = "/platform/onboarding";
+    let render_mode = state.render_modes.get(route_pattern)
+        .copied()
+        .unwrap_or(RenderMode::Phase1ClientMount);
+    let ir_module = state.ir_modules.get(route_pattern);
+
+    // Populate slot data from IR module defaults + server overrides
+    let slots = if render_mode == RenderMode::Phase2SsrReconcile {
+        ir_module.map(|m| populate_onboarding_slots(state, m))
+    } else {
+        None
+    };
+
+    render_page(&PageConfig {
+        title: "Get Started — Forma Auth",
+        route_pattern,
+        manifest: &state.asset_manifest,
+        config_script: Some(&config_script),
+        body_class: None,
+        personality_css: Some("body{background:#0a0a0c;color:#e8e6e3;--grid-opacity:0.15;--glow-size:1100px;--glow-intensity:0.10;}"),
+        body_prefix: None,
+        render_mode,
+        ir_module,
+        slots: slots.as_ref(),
+    })
+}
+
+fn render_platform_login_page_html(state: &AppState) -> PageOutput {
+    let google_enabled = state.config.google_client_id.is_some()
+        && state.config.google_client_secret.is_some();
+    let github_enabled = state.config.github_client_id.is_some()
+        && state.config.github_client_secret.is_some();
+
+    let config_script = format!(
+        "window.__FORMA_SERVER_URL__=\"{}\";window.__PLATFORM_CONFIG__={};",
+        state.config.server_url,
+        serde_json::json!({
+            "google_enabled": google_enabled,
+            "github_enabled": github_enabled,
+            "client_id": PLATFORM_LOGIN_CLIENT_ID,
+        }),
+    );
+
+    let route_pattern = "/platform/login";
+    let render_mode = state.render_modes.get(route_pattern)
+        .copied()
+        .unwrap_or(RenderMode::Phase1ClientMount);
+    let ir_module = state.ir_modules.get(route_pattern);
+
+    // Populate slot data from IR module defaults + server overrides
+    let slots = if render_mode == RenderMode::Phase2SsrReconcile {
+        ir_module.map(|m| populate_onboarding_slots(state, m))
+    } else {
+        None
+    };
+
+    render_page(&PageConfig {
+        title: "Platform Login — Forma Auth",
+        route_pattern,
+        manifest: &state.asset_manifest,
+        config_script: Some(&config_script),
+        body_class: None,
+        personality_css: Some("body{background:#0a0a0c;color:#e8e6e3;--grid-opacity:0.25;--glow-size:900px;--glow-intensity:0.07;}"),
+        body_prefix: None,
+        render_mode,
+        ir_module,
+        slots: slots.as_ref(),
+    })
+}
+
+pub fn is_reserved_slug(slug: &str) -> bool {
+    RESERVED_SLUGS.contains(&slug)
+}
+
+async fn ensure_platform_oauth_clients(state: &AppState) -> Result<(), AppError> {
+    let login_redirect = format!("{}/platform/login", state.config.server_url);
+    let onboarding_redirect = format!("{}/platform/onboarding", state.config.server_url);
+
+    sqlx::query(
+        "INSERT INTO oauth_clients (id, redirect_uri, name, tenant_id)
+         VALUES ($1, $2, $3, 'ten_platform')
+         ON CONFLICT (id) DO UPDATE SET redirect_uri = EXCLUDED.redirect_uri, tenant_id = 'ten_platform'",
+    )
+    .bind(PLATFORM_LOGIN_CLIENT_ID)
+    .bind(login_redirect)
+    .bind("Platform Login")
+    .execute(&state.db)
+    .await?;
+
+    sqlx::query(
+        "INSERT INTO oauth_clients (id, redirect_uri, name, tenant_id)
+         VALUES ($1, $2, $3, 'ten_platform')
+         ON CONFLICT (id) DO UPDATE SET redirect_uri = EXCLUDED.redirect_uri, tenant_id = 'ten_platform'",
+    )
+    .bind(PLATFORM_ONBOARDING_CLIENT_ID)
+    .bind(onboarding_redirect)
+    .bind("Platform Onboarding")
+    .execute(&state.db)
+    .await?;
+
+    Ok(())
+}
+
+fn validate_slug(slug: &str) -> Result<String, AppError> {
+    let slug = slug.trim().to_lowercase();
+    if slug.is_empty()
+        || slug.len() > 63
+        || !slug.chars().all(|c| c.is_ascii_alphanumeric() || c == '-')
+    {
+        return Err(AppError::BadRequest {
+            error: "invalid_slug",
+            message: "Slug must be 1-63 characters, lowercase alphanumeric or hyphens".into(),
+        });
+    }
+    if slug.starts_with('-') || slug.ends_with('-') {
+        return Err(AppError::BadRequest {
+            error: "invalid_slug",
+            message: "Slug cannot start or end with a hyphen".into(),
+        });
+    }
+    if is_reserved_slug(&slug) {
+        return Err(AppError::BadRequest {
+            error: "reserved_slug",
+            message: format!("The slug '{}' is reserved and cannot be used", slug),
+        });
+    }
+    Ok(slug)
+}
+
+// ── Self-Serve API ──────────────────────────────────────────────────────
+
+#[derive(Debug, Deserialize)]
+pub struct CreateTenantRequest {
+    pub name: String,
+    pub slug: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct UpdateTenantRequest {
+    pub name: Option<String>,
+    pub allowed_providers: Option<Vec<String>>,
+    pub branding_logo_url: Option<String>,
+    pub branding_primary_color: Option<String>,
+    pub branding_app_name: Option<String>,
+    pub login_redirect_url: Option<String>,
+    pub allowed_origins: Option<Vec<String>>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct DeleteTenantRequest {
+    pub confirm_slug: String,
+}
+
+/// POST /platform/self-serve/tenants — Create a new tenant (authenticated platform user).
+pub async fn create_tenant(
+    State(state): State<AppState>,
+    req: axum::extract::Request,
+) -> Result<impl IntoResponse, AppError> {
+    let user = req
+        .extensions()
+        .get::<PlatformUser>()
+        .cloned()
+        .ok_or(AppError::Unauthorized {
+            error: "unauthorized",
+            message: "Not authenticated".into(),
+        })?;
+
+    let body: CreateTenantRequest = axum::Json::<CreateTenantRequest>::from_request(req, &state)
+        .await
+        .map_err(|_| AppError::BadRequest {
+            error: "invalid_request",
+            message: "Invalid request body. Required: name, slug".into(),
+        })?
+        .0;
+
+    let slug = validate_slug(&body.slug)?;
+
+    if body.name.trim().is_empty() {
+        return Err(AppError::BadRequest {
+            error: "invalid_name",
+            message: "Tenant name is required".into(),
+        });
+    }
+
+    // Check slug uniqueness
+    let exists = sqlx::query_scalar::<_, String>("SELECT id FROM tenants WHERE slug = $1")
+        .bind(&slug)
+        .fetch_optional(&state.db)
+        .await?;
+
+    if exists.is_some() {
+        return Err(AppError::Conflict {
+            error: "slug_taken",
+            message: format!("Tenant slug '{}' is already in use", slug),
+        });
+    }
+
+    let tenant_id = format!("ten_{}", uuid::Uuid::new_v4());
+    let api_key = format!("mgmt_{}", uuid::Uuid::new_v4());
+    let api_key_prefix = &api_key[..api_key.len().min(13)];
+    let api_key_hash = signing::hash_token(&api_key);
+    let trial_ends_at = Utc::now() + Duration::days(14);
+
+    let default_login_redirect = default_login_redirect(&state.config.server_url, &slug);
+
+    sqlx::query(
+        "INSERT INTO tenants (id, name, slug, owner_email, api_key_hash, api_key_prefix, \
+         allowed_providers, max_users, plan, trial_ends_at, owner_user_id, login_redirect_url) \
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)",
+    )
+    .bind(&tenant_id)
+    .bind(body.name.trim())
+    .bind(&slug)
+    .bind(&user.email)
+    .bind(&api_key_hash)
+    .bind(api_key_prefix)
+    .bind(serde_json::json!(["email"]))
+    .bind(100_i32) // trial limit
+    .bind("trial")
+    .bind(trial_ends_at)
+    .bind(&user.user_id)
+    .bind(&default_login_redirect)
+    .execute(&state.db)
+    .await?;
+
+    sqlx::query(
+        "INSERT INTO tenant_entitlements \
+         (tenant_id, plan, max_users, max_organizations, allow_custom_roles, allow_webhooks, allow_organizations) \
+         VALUES ($1, 'trial', 100, 3, TRUE, TRUE, TRUE) \
+         ON CONFLICT (tenant_id) DO NOTHING",
+    )
+    .bind(&tenant_id)
+    .execute(&state.db)
+    .await?;
+
+    // ── Auto-create owner as admin on new tenant ─────────────
+    let admin_user_id = format!("usr_{}", uuid::Uuid::new_v4());
+    let admin_cred_id = format!("cred_{}", uuid::Uuid::new_v4());
+
+    // Copy password hash from platform tenant credentials
+    let platform_hash = sqlx::query_scalar::<_, String>(
+        "SELECT hashed_password FROM credentials WHERE user_id = $1 AND provider = 'email' LIMIT 1",
+    )
+    .bind(&user.user_id)
+    .fetch_optional(&state.db)
+    .await?;
+
+    let owner_name = user.name.as_deref().unwrap_or("");
+
+    let mut tx = state.db.begin().await?;
+
+    sqlx::query(
+        "INSERT INTO users (id, email, name, email_verified, tenant_id) VALUES ($1, $2, $3, TRUE, $4)",
+    )
+    .bind(&admin_user_id)
+    .bind(&user.email)
+    .bind(owner_name)
+    .bind(&tenant_id)
+    .execute(&mut *tx)
+    .await?;
+
+    if let Some(ref hash) = platform_hash {
+        sqlx::query(
+            "INSERT INTO credentials (id, user_id, provider, provider_user_id, hashed_password, tenant_id) \
+             VALUES ($1, $2, 'email', $3, $4, $5)",
+        )
+        .bind(&admin_cred_id)
+        .bind(&admin_user_id)
+        .bind(&user.email)
+        .bind(hash)
+        .bind(&tenant_id)
+        .execute(&mut *tx)
+        .await?;
+    }
+
+    sqlx::query(
+        "INSERT INTO user_roles (user_id, role_id, tenant_id) VALUES ($1, 'role_admin', $2) ON CONFLICT DO NOTHING",
+    )
+    .bind(&admin_user_id)
+    .bind(&tenant_id)
+    .execute(&mut *tx)
+    .await?;
+
+    tx.commit().await?;
+
+    tracing::info!(
+        tenant_id = %tenant_id,
+        slug = %slug,
+        owner = %user.email,
+        owner_user_id = %user.user_id,
+        admin_user_id = %admin_user_id,
+        "Self-serve tenant created with owner as admin"
+    );
+
+    Ok((
+        StatusCode::CREATED,
+        Json(serde_json::json!({
+            "tenant": {
+                "id": tenant_id,
+                "name": body.name.trim(),
+                "slug": slug,
+                "owner_email": user.email,
+                "allowed_providers": ["email"],
+                "max_users": 100,
+                "plan": "trial",
+                "trial_ends_at": trial_ends_at.to_rfc3339(),
+                "status": "active",
+                "login_redirect_url": default_login_redirect,
+            },
+            "api_key": api_key,
+            "dashboard_url": format!("/t/{}/dashboard", slug),
+            "admin_url": format!("/t/{}/admin", slug),
+            "note": "Save this API key in backend secrets only — it will not be shown again. You are already admin on this tenant — use the admin URL for tenant management."
+        })),
+    ))
+}
+
+/// GET /platform/self-serve/tenants — List tenants owned by the authenticated user.
+pub async fn list_my_tenants(
+    State(state): State<AppState>,
+    req: axum::extract::Request,
+) -> Result<impl IntoResponse, AppError> {
+    let user = req
+        .extensions()
+        .get::<PlatformUser>()
+        .cloned()
+        .ok_or(AppError::Unauthorized {
+            error: "unauthorized",
+            message: "Not authenticated".into(),
+        })?;
+
+    let tenants = sqlx::query_as::<
+        _,
+        (
+            String,
+            String,
+            String,
+            String,
+            serde_json::Value,
+            i32,
+            String,
+            Option<chrono::DateTime<Utc>>,
+            chrono::DateTime<Utc>,
+        ),
+    >(
+        "SELECT id, name, slug, status, allowed_providers, max_users, \
+         COALESCE(plan, 'trial'), trial_ends_at, created_at \
+         FROM tenants WHERE owner_user_id = $1 AND status != 'deleted' \
+         ORDER BY created_at DESC",
+    )
+    .bind(&user.user_id)
+    .fetch_all(&state.db)
+    .await?;
+
+    let items: Vec<serde_json::Value> = tenants
+        .into_iter()
+        .map(
+            |(id, name, slug, status, providers, max_users, plan, trial_ends, created)| {
+                // Count users inline (avoid N+1 in listing — acceptable for small tenant counts)
+                serde_json::json!({
+                    "id": id,
+                    "name": name,
+                    "slug": slug,
+                    "status": status,
+                    "allowed_providers": providers,
+                    "max_users": max_users,
+                    "plan": plan,
+                    "trial_ends_at": trial_ends.map(|t| t.to_rfc3339()),
+                    "created_at": created.to_rfc3339(),
+                })
+            },
+        )
+        .collect();
+
+    Ok(Json(serde_json::json!({
+        "tenants": items,
+    })))
+}
+
+/// GET /platform/self-serve/tenants/{id} — Get a tenant owned by the authenticated user.
+pub async fn get_my_tenant(
+    State(state): State<AppState>,
+    Path(tenant_id): Path<String>,
+    req: axum::extract::Request,
+) -> Result<impl IntoResponse, AppError> {
+    let user = req
+        .extensions()
+        .get::<PlatformUser>()
+        .cloned()
+        .ok_or(AppError::Unauthorized {
+            error: "unauthorized",
+            message: "Not authenticated".into(),
+        })?;
+
+    let row = sqlx::query_as::<
+        _,
+        (
+            String,
+            String,
+            String,
+            String,
+            String,
+            serde_json::Value,
+            serde_json::Value,
+            i32,
+            String,
+            Option<chrono::DateTime<Utc>>,
+            Option<String>,
+            Option<String>,
+            Option<String>,
+            Option<String>,
+            chrono::DateTime<Utc>,
+            chrono::DateTime<Utc>,
+        ),
+    >(
+        "SELECT id, name, slug, owner_email, status, allowed_providers, allowed_origins, \
+         max_users, COALESCE(plan, 'trial'), trial_ends_at, \
+         branding_logo_url, branding_primary_color, branding_app_name, \
+         login_redirect_url, \
+         created_at, updated_at \
+         FROM tenants WHERE id = $1 AND owner_user_id = $2 AND status != 'deleted'",
+    )
+    .bind(&tenant_id)
+    .bind(&user.user_id)
+    .fetch_optional(&state.db)
+    .await?
+    .ok_or(AppError::NotFound {
+        error: "tenant_not_found",
+        message: "Tenant not found or you don't have access".into(),
+    })?;
+
+    let (
+        id,
+        name,
+        slug,
+        owner_email,
+        status,
+        providers,
+        origins,
+        max_users,
+        plan,
+        trial_ends,
+        logo,
+        primary_color,
+        app_name,
+        redirect_url,
+        created,
+        updated,
+    ) = row;
+    let resolved_login_redirect =
+        resolve_login_redirect(&state.config.server_url, &slug, redirect_url.as_deref());
+
+    let user_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM users WHERE tenant_id = $1")
+        .bind(&id)
+        .fetch_one(&state.db)
+        .await
+        .unwrap_or(0);
+
+    Ok(Json(serde_json::json!({
+        "id": id,
+        "name": name,
+        "slug": slug,
+        "owner_email": owner_email,
+        "status": status,
+        "allowed_providers": providers,
+        "allowed_origins": origins,
+        "max_users": max_users,
+        "user_count": user_count,
+        "plan": plan,
+        "trial_ends_at": trial_ends.map(|t| t.to_rfc3339()),
+        "branding": {
+            "logo_url": logo,
+            "primary_color": primary_color,
+            "app_name": app_name,
+            "login_redirect_url": resolved_login_redirect,
+        },
+        "created_at": created.to_rfc3339(),
+        "updated_at": updated.to_rfc3339(),
+    })))
+}
+
+/// PATCH /platform/self-serve/tenants/{id} — Update a tenant owned by the authenticated user.
+pub async fn update_my_tenant(
+    State(state): State<AppState>,
+    Path(tenant_id): Path<String>,
+    req: axum::extract::Request,
+) -> Result<impl IntoResponse, AppError> {
+    let user = req
+        .extensions()
+        .get::<PlatformUser>()
+        .cloned()
+        .ok_or(AppError::Unauthorized {
+            error: "unauthorized",
+            message: "Not authenticated".into(),
+        })?;
+
+    // Verify ownership
+    let slug = sqlx::query_scalar::<_, String>(
+        "SELECT slug FROM tenants WHERE id = $1 AND owner_user_id = $2 AND status != 'deleted'",
+    )
+    .bind(&tenant_id)
+    .bind(&user.user_id)
+    .fetch_optional(&state.db)
+    .await?
+    .ok_or(AppError::NotFound {
+        error: "tenant_not_found",
+        message: "Tenant not found or you don't have access".into(),
+    })?;
+
+    let body: UpdateTenantRequest = axum::Json::<UpdateTenantRequest>::from_request(req, &state)
+        .await
+        .map_err(|_| AppError::BadRequest {
+            error: "invalid_request",
+            message: "Invalid request body".into(),
+        })?
+        .0;
+
+    if let Some(ref name) = body.name {
+        sqlx::query("UPDATE tenants SET name = $1, updated_at = NOW() WHERE id = $2")
+            .bind(name.trim())
+            .bind(&tenant_id)
+            .execute(&state.db)
+            .await?;
+    }
+    if let Some(ref providers) = body.allowed_providers {
+        let json = serde_json::to_value(providers).unwrap_or_default();
+        sqlx::query("UPDATE tenants SET allowed_providers = $1, updated_at = NOW() WHERE id = $2")
+            .bind(&json)
+            .bind(&tenant_id)
+            .execute(&state.db)
+            .await?;
+    }
+    if let Some(ref origins) = body.allowed_origins {
+        let json = serde_json::to_value(origins).unwrap_or_default();
+        sqlx::query("UPDATE tenants SET allowed_origins = $1, updated_at = NOW() WHERE id = $2")
+            .bind(&json)
+            .bind(&tenant_id)
+            .execute(&state.db)
+            .await?;
+    }
+    if let Some(ref v) = body.branding_logo_url {
+        sqlx::query("UPDATE tenants SET branding_logo_url = $1, updated_at = NOW() WHERE id = $2")
+            .bind(v)
+            .bind(&tenant_id)
+            .execute(&state.db)
+            .await?;
+    }
+    if let Some(ref v) = body.branding_primary_color {
+        sqlx::query(
+            "UPDATE tenants SET branding_primary_color = $1, updated_at = NOW() WHERE id = $2",
+        )
+        .bind(v)
+        .bind(&tenant_id)
+        .execute(&state.db)
+        .await?;
+    }
+    if let Some(ref v) = body.branding_app_name {
+        sqlx::query("UPDATE tenants SET branding_app_name = $1, updated_at = NOW() WHERE id = $2")
+            .bind(v)
+            .bind(&tenant_id)
+            .execute(&state.db)
+            .await?;
+    }
+    if let Some(ref v) = body.login_redirect_url {
+        let validated = validate_login_redirect_input(&state.config.server_url, &slug, v)?;
+        sqlx::query("UPDATE tenants SET login_redirect_url = $1, updated_at = NOW() WHERE id = $2")
+            .bind(validated)
+            .bind(&tenant_id)
+            .execute(&state.db)
+            .await?;
+    }
+
+    state.tenant_cache.invalidate(&slug);
+    tracing::info!(tenant_id = %tenant_id, "Self-serve tenant config updated");
+
+    Ok(Json(serde_json::json!({
+        "message": "Configuration updated successfully"
+    })))
+}
+
+/// DELETE /platform/self-serve/tenants/{id} — Soft-delete a tenant owned by the authenticated user.
+/// Requires `confirm_slug` in request body as an explicit destructive-action confirmation.
+pub async fn delete_my_tenant(
+    State(state): State<AppState>,
+    Path(tenant_id): Path<String>,
+    req: axum::extract::Request,
+) -> Result<impl IntoResponse, AppError> {
+    let user = req
+        .extensions()
+        .get::<PlatformUser>()
+        .cloned()
+        .ok_or(AppError::Unauthorized {
+            error: "unauthorized",
+            message: "Not authenticated".into(),
+        })?;
+
+    let body: DeleteTenantRequest = axum::Json::<DeleteTenantRequest>::from_request(req, &state)
+        .await
+        .map_err(|_| AppError::BadRequest {
+            error: "invalid_request",
+            message: "Invalid request body".into(),
+        })?
+        .0;
+
+    let slug = sqlx::query_scalar::<_, String>(
+        "SELECT slug FROM tenants WHERE id = $1 AND owner_user_id = $2 AND status != 'deleted'",
+    )
+    .bind(&tenant_id)
+    .bind(&user.user_id)
+    .fetch_optional(&state.db)
+    .await?
+    .ok_or(AppError::NotFound {
+        error: "tenant_not_found",
+        message: "Tenant not found or you don't have access".into(),
+    })?;
+
+    let confirm_slug = body.confirm_slug.trim();
+    if confirm_slug != slug {
+        return Err(AppError::BadRequest {
+            error: "confirmation_mismatch",
+            message: format!("Confirmation slug must match '{}'", slug),
+        });
+    }
+
+    sqlx::query("UPDATE tenants SET status = 'deleted', updated_at = NOW() WHERE id = $1")
+        .bind(&tenant_id)
+        .execute(&state.db)
+        .await?;
+
+    state.tenant_cache.invalidate(&slug);
+    tracing::warn!(
+        tenant_id = %tenant_id,
+        owner_user_id = %user.user_id,
+        slug = %slug,
+        "Self-serve tenant soft-deleted"
+    );
+
+    Ok((
+        StatusCode::OK,
+        Json(serde_json::json!({
+            "message": "Tenant deleted",
+            "tenant_id": tenant_id,
+            "slug": slug,
+            "status": "deleted"
+        })),
+    ))
+}
+
+/// POST /platform/self-serve/tenants/{id}/rotate-key — Rotate management API key.
+pub async fn rotate_my_tenant_key(
+    State(state): State<AppState>,
+    Path(tenant_id): Path<String>,
+    req: axum::extract::Request,
+) -> Result<impl IntoResponse, AppError> {
+    let user = req
+        .extensions()
+        .get::<PlatformUser>()
+        .cloned()
+        .ok_or(AppError::Unauthorized {
+            error: "unauthorized",
+            message: "Not authenticated".into(),
+        })?;
+
+    // Verify ownership
+    let exists = sqlx::query_scalar::<_, String>(
+        "SELECT id FROM tenants WHERE id = $1 AND owner_user_id = $2 AND status != 'deleted'",
+    )
+    .bind(&tenant_id)
+    .bind(&user.user_id)
+    .fetch_optional(&state.db)
+    .await?;
+
+    if exists.is_none() {
+        return Err(AppError::NotFound {
+            error: "tenant_not_found",
+            message: "Tenant not found or you don't have access".into(),
+        });
+    }
+
+    let new_key = format!("mgmt_{}", uuid::Uuid::new_v4());
+    let prefix = &new_key[..new_key.len().min(13)];
+    let hash = signing::hash_token(&new_key);
+
+    sqlx::query("UPDATE tenants SET api_key_hash = $1, api_key_prefix = $2, updated_at = NOW() WHERE id = $3")
+        .bind(&hash)
+        .bind(prefix)
+        .bind(&tenant_id)
+        .execute(&state.db)
+        .await?;
+
+    tracing::info!(tenant_id = %tenant_id, "Self-serve API key rotated");
+
+    Ok(Json(serde_json::json!({
+        "api_key": new_key,
+        "note": "Save this API key in backend secrets only — it will not be shown again. The old key is now invalid."
+    })))
+}
+
+/// GET /platform/self-serve/tenants/{id}/stats — Per-tenant stats for the dashboard.
+pub async fn tenant_stats(
+    State(state): State<AppState>,
+    Path(tenant_id): Path<String>,
+    req: axum::extract::Request,
+) -> Result<impl IntoResponse, AppError> {
+    let user = req
+        .extensions()
+        .get::<PlatformUser>()
+        .cloned()
+        .ok_or(AppError::Unauthorized {
+            error: "unauthorized",
+            message: "Not authenticated".into(),
+        })?;
+
+    // Verify ownership
+    sqlx::query_scalar::<_, String>(
+        "SELECT id FROM tenants WHERE id = $1 AND owner_user_id = $2 AND status != 'deleted'",
+    )
+    .bind(&tenant_id)
+    .bind(&user.user_id)
+    .fetch_optional(&state.db)
+    .await?
+    .ok_or(AppError::NotFound {
+        error: "tenant_not_found",
+        message: "Tenant not found or you don't have access".into(),
+    })?;
+
+    // Gather stats (same queries as admin.rs::stats + management.rs::tenant_stats)
+    let total_users: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM users WHERE tenant_id = $1")
+        .bind(&tenant_id)
+        .fetch_one(&state.db)
+        .await
+        .unwrap_or(0);
+
+    let verified_users: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM users WHERE tenant_id = $1 AND email_verified = TRUE",
+    )
+    .bind(&tenant_id)
+    .fetch_one(&state.db)
+    .await
+    .unwrap_or(0);
+
+    let blocked_users: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM users WHERE tenant_id = $1 AND locked_until > NOW()",
+    )
+    .bind(&tenant_id)
+    .fetch_one(&state.db)
+    .await
+    .unwrap_or(0);
+
+    let active_sessions: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM refresh_tokens WHERE tenant_id = $1 AND revoked = FALSE AND expires_at > NOW()"
+    ).bind(&tenant_id).fetch_one(&state.db).await.unwrap_or(0);
+
+    let logins_24h: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM login_attempts WHERE user_id IN \
+         (SELECT id FROM users WHERE tenant_id = $1) AND success = TRUE \
+         AND created_at > NOW() - INTERVAL '24 hours'",
+    )
+    .bind(&tenant_id)
+    .fetch_one(&state.db)
+    .await
+    .unwrap_or(0);
+
+    let failed_logins_24h: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM login_attempts WHERE user_id IN \
+         (SELECT id FROM users WHERE tenant_id = $1) AND success = FALSE \
+         AND created_at > NOW() - INTERVAL '24 hours'",
+    )
+    .bind(&tenant_id)
+    .fetch_one(&state.db)
+    .await
+    .unwrap_or(0);
+
+    // Provider breakdown
+    let provider_rows = sqlx::query_as::<_, (String, i64)>(
+        "SELECT c.provider, COUNT(*) FROM credentials c \
+         JOIN users u ON u.id = c.user_id WHERE u.tenant_id = $1 GROUP BY c.provider",
+    )
+    .bind(&tenant_id)
+    .fetch_all(&state.db)
+    .await
+    .unwrap_or_default();
+
+    let mut providers = serde_json::Map::new();
+    for (provider, count) in provider_rows {
+        providers.insert(provider, serde_json::json!(count));
+    }
+
+    Ok(Json(serde_json::json!({
+        "tenant_id": tenant_id,
+        "total_users": total_users,
+        "verified_users": verified_users,
+        "blocked_users": blocked_users,
+        "active_sessions": active_sessions,
+        "logins_24h": logins_24h,
+        "failed_logins_24h": failed_logins_24h,
+        "providers": providers,
+    })))
+}
+
+// ── Get Started Page ────────────────────────────────────────────────────
+
+/// GET /get-started — Self-serve onboarding page.
+/// Step 1: Register/login on platform tenant
+/// Step 2: Create a tenant
+/// Step 3: Get API key + next steps
+pub async fn get_started_page(State(state): State<AppState>) -> impl IntoResponse {
+    if let Err(e) = ensure_platform_oauth_clients(&state).await {
+        tracing::warn!(error = ?e, "Failed to ensure platform OAuth clients for onboarding");
+    }
+
+    let page = render_get_started_page_html(&state);
+    (
+        [(axum::http::header::HeaderName::from_static("content-security-policy"), page.csp)],
+        Html(page.html),
+    ).into_response()
+}
+
+/// GET /platform/login — Returning platform users sign in here.
+/// If authenticated and they have tenants, redirect to /platform/console.
+/// If authenticated but no tenants, redirect to /platform/onboarding.
+pub async fn platform_login_page(State(state): State<AppState>) -> impl IntoResponse {
+    if let Err(e) = ensure_platform_oauth_clients(&state).await {
+        tracing::warn!(error = ?e, "Failed to ensure platform OAuth clients for login");
+    }
+
+    let page = render_platform_login_page_html(&state);
+    (
+        [
+            (axum::http::header::CACHE_CONTROL, "no-store".to_string()),
+            (axum::http::header::HeaderName::from_static("content-security-policy"), page.csp),
+        ],
+        Html(page.html),
+    )
+}
