@@ -229,7 +229,7 @@ async fn handle_auth_code(
 
     let (email, name, avatar, email_verified) = user_row;
 
-    let roles = db::fetch_user_roles(&state.db, &user_id).await;
+    let roles = db::fetch_user_roles(&state.db, &user_id, tenant_id.as_deref()).await;
 
     let auth_method = if auth_provider.as_deref() == Some("email") {
         "password"
@@ -662,7 +662,7 @@ async fn handle_refresh(
         message: "User not found".into(),
     })?;
 
-    let roles = db::fetch_user_roles(&state.db, &user_id).await;
+    let roles = db::fetch_user_roles(&state.db, &user_id, tenant_id.as_deref()).await;
 
     // ── DPoP proof validation (sender-constrained tokens) ────────────
     let dpop_cnf = validate_dpop_if_needed(

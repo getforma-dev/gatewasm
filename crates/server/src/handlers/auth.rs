@@ -1109,7 +1109,7 @@ pub async fn login(
         );
     }
 
-    let roles = db::fetch_user_roles(&state.db, &user_id).await;
+    let roles = db::fetch_user_roles(&state.db, &user_id, tenant_id.as_deref()).await;
 
     let (access_token, expires_at) = signing::create_access_token(
         signing::AccessTokenInput {
@@ -1515,10 +1515,19 @@ pub async fn delete_account(
         .execute(&state.db)
         .await?;
 
-    sqlx::query("DELETE FROM users WHERE id = $1")
-        .bind(&user_id)
-        .execute(&state.db)
-        .await?;
+    // Tenant-scoped deletion when within a tenant context; otherwise platform-level deletion
+    if let Some(ref tid) = tenant_id {
+        sqlx::query("DELETE FROM users WHERE id = $1 AND tenant_id = $2")
+            .bind(&user_id)
+            .bind(tid)
+            .execute(&state.db)
+            .await?;
+    } else {
+        sqlx::query("DELETE FROM users WHERE id = $1")
+            .bind(&user_id)
+            .execute(&state.db)
+            .await?;
+    }
 
     // Dispatch webhook event
     if let Some(ref tid) = tenant_id {

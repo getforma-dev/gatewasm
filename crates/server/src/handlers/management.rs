@@ -130,6 +130,13 @@ pub async fn create_tenant(
         });
     }
 
+    if slug.starts_with('-') || slug.ends_with('-') {
+        return Err(AppError::BadRequest {
+            error: "invalid_slug",
+            message: "Slug must not start or end with a hyphen".into(),
+        });
+    }
+
     if is_reserved_slug(&slug) {
         return Err(AppError::BadRequest {
             error: "reserved_slug",
@@ -486,6 +493,23 @@ pub async fn delete_tenant(
         });
     }
 
+    // Revoke all active sessions for the deleted tenant
+    sqlx::query("UPDATE refresh_tokens SET revoked = TRUE WHERE tenant_id = $1 AND revoked = FALSE")
+        .bind(&tenant_id)
+        .execute(&state.db)
+        .await
+        .ok();
+
+    // Invalidate tenant cache so the deletion takes effect immediately
+    if let Ok(Some(slug)) =
+        sqlx::query_scalar::<_, String>("SELECT slug FROM tenants WHERE id = $1")
+            .bind(&tenant_id)
+            .fetch_optional(&state.db)
+            .await
+    {
+        state.tenant_cache.invalidate(&slug);
+    }
+
     tracing::info!(tenant_id = %tenant_id, "Tenant soft-deleted");
     Ok(StatusCode::NO_CONTENT)
 }
@@ -770,9 +794,10 @@ pub async fn block_user(
         });
     }
 
-    // Revoke all their sessions
-    sqlx::query("UPDATE refresh_tokens SET revoked = TRUE WHERE user_id = $1 AND revoked = FALSE")
+    // Revoke all their sessions within this tenant
+    sqlx::query("UPDATE refresh_tokens SET revoked = TRUE WHERE user_id = $1 AND tenant_id = $2 AND revoked = FALSE")
         .bind(&user_id)
+        .bind(&tenant.tenant_id)
         .execute(&state.db)
         .await
         .ok();
@@ -1446,9 +1471,10 @@ pub async fn revoke_user_sessions(
     }
 
     let result = sqlx::query(
-        "UPDATE refresh_tokens SET revoked = TRUE WHERE user_id = $1 AND revoked = FALSE",
+        "UPDATE refresh_tokens SET revoked = TRUE WHERE user_id = $1 AND tenant_id = $2 AND revoked = FALSE",
     )
     .bind(&user_id)
+    .bind(&tenant.tenant_id)
     .execute(&state.db)
     .await?;
 

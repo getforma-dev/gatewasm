@@ -325,14 +325,26 @@ pub async fn log_login_attempt(
 }
 
 /// Fetch the role names for a user, falling back to `["user"]` on error.
-pub async fn fetch_user_roles(pool: &PgPool, user_id: &str) -> Vec<String> {
-    sqlx::query_scalar(
-        "SELECT r.name FROM roles r JOIN user_roles ur ON ur.role_id = r.id WHERE ur.user_id = $1",
-    )
-    .bind(user_id)
-    .fetch_all(pool)
-    .await
-    .unwrap_or_else(|_| vec!["user".to_string()])
+/// When `tenant_id` is provided, only returns global roles and roles scoped to that tenant.
+pub async fn fetch_user_roles(pool: &PgPool, user_id: &str, tenant_id: Option<&str>) -> Vec<String> {
+    if let Some(tid) = tenant_id {
+        sqlx::query_scalar(
+            "SELECT r.name FROM roles r JOIN user_roles ur ON ur.role_id = r.id WHERE ur.user_id = $1 AND (r.tenant_id IS NULL OR r.tenant_id = $2)",
+        )
+        .bind(user_id)
+        .bind(tid)
+        .fetch_all(pool)
+        .await
+        .unwrap_or_else(|_| vec!["user".to_string()])
+    } else {
+        sqlx::query_scalar(
+            "SELECT r.name FROM roles r JOIN user_roles ur ON ur.role_id = r.id WHERE ur.user_id = $1",
+        )
+        .bind(user_id)
+        .fetch_all(pool)
+        .await
+        .unwrap_or_else(|_| vec!["user".to_string()])
+    }
 }
 
 /// Enforce a maximum number of active refresh tokens per user.

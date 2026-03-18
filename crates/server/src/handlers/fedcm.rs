@@ -210,7 +210,7 @@ pub async fn token_assertion(
     let (email, name) = user;
 
     // Fetch roles
-    let roles = db::fetch_user_roles(&state.db, &user_id).await;
+    let roles = db::fetch_user_roles(&state.db, &user_id, Some(&tenant_id)).await;
 
     // Issue a short-lived access token
     let (access_token, _) = signing::create_access_token(

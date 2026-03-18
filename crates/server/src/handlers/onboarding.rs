@@ -727,6 +727,13 @@ pub async fn delete_my_tenant(
         .execute(&state.db)
         .await?;
 
+    // Revoke all active sessions for the deleted tenant
+    sqlx::query("UPDATE refresh_tokens SET revoked = TRUE WHERE tenant_id = $1 AND revoked = FALSE")
+        .bind(&tenant_id)
+        .execute(&state.db)
+        .await
+        .ok();
+
     state.tenant_cache.invalidate(&slug);
     tracing::warn!(
         tenant_id = %tenant_id,

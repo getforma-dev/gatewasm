@@ -1305,7 +1305,7 @@ pub async fn login_complete(
     }
 
     // Fetch roles
-    let roles = crate::db::fetch_user_roles(&state.db, &db_user_id).await;
+    let roles = crate::db::fetch_user_roles(&state.db, &db_user_id, Some(tenant_id)).await;
 
     // Create tokens
     let (access_token, expires_at) = signing::create_access_token(
