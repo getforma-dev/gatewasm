@@ -14,7 +14,7 @@
  */
 import type { Browser, Page, BrowserContext } from '@playwright/test';
 
-const BASE = 'http://127.0.0.1:3101';
+const BASE = process.env.BASE_URL || 'http://127.0.0.1:3102';
 const TENANT_HEADER = { 'X-Tenant-Slug': 'platform' };
 const TEST_EMAIL = 'e2e-test-' + Date.now() + '@test.local';
 const TEST_PASSWORD = 'E2eTestPassword123!';
