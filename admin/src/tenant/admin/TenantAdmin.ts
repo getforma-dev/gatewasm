@@ -2,6 +2,7 @@
 // TenantAdmin.ts — Tenant admin console with sidebar + view switching
 // ---------------------------------------------------------------------------
 
+import { detectEnv } from '../../core/utils';
 import { Sidebar } from '../../core/components/Sidebar';
 import { LoadingBar } from '../../core/components/LoadingBar';
 import { ToastView } from '../../core/components/Toast';
@@ -35,13 +36,6 @@ const REFRESH_ICON =
   '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>';
 const SIGNOUT_ICON =
   '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>';
-
-// -- Environment badge -------------------------------------------------------
-
-function detectEnv(): string {
-  const host = typeof window !== 'undefined' ? window.location.hostname : '';
-  return (host === 'localhost' || host === '127.0.0.1') ? 'dev' : 'prod';
-}
 
 // -- Modal overlay helper ----------------------------------------------------
 

@@ -2,6 +2,7 @@
 // TenantDashboard.ts — Tenant dashboard shell with sidebar + view switching
 // ---------------------------------------------------------------------------
 
+import { detectEnv } from '../../core/utils';
 import { Sidebar } from '../../core/components/Sidebar';
 import { LoadingBar } from '../../core/components/LoadingBar';
 import { ToastView } from '../../core/components/Toast';
@@ -29,13 +30,6 @@ const INTEGRATION_ICON =
   '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>';
 const SIGNOUT_ICON =
   '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>';
-
-// -- Environment badge -------------------------------------------------------
-
-function detectEnv(): string {
-  const host = typeof window !== 'undefined' ? window.location.hostname : '';
-  return (host === 'localhost' || host === '127.0.0.1') ? 'dev' : 'prod';
-}
 
 // -- Profile View ------------------------------------------------------------
 

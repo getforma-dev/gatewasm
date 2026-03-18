@@ -18,6 +18,8 @@ struct DPoPClaims {
     htm: String,
     htu: String,
     iat: u64,
+    /// Access token hash (RFC 9449 §4.2) — base64url(SHA-256(access_token)).
+    /// Deserialized for future validation when DPoP proofs accompany access tokens.
     #[serde(default)]
     #[allow(dead_code)]
     ath: Option<String>,
@@ -27,6 +29,9 @@ struct DPoPClaims {
 ///
 /// Returns `(jti, jwk_thumbprint)` on success so the caller can perform
 /// jti-replay checking and bind the thumbprint into the access token.
+///
+/// When `access_token` is provided, the `ath` claim (RFC 9449 §4.2) is
+/// validated: it must equal the base64url(SHA-256(access_token)).
 pub fn validate_dpop_proof(
     proof: &str,
     expected_method: &str,
@@ -138,7 +143,7 @@ pub fn validate_dpop_proof(
     // iat must be within ±60 seconds of now
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
-        .unwrap()
+        .expect("system clock before Unix epoch")
         .as_secs();
     let iat = claims.iat;
     if iat > now + 60 {

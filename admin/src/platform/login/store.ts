@@ -71,43 +71,7 @@ if (code) {
 
 // ── Helpers ───────────────────────────────────────────────────────────
 
-function randomState(): string {
-  const bytes = new Uint8Array(16);
-  crypto.getRandomValues(bytes);
-  return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
-}
-
-async function generatePKCE(): Promise<{ verifier: string; challenge: string }> {
-  const bytes = new Uint8Array(32);
-  crypto.getRandomValues(bytes);
-  const verifier = btoa(String.fromCharCode(...bytes))
-    .replace(/\+/g, '-')
-    .replace(/\//g, '_')
-    .replace(/=+$/, '');
-
-  const hash = await crypto.subtle.digest(
-    'SHA-256',
-    new TextEncoder().encode(verifier),
-  );
-  const challenge = btoa(String.fromCharCode(...new Uint8Array(hash)))
-    .replace(/\+/g, '-')
-    .replace(/\//g, '_')
-    .replace(/=+$/, '');
-
-  return { verifier, challenge };
-}
-
-function decodeJwtClaims(token: string | null): Record<string, any> | null {
-  try {
-    const parts = String(token || '').split('.');
-    if (parts.length < 2) return null;
-    let payload = parts[1].replace(/-/g, '+').replace(/_/g, '/');
-    while (payload.length % 4) payload += '=';
-    return JSON.parse(atob(payload));
-  } catch {
-    return null;
-  }
-}
+import { randomState, generatePKCE, decodeJwtClaims, copyText } from '../../core/utils';
 
 function formatRetryAfter(seconds: number): string {
   const sec = Number(seconds || 0);
@@ -128,19 +92,8 @@ function isOauthConfigError(detail: string): boolean {
   );
 }
 
-export function copyText(value: string): Promise<void> {
-  if (!value) return Promise.resolve();
-  if (navigator.clipboard && navigator.clipboard.writeText) {
-    return navigator.clipboard.writeText(value).catch(() => {});
-  }
-  const ta = document.createElement('textarea');
-  ta.value = value;
-  document.body.appendChild(ta);
-  ta.select();
-  try { document.execCommand('copy'); } catch { /* noop */ }
-  document.body.removeChild(ta);
-  return Promise.resolve();
-}
+// Re-export for consumers that import copyText from this module
+export { copyText };
 
 // ── API helper ────────────────────────────────────────────────────────
 

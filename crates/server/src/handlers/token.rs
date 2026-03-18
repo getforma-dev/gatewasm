@@ -593,7 +593,7 @@ async fn handle_refresh(
     // family as a security precaution.
     // NULL stored fingerprint (legacy tokens) is treated as a match.
     let current_fingerprint = {
-        let fp_ip = extract_client_ip(&headers);
+        let fp_ip = extract_client_ip(&headers, None);
         let fp_ua = extract_user_agent(&headers);
         compute_fingerprint(&fp_ua, &fp_ip)
     };
@@ -642,7 +642,7 @@ async fn handle_refresh(
                 Some(&user_id),
                 AuditAction::USER_TOKEN_REVOKED,
                 "/auth/token",
-                &extract_client_ip(&headers),
+                &extract_client_ip(&headers, None),
                 None,
                 None,
                 RESULT_FAILURE,

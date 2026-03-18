@@ -724,7 +724,7 @@ pub async fn register(
 
     let client_fingerprint = {
         use crate::middleware::fingerprint::{compute_fingerprint, extract_client_ip, extract_user_agent};
-        let ip = extract_client_ip(&req_headers);
+        let ip = extract_client_ip(&req_headers, None);
         let ua = extract_user_agent(&req_headers);
         compute_fingerprint(&ua, &ip)
     };
@@ -1133,7 +1133,7 @@ pub async fn login(
 
     let login_fingerprint = {
         use crate::middleware::fingerprint::{compute_fingerprint, extract_client_ip, extract_user_agent};
-        let fp_ip = extract_client_ip(&login_req_headers);
+        let fp_ip = extract_client_ip(&login_req_headers, None);
         let fp_ua = extract_user_agent(&login_req_headers);
         compute_fingerprint(&fp_ua, &fp_ip)
     };
@@ -1141,7 +1141,7 @@ pub async fn login(
     // ── Geolocation / impossible-travel detection ──────────────────────
     let login_ip_str = {
         use crate::middleware::fingerprint::extract_client_ip;
-        extract_client_ip(&login_req_headers)
+        extract_client_ip(&login_req_headers, None)
     };
     let login_ip_type = super::geolocation::classify_ip(&login_ip_str);
     let login_geo = super::geolocation::geolocate_ip(&login_ip_str);

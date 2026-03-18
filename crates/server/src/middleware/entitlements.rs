@@ -73,14 +73,20 @@ pub async fn load_entitlements(pool: &PgPool, tenant_id: &str) -> Result<Entitle
     .fetch_optional(pool)
     .await?;
 
-    let (plan, max_users) = fallback.unwrap_or_else(|| ("trial".to_string(), 1000));
+    let (plan, max_users) = match fallback {
+        Some(row) => row,
+        None => {
+            tracing::warn!(tenant_id, "No tenant row found — applying restrictive defaults");
+            ("trial".to_string(), 5)
+        }
+    };
     Ok(Entitlements {
         plan,
         max_users,
-        max_organizations: 3,
-        allow_custom_roles: true,
-        allow_webhooks: true,
-        allow_organizations: true,
+        max_organizations: 1,
+        allow_custom_roles: false,
+        allow_webhooks: false,
+        allow_organizations: false,
     })
 }
 

@@ -26,14 +26,24 @@ fn normalize_to_subnet(ip: &str) -> String {
     }
 }
 
-/// Extract client IP from X-Forwarded-For header (first entry).
-pub fn extract_client_ip(headers: &axum::http::HeaderMap) -> String {
+/// Extract client IP from X-Forwarded-For header (first entry) with basic validation.
+///
+/// Only accepts values that parse as valid IP addresses. Spoofed or garbage
+/// X-Forwarded-For values fall through to the fallback.
+pub fn extract_client_ip(
+    headers: &axum::http::HeaderMap,
+    peer_ip: Option<&str>,
+) -> String {
+    let fallback = peer_ip.unwrap_or("0.0.0.0");
+
     headers
         .get("x-forwarded-for")
         .and_then(|v| v.to_str().ok())
         .and_then(|v| v.split(',').next())
-        .map(|s| s.trim().to_string())
-        .unwrap_or_else(|| "0.0.0.0".to_string())
+        .map(|s| s.trim())
+        .filter(|s| s.parse::<IpAddr>().is_ok())
+        .map(|s| s.to_string())
+        .unwrap_or_else(|| fallback.to_string())
 }
 
 /// Extract User-Agent from headers.
@@ -123,13 +133,33 @@ mod tests {
             "x-forwarded-for",
             "203.0.113.50, 70.41.3.18".parse().unwrap(),
         );
-        assert_eq!(extract_client_ip(&headers), "203.0.113.50");
+        assert_eq!(extract_client_ip(&headers, None), "203.0.113.50");
     }
 
     #[test]
     fn extract_client_ip_missing_xff() {
         let headers = axum::http::HeaderMap::new();
-        assert_eq!(extract_client_ip(&headers), "0.0.0.0");
+        assert_eq!(extract_client_ip(&headers, None), "0.0.0.0");
+    }
+
+    #[test]
+    fn extract_client_ip_rejects_spoofed_xff() {
+        let mut headers = axum::http::HeaderMap::new();
+        headers.insert(
+            "x-forwarded-for",
+            "not-an-ip, 70.41.3.18".parse().unwrap(),
+        );
+        assert_eq!(
+            extract_client_ip(&headers, Some("10.0.0.1")),
+            "10.0.0.1",
+            "Invalid IP in XFF should fall back to peer IP"
+        );
+    }
+
+    #[test]
+    fn extract_client_ip_uses_peer_fallback() {
+        let headers = axum::http::HeaderMap::new();
+        assert_eq!(extract_client_ip(&headers, Some("172.16.0.5")), "172.16.0.5");
     }
 
     #[test]

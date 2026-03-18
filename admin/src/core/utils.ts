@@ -60,3 +60,48 @@ export async function copyText(text: string): Promise<void> {
     document.body.removeChild(ta);
   }
 }
+
+// ── Auth / crypto helpers ───────────────────────────────────────────────────
+
+export function randomState(): string {
+  const bytes = new Uint8Array(16);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+export async function generatePKCE(): Promise<{ verifier: string; challenge: string }> {
+  const bytes = new Uint8Array(32);
+  crypto.getRandomValues(bytes);
+  const verifier = btoa(String.fromCharCode(...bytes))
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/, '');
+
+  const hash = await crypto.subtle.digest(
+    'SHA-256',
+    new TextEncoder().encode(verifier),
+  );
+  const challenge = btoa(String.fromCharCode(...new Uint8Array(hash)))
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/, '');
+
+  return { verifier, challenge };
+}
+
+export function decodeJwtClaims(token: string | null): Record<string, unknown> | null {
+  try {
+    const parts = String(token || '').split('.');
+    if (parts.length < 2) return null;
+    let payload = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+    while (payload.length % 4) payload += '=';
+    return JSON.parse(atob(payload));
+  } catch {
+    return null;
+  }
+}
+
+export function detectEnv(): string {
+  const host = typeof window !== 'undefined' ? window.location.hostname : '';
+  return (host === 'localhost' || host === '127.0.0.1') ? 'dev' : 'prod';
+}

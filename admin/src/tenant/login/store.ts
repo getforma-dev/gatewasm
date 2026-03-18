@@ -58,31 +58,7 @@ export const [rememberEmail, setRememberEmail] = createSignal(false);
 
 // ── Helpers ─────────────────────────────────────────────────────────────
 
-function randomState(): string {
-  const bytes = new Uint8Array(16);
-  crypto.getRandomValues(bytes);
-  return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
-}
-
-async function generatePKCE(): Promise<{ verifier: string; challenge: string }> {
-  const bytes = new Uint8Array(32);
-  crypto.getRandomValues(bytes);
-  const verifier = btoa(String.fromCharCode(...bytes))
-    .replace(/\+/g, '-')
-    .replace(/\//g, '_')
-    .replace(/=+$/, '');
-
-  const hash = await crypto.subtle.digest(
-    'SHA-256',
-    new TextEncoder().encode(verifier),
-  );
-  const challenge = btoa(String.fromCharCode(...new Uint8Array(hash)))
-    .replace(/\+/g, '-')
-    .replace(/\//g, '_')
-    .replace(/=+$/, '');
-
-  return { verifier, challenge };
-}
+import { randomState, generatePKCE } from '../../core/utils';
 
 // ── Remember email ──────────────────────────────────────────────────────
 

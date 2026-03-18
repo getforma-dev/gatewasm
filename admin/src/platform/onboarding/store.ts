@@ -35,45 +35,9 @@ export const [submitting, setSubmitting] = createSignal(false);
 export const [showPassword, setShowPassword] = createSignal(false);
 export const [showConfirm, setShowConfirm] = createSignal(false);
 
-// ── PKCE helpers ────────────────────────────────────────────────────────
+// ── Shared helpers ──────────────────────────────────────────────────────
 
-function randomState(): string {
-  const bytes = new Uint8Array(16);
-  crypto.getRandomValues(bytes);
-  return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
-}
-
-async function generatePKCE(): Promise<{ verifier: string; challenge: string }> {
-  const bytes = new Uint8Array(32);
-  crypto.getRandomValues(bytes);
-  const verifier = btoa(String.fromCharCode(...bytes))
-    .replace(/\+/g, '-')
-    .replace(/\//g, '_')
-    .replace(/=+$/, '');
-  const hash = await crypto.subtle.digest(
-    'SHA-256',
-    new TextEncoder().encode(verifier),
-  );
-  const challenge = btoa(String.fromCharCode(...new Uint8Array(hash)))
-    .replace(/\+/g, '-')
-    .replace(/\//g, '_')
-    .replace(/=+$/, '');
-  return { verifier, challenge };
-}
-
-// ── JWT decode ──────────────────────────────────────────────────────────
-
-function decodeJwtClaims(token: string): Record<string, unknown> | null {
-  try {
-    const parts = token.split('.');
-    if (parts.length < 2) return null;
-    let payload = parts[1].replace(/-/g, '+').replace(/_/g, '/');
-    while (payload.length % 4 !== 0) payload += '=';
-    return JSON.parse(atob(payload));
-  } catch {
-    return null;
-  }
-}
+import { randomState, generatePKCE, decodeJwtClaims } from '../../core/utils';
 
 // ── Post-auth routing ───────────────────────────────────────────────────
 
