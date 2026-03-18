@@ -1,6 +1,6 @@
 import type { SidebarProps } from '../types';
 
-import { h, createSignal, createList } from 'formajs';
+import { h, createSignal } from 'formajs';
 
 export function Sidebar(props: SidebarProps): HTMLElement {
   const [collapsed, setCollapsed] = createSignal(false);

@@ -11,13 +11,6 @@ use crate::jwt::signing;
 use crate::AppState;
 
 #[derive(Debug, Deserialize)]
-pub struct ListUsersQuery {
-    pub limit: Option<i64>,
-    pub offset: Option<i64>,
-    pub email: Option<String>,
-}
-
-#[derive(Debug, Deserialize)]
 pub struct PaginationQuery {
     pub limit: Option<i64>,
     pub offset: Option<i64>,
@@ -35,78 +28,6 @@ fn tenant_id_from_claims(req: &axum::extract::Request) -> Result<String, AppErro
         error: "no_tenant",
         message: "User has no tenant".into(),
     })
-}
-
-/// GET /admin/users — List users in the authenticated admin's tenant.
-pub async fn list_users(
-    State(state): State<AppState>,
-    req: axum::extract::Request,
-) -> Result<impl IntoResponse, AppError> {
-    let tenant_id = tenant_id_from_claims(&req)?;
-
-    let params: ListUsersQuery = Query::try_from_uri(req.uri())
-        .unwrap_or(Query(ListUsersQuery {
-            limit: None,
-            offset: None,
-            email: None,
-        }))
-        .0;
-
-    let limit = params.limit.unwrap_or(50).min(100);
-    let offset = params.offset.unwrap_or(0);
-
-    let users = if let Some(ref email_filter) = params.email {
-        let escaped = email_filter
-            .to_lowercase()
-            .replace('%', "\\%")
-            .replace('_', "\\_");
-        let pattern = format!("%{}%", escaped);
-        sqlx::query_as::<_, (String, String, Option<String>, Option<String>, bool, chrono::DateTime<Utc>)>(
-            "SELECT id, email, name, avatar, email_verified, created_at FROM users WHERE tenant_id = $1 AND email ILIKE $2 ORDER BY created_at DESC LIMIT $3 OFFSET $4",
-        )
-        .bind(&tenant_id)
-        .bind(&pattern)
-        .bind(limit)
-        .bind(offset)
-        .fetch_all(&state.db)
-        .await?
-    } else {
-        sqlx::query_as::<_, (String, String, Option<String>, Option<String>, bool, chrono::DateTime<Utc>)>(
-            "SELECT id, email, name, avatar, email_verified, created_at FROM users WHERE tenant_id = $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3",
-        )
-        .bind(&tenant_id)
-        .bind(limit)
-        .bind(offset)
-        .fetch_all(&state.db)
-        .await?
-    };
-
-    let total: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM users WHERE tenant_id = $1")
-        .bind(&tenant_id)
-        .fetch_one(&state.db)
-        .await
-        .unwrap_or(0);
-
-    let items: Vec<serde_json::Value> = users
-        .into_iter()
-        .map(|(id, email, name, avatar, verified, created)| {
-            serde_json::json!({
-                "id": id,
-                "email": email,
-                "name": name,
-                "avatar": avatar,
-                "email_verified": verified,
-                "created_at": created.to_rfc3339(),
-            })
-        })
-        .collect();
-
-    Ok(Json(serde_json::json!({
-        "users": items,
-        "total": total,
-        "limit": limit,
-        "offset": offset,
-    })))
 }
 
 /// GET /admin/stats — Tenant statistics for admin dashboard.

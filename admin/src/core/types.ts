@@ -3,11 +3,6 @@
 // Shared types for the Forma Auth admin frontend.
 // ─────────────────────────────────────────────────────────────────────────────
 
-// ── Reactivity ──────────────────────────────────────────────────────────────
-
-export type SignalGetter<T> = () => T;
-export type SignalSetter<T> = (next: T | ((prev: T) => T)) => void;
-
 // ── Pagination ──────────────────────────────────────────────────────────────
 
 export interface PageState {

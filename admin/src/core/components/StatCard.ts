@@ -1,5 +1,4 @@
 import { h } from 'formajs';
-import type { HeaderProps } from '../types';
 
 export function StatCard(props: { label: string; value: () => string | number; hint?: string }) {
   return h('article', { class: 'stat-card' },

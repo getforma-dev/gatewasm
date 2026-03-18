@@ -1,6 +1,6 @@
 import type { HeaderProps } from '../types';
 
-import { h, createShow } from 'formajs';
+import { h } from 'formajs';
 
 export function Header(props: HeaderProps) {
   return h('header', { class: 'header' },

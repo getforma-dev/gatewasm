@@ -14,12 +14,6 @@ export function fmtDate(iso: string | null | undefined): string {
   }
 }
 
-export function isTrialExpiring(iso: string | null | undefined): boolean {
-  if (!iso) return false;
-  const diff = new Date(iso).getTime() - Date.now();
-  return diff > 0 && diff < 7 * 24 * 3600 * 1000;
-}
-
 export function normalizePillStatus(status: unknown): string {
   return String(status || 'unknown').toLowerCase().replace(/[^a-z]/g, '');
 }
