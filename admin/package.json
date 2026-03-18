@@ -13,7 +13,7 @@
   },
   "devDependencies": {
     "@getforma/compiler": "^0.1.2",
-    "@getforma/build": "^0.1.2",
+    "@getforma/build": "^0.1.6",
     "esbuild": "^0.25.0",
     "tsx": "^4.0.0",
     "@tailwindcss/cli": "^4.1.0",
