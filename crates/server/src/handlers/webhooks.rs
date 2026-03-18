@@ -11,6 +11,43 @@ use crate::error::AppError;
 use crate::middleware::tenant::TenantContext;
 use crate::AppState;
 
+/// Reject URLs targeting private/internal network addresses (SSRF prevention).
+pub fn is_private_url(raw_url: &str) -> bool {
+    if let Ok(parsed) = url::Url::parse(raw_url) {
+        if let Some(host) = parsed.host_str() {
+            let h = host.to_lowercase();
+            return h == "localhost"
+                || h == "127.0.0.1"
+                || h == "0.0.0.0"
+                || h == "::1"
+                || h == "[::1]"
+                || h.starts_with("10.")
+                || h.starts_with("172.16.")
+                || h.starts_with("172.17.")
+                || h.starts_with("172.18.")
+                || h.starts_with("172.19.")
+                || h.starts_with("172.20.")
+                || h.starts_with("172.21.")
+                || h.starts_with("172.22.")
+                || h.starts_with("172.23.")
+                || h.starts_with("172.24.")
+                || h.starts_with("172.25.")
+                || h.starts_with("172.26.")
+                || h.starts_with("172.27.")
+                || h.starts_with("172.28.")
+                || h.starts_with("172.29.")
+                || h.starts_with("172.30.")
+                || h.starts_with("172.31.")
+                || h.starts_with("192.168.")
+                || h == "169.254.169.254"
+                || h.starts_with("169.254.")
+                || h.ends_with(".internal")
+                || h.ends_with(".local");
+        }
+    }
+    false
+}
+
 /// Valid webhook event types.
 pub const WEBHOOK_EVENTS: &[&str] = &[
     "user.registered",
@@ -100,6 +137,12 @@ pub async fn create_webhook(
         return Err(AppError::BadRequest {
             error: "invalid_url",
             message: "Webhook URL must start with http:// or https://".into(),
+        });
+    }
+    if is_private_url(&body.url) {
+        return Err(AppError::BadRequest {
+            error: "invalid_url",
+            message: "URL must not target private/internal addresses".into(),
         });
     }
 
@@ -244,6 +287,12 @@ pub async fn update_webhook(
             return Err(AppError::BadRequest {
                 error: "invalid_url",
                 message: "Webhook URL must start with http:// or https://".into(),
+            });
+        }
+        if is_private_url(url) {
+            return Err(AppError::BadRequest {
+                error: "invalid_url",
+                message: "URL must not target private/internal addresses".into(),
             });
         }
         sqlx::query("UPDATE webhooks SET url = $1, updated_at = NOW() WHERE id = $2")

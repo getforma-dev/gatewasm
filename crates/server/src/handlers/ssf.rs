@@ -13,6 +13,7 @@ use serde::Deserialize;
 use sqlx::Row;
 
 use crate::compliance::audit::{self, AuditAction, RESULT_SUCCESS};
+use crate::handlers::webhooks::is_private_url;
 use crate::error::AppError;
 use crate::middleware::tenant::TenantContext;
 use crate::AppState;
@@ -123,7 +124,14 @@ pub async fn create_stream(
     // Push requires a receiver_url
     if body.delivery_method == "push" {
         match &body.receiver_url {
-            Some(url) if url.starts_with("https://") || url.starts_with("http://") => {}
+            Some(url) if url.starts_with("https://") || url.starts_with("http://") => {
+                if is_private_url(url) {
+                    return Err(AppError::BadRequest {
+                        error: "invalid_url",
+                        message: "URL must not target private/internal addresses".into(),
+                    });
+                }
+            }
             Some(_) => {
                 return Err(AppError::BadRequest {
                     error: "invalid_url",
@@ -355,6 +363,12 @@ pub async fn update_stream(
             return Err(AppError::BadRequest {
                 error: "invalid_url",
                 message: "receiver_url must start with http:// or https://".into(),
+            });
+        }
+        if is_private_url(url) {
+            return Err(AppError::BadRequest {
+                error: "invalid_url",
+                message: "URL must not target private/internal addresses".into(),
             });
         }
         sqlx::query("UPDATE ssf_streams SET receiver_url = $1, updated_at = NOW() WHERE id = $2")

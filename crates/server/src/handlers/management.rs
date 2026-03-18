@@ -19,6 +19,19 @@ use crate::redirects::{default_login_redirect, validate_login_redirect_input};
 use crate::security_config::TenantSecurityConfig;
 use crate::AppState;
 
+// ── Validation helpers ──────────────────────────────────────────────────
+
+/// Validate that a string is a safe CSS hex color (e.g. `#abc`, `#aabbcc`).
+pub fn is_valid_css_color(s: &str) -> bool {
+    let s = s.trim();
+    if s.starts_with('#') {
+        let hex = &s[1..];
+        matches!(hex.len(), 3 | 4 | 6 | 8) && hex.chars().all(|c| c.is_ascii_hexdigit())
+    } else {
+        false
+    }
+}
+
 // ── Platform Admin endpoints (authenticated with plat_ key) ─────────────
 
 #[derive(Debug, Deserialize)]
@@ -1041,6 +1054,12 @@ pub async fn update_config(
             .await?;
     }
     if let Some(ref v) = body.branding_primary_color {
+        if !is_valid_css_color(v) {
+            return Err(AppError::BadRequest {
+                error: "invalid_color",
+                message: "branding_primary_color must be a valid CSS hex color (e.g. #abc, #aabbcc)".into(),
+            });
+        }
         sqlx::query(
             "UPDATE tenants SET branding_primary_color = $1, updated_at = NOW() WHERE id = $2",
         )

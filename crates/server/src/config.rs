@@ -2,7 +2,7 @@ use std::env;
 
 use crate::compliance::ComplianceConfig;
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct AppConfig {
     pub port: u16,
     pub host: String,
@@ -49,6 +49,18 @@ pub struct AppConfig {
     pub ssf_signing_key_pem: Option<String>,
     /// Path to a MaxMind GeoIP database (`.mmdb`) for impossible-travel detection.
     pub maxmind_db_path: Option<String>,
+}
+
+impl std::fmt::Debug for AppConfig {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("AppConfig")
+            .field("host", &self.host)
+            .field("port", &self.port)
+            .field("server_url", &self.server_url)
+            .field("jwt_issuer", &self.jwt_issuer)
+            .field("jwt_audience", &self.jwt_audience)
+            .finish_non_exhaustive()
+    }
 }
 
 impl AppConfig {

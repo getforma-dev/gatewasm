@@ -7,6 +7,8 @@ use chrono::{Duration, Utc};
 use hmac::{Hmac, Mac};
 use sha2::Sha256;
 
+use subtle::ConstantTimeEq;
+
 use crate::error::AppError;
 use crate::handlers::auth::{ensure_platform_account_and_owner_role, normalize_email};
 use crate::jwt::signing;
@@ -332,7 +334,7 @@ pub async fn callback(
         mac.update(returned_state.as_bytes());
         let computed_hmac =
             base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(mac.finalize().into_bytes());
-        if computed_hmac != *stored_hmac {
+        if computed_hmac.as_bytes().ct_eq(stored_hmac.as_bytes()).unwrap_u8() != 1 {
             return Err(AppError::BadRequest {
                 error: "invalid_state",
                 message: "CSRF verification failed".into(),

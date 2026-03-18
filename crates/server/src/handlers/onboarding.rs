@@ -8,6 +8,7 @@ use chrono::{Duration, Utc};
 use serde::Deserialize;
 
 use crate::error::AppError;
+use crate::handlers::management::is_valid_css_color;
 use crate::html_template::{render_page, PageConfig, PageOutput};
 use crate::ir;
 use crate::jwt::signing;
@@ -639,6 +640,12 @@ pub async fn update_my_tenant(
             .await?;
     }
     if let Some(ref v) = body.branding_primary_color {
+        if !is_valid_css_color(v) {
+            return Err(AppError::BadRequest {
+                error: "invalid_color",
+                message: "branding_primary_color must be a valid CSS hex color (e.g. #abc, #aabbcc)".into(),
+            });
+        }
         sqlx::query(
             "UPDATE tenants SET branding_primary_color = $1, updated_at = NOW() WHERE id = $2",
         )
