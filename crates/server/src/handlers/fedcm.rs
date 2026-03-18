@@ -7,6 +7,7 @@ use axum::{
 use chrono::Utc;
 use serde::Deserialize;
 
+use crate::db;
 use crate::error::AppError;
 use crate::handlers::auth::extract_refresh_cookie;
 use crate::jwt::signing;
@@ -209,13 +210,7 @@ pub async fn token_assertion(
     let (email, name) = user;
 
     // Fetch roles
-    let roles: Vec<String> = sqlx::query_scalar(
-        "SELECT r.name FROM roles r JOIN user_roles ur ON ur.role_id = r.id WHERE ur.user_id = $1",
-    )
-    .bind(&user_id)
-    .fetch_all(&state.db)
-    .await
-    .unwrap_or_else(|_| vec!["user".to_string()]);
+    let roles = db::fetch_user_roles(&state.db, &user_id).await;
 
     // Issue a short-lived access token
     let (access_token, _) = signing::create_access_token(

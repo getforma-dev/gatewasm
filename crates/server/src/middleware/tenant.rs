@@ -46,6 +46,58 @@ pub struct TenantContext {
     pub security_config: TenantSecurityConfig,
 }
 
+impl TenantContext {
+    /// Construct a `TenantContext` from a database row and the platform server URL.
+    ///
+    /// Both the slug-based lookup (extract_tenant) and the API-key lookup
+    /// (management_auth) share the same field mapping, so this avoids duplication.
+    pub fn from_db_row(row: &sqlx::postgres::PgRow, server_url: &str) -> Self {
+        let providers_json: serde_json::Value = row.get("allowed_providers");
+        let origins_json: serde_json::Value = row.get("allowed_origins");
+        let allowed_providers: Vec<String> =
+            serde_json::from_value(providers_json).unwrap_or_default();
+        let allowed_origins: Vec<String> =
+            serde_json::from_value(origins_json).unwrap_or_default();
+
+        let slug: String = row.get("slug");
+        let login_redirect_url: Option<String> = row.get("login_redirect_url");
+        let resolved_login_redirect =
+            resolve_login_redirect(server_url, &slug, login_redirect_url.as_deref());
+
+        let security_config_json: serde_json::Value = row.get("security_config");
+        let security_config = TenantSecurityConfig::from_json(&security_config_json);
+
+        Self {
+            tenant_id: row.get("id"),
+            slug,
+            name: row.get("name"),
+            allowed_providers,
+            google_client_id: row.get("google_client_id"),
+            google_client_secret: row.get("google_client_secret"),
+            github_client_id: row.get("github_client_id"),
+            github_client_secret: row.get("github_client_secret"),
+            allowed_origins,
+            status: row.get("status"),
+            signup_mode: row
+                .get::<Option<String>, _>("signup_mode")
+                .unwrap_or_else(|| "open".to_string()),
+            plan: row
+                .get::<Option<String>, _>("plan")
+                .unwrap_or_else(|| "trial".to_string()),
+            trial_ends_at: row.get("trial_ends_at"),
+            owner_user_id: row.get("owner_user_id"),
+            branding_logo_url: row.get("branding_logo_url"),
+            branding_primary_color: row
+                .get::<Option<String>, _>("branding_primary_color")
+                .unwrap_or_else(|| "#6366f1".to_string()),
+            branding_app_name: row.get("branding_app_name"),
+            branding_custom_css: row.get("branding_custom_css"),
+            login_redirect_url: resolved_login_redirect,
+            security_config,
+        }
+    }
+}
+
 /// Simple in-memory tenant cache (slug → TenantContext).
 /// In production, use something like moka or Redis. This is good enough for v1.
 #[derive(Clone, Default)]
@@ -131,12 +183,11 @@ pub async fn extract_tenant(
         let row = sqlx::query(
             "SELECT id, name, slug, allowed_providers, \
              google_client_id, google_client_secret, github_client_id, github_client_secret, \
-             allowed_origins, status, \
-             COALESCE(signup_mode, 'open') as signup_mode, \
-             branding_logo_url, COALESCE(branding_primary_color, '#6366f1') as branding_primary_color, \
+             allowed_origins, status, signup_mode, \
+             branding_logo_url, branding_primary_color, \
              branding_app_name, branding_custom_css, \
              login_redirect_url, \
-             COALESCE(plan, 'trial') as plan, trial_ends_at, owner_user_id, \
+             plan, trial_ends_at, owner_user_id, \
              COALESCE(security_config, '{}') as security_config \
              FROM tenants WHERE slug = $1",
         )
@@ -155,44 +206,7 @@ pub async fn extract_tenant(
             message: format!("No tenant with slug '{}'", slug),
         })?;
 
-        let providers_json: serde_json::Value = row.get("allowed_providers");
-        let origins_json: serde_json::Value = row.get("allowed_origins");
-        let allowed_providers: Vec<String> =
-            serde_json::from_value(providers_json).unwrap_or_default();
-        let allowed_origins: Vec<String> = serde_json::from_value(origins_json).unwrap_or_default();
-
-        let login_redirect_url: Option<String> = row.get("login_redirect_url");
-        let resolved_login_redirect = resolve_login_redirect(
-            &state.config.server_url,
-            &slug,
-            login_redirect_url.as_deref(),
-        );
-
-        let security_config_json: serde_json::Value = row.get("security_config");
-        let security_config = TenantSecurityConfig::from_json(&security_config_json);
-
-        let ctx = TenantContext {
-            tenant_id: row.get("id"),
-            slug: row.get("slug"),
-            name: row.get("name"),
-            allowed_providers,
-            google_client_id: row.get("google_client_id"),
-            google_client_secret: row.get("google_client_secret"),
-            github_client_id: row.get("github_client_id"),
-            github_client_secret: row.get("github_client_secret"),
-            allowed_origins,
-            status: row.get("status"),
-            signup_mode: row.get("signup_mode"),
-            plan: row.get("plan"),
-            trial_ends_at: row.get("trial_ends_at"),
-            owner_user_id: row.get("owner_user_id"),
-            branding_logo_url: row.get("branding_logo_url"),
-            branding_primary_color: row.get("branding_primary_color"),
-            branding_app_name: row.get("branding_app_name"),
-            branding_custom_css: row.get("branding_custom_css"),
-            login_redirect_url: resolved_login_redirect,
-            security_config,
-        };
+        let ctx = TenantContext::from_db_row(&row, &state.config.server_url);
 
         state.tenant_cache.set(slug.clone(), ctx.clone());
         ctx

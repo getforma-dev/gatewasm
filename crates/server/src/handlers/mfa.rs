@@ -166,7 +166,7 @@ fn decrypt_mfa_secret_with_material(
 }
 
 fn legacy_mfa_key_material(state: &AppState) -> String {
-    format!("{}|mfa-secret-v1", state.config.csrf_secret)
+    format!("{}|mfa-secret-v1", state.config.mfa_encryption_key)
 }
 
 fn encrypt_mfa_secret(secret: &str, state: &AppState) -> Result<String, AppError> {

@@ -154,12 +154,16 @@ fn create_router_inner(state: AppState, rate_limit_enabled: bool) -> Router {
             .route("/auth/reset-password", post(password_reset::reset_password))
             .layer(rate_limit::register_limiter());
 
+        let verify_email_routes = Router::new()
+            .route("/auth/verify-email", get(auth::verify_email))
+            .layer(rate_limit::register_limiter());
+
         Router::new()
             .merge(register_routes)
             .merge(login_routes)
             .merge(token_routes)
             .merge(password_reset_routes)
-            .route("/auth/verify-email", get(auth::verify_email))
+            .merge(verify_email_routes)
     } else {
         Router::new()
             .route("/auth/register", post(auth::register))

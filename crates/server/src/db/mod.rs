@@ -1,5 +1,9 @@
 use sqlx::postgres::{PgPool, PgPoolOptions};
 
+/// Maximum number of active refresh tokens per user.
+/// Used by all handlers that issue refresh tokens.
+pub const MAX_REFRESH_TOKENS_PER_USER: i64 = 10;
+
 pub async fn create_pool(database_url: &str) -> Result<PgPool, sqlx::Error> {
     let max_conns: u32 = std::env::var("DB_MAX_CONNECTIONS")
         .ok()
@@ -298,10 +302,11 @@ pub async fn log_login_attempt(
     ip_address: Option<&str>,
     user_agent: Option<&str>,
     failure_reason: Option<&str>,
+    tenant_id: Option<&str>,
 ) {
     let id = format!("la_{}", uuid::Uuid::new_v4());
     let result = sqlx::query(
-        "INSERT INTO login_attempts (id, email, user_id, success, ip_address, user_agent, failure_reason) VALUES ($1, $2, $3, $4, $5, $6, $7)",
+        "INSERT INTO login_attempts (id, email, user_id, success, ip_address, user_agent, failure_reason, tenant_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
     )
     .bind(&id)
     .bind(email)
@@ -310,12 +315,24 @@ pub async fn log_login_attempt(
     .bind(ip_address)
     .bind(user_agent)
     .bind(failure_reason)
+    .bind(tenant_id)
     .execute(pool)
     .await;
 
     if let Err(e) = result {
         tracing::warn!(error = %e, "Failed to log login attempt");
     }
+}
+
+/// Fetch the role names for a user, falling back to `["user"]` on error.
+pub async fn fetch_user_roles(pool: &PgPool, user_id: &str) -> Vec<String> {
+    sqlx::query_scalar(
+        "SELECT r.name FROM roles r JOIN user_roles ur ON ur.role_id = r.id WHERE ur.user_id = $1",
+    )
+    .bind(user_id)
+    .fetch_all(pool)
+    .await
+    .unwrap_or_else(|_| vec!["user".to_string()])
 }
 
 /// Enforce a maximum number of active refresh tokens per user.

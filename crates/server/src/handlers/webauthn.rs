@@ -20,8 +20,6 @@ const MAX_CREDENTIALS_PER_USER: i64 = 10;
 /// Challenge validity in minutes.
 const CHALLENGE_TTL_MINUTES: i64 = 5;
 
-/// Maximum number of refresh tokens per user (same as auth.rs).
-const MAX_REFRESH_TOKENS_PER_USER: i64 = 10;
 
 // ── Request/Response types ────────────────────────────────────────────────
 
@@ -1307,13 +1305,7 @@ pub async fn login_complete(
     }
 
     // Fetch roles
-    let roles: Vec<String> = sqlx::query_scalar(
-        "SELECT r.name FROM roles r JOIN user_roles ur ON ur.role_id = r.id WHERE ur.user_id = $1",
-    )
-    .bind(&db_user_id)
-    .fetch_all(&state.db)
-    .await
-    .unwrap_or_else(|_| vec!["user".to_string()]);
+    let roles = crate::db::fetch_user_roles(&state.db, &db_user_id).await;
 
     // Create tokens
     let (access_token, expires_at) = signing::create_access_token(
@@ -1349,7 +1341,7 @@ pub async fn login_complete(
     .execute(&state.db)
     .await?;
 
-    crate::db::enforce_refresh_token_limit(&state.db, &db_user_id, MAX_REFRESH_TOKENS_PER_USER)
+    crate::db::enforce_refresh_token_limit(&state.db, &db_user_id, crate::db::MAX_REFRESH_TOKENS_PER_USER)
         .await;
 
     tracing::info!(

@@ -14,11 +14,10 @@ use crate::email;
 use crate::error::AppError;
 use crate::jwt::signing;
 use crate::middleware::entitlements::ensure_user_capacity;
+use crate::middleware::fingerprint::extract_client_ip;
 use crate::middleware::tenant::TenantContext;
 use crate::types::*;
 use crate::AppState;
-
-const MAX_REFRESH_TOKENS_PER_USER: i64 = 10;
 
 pub fn is_valid_email(email: &str) -> bool {
     let parts: Vec<&str> = email.splitn(2, '@').collect();
@@ -501,6 +500,7 @@ pub async fn register(
 
     // Extract headers for fingerprinting before consuming the request body
     let req_headers = req.headers().clone();
+    let register_client_ip = extract_client_ip(&req_headers, None);
 
     let body: RegisterRequest = axum::Json::from_request(req, &state)
         .await
@@ -798,7 +798,7 @@ pub async fn register(
         &state.keys,
     )?;
 
-    db::enforce_refresh_token_limit(&state.db, &user_id, MAX_REFRESH_TOKENS_PER_USER).await;
+    db::enforce_refresh_token_limit(&state.db, &user_id, db::MAX_REFRESH_TOKENS_PER_USER).await;
 
     tracing::info!(user_id = %user_id, email = %email, "User created");
 
@@ -820,7 +820,7 @@ pub async fn register(
             Some(&user_id),
             AuditAction::USER_REGISTER,
             "/auth/register",
-            "0.0.0.0",
+            &register_client_ip,
             None,
             None,
             RESULT_SUCCESS,
@@ -881,6 +881,7 @@ pub async fn login(
 
     // Extract headers for fingerprinting before consuming the request body
     let login_req_headers = req.headers().clone();
+    let login_client_ip = extract_client_ip(&login_req_headers, None);
 
     let body: LoginRequest = axum::Json::from_request(req, &state)
         .await
@@ -926,6 +927,7 @@ pub async fn login(
                     ip.as_deref(),
                     ua.as_deref(),
                     Some("user_not_found"),
+                    tenant_id.as_deref(),
                 )
                 .await;
                 return Err(AppError::Unauthorized {
@@ -961,6 +963,7 @@ pub async fn login(
                 ip.as_deref(),
                 ua.as_deref(),
                 Some("account_locked"),
+                tenant_id.as_deref(),
             )
             .await;
             return Err(AppError::AccountLocked {
@@ -983,6 +986,7 @@ pub async fn login(
                 ip.as_deref(),
                 ua.as_deref(),
                 Some("no_password_credential"),
+                tenant_id.as_deref(),
             )
             .await;
             return Err(AppError::Unauthorized {
@@ -1031,6 +1035,7 @@ pub async fn login(
                 ip.as_deref(),
                 ua.as_deref(),
                 Some("wrong_password"),
+                tenant_id.as_deref(),
             )
             .await;
             if state.config.compliance.audit_log_enabled {
@@ -1040,7 +1045,7 @@ pub async fn login(
                     Some(&user_id),
                     AuditAction::USER_LOGIN_FAILED,
                     "/auth/login",
-                    ip.as_deref().unwrap_or("0.0.0.0"),
+                    &login_client_ip,
                     ua.as_deref(),
                     None,
                     RESULT_FAILURE,
@@ -1071,6 +1076,7 @@ pub async fn login(
         ip.as_deref(),
         ua.as_deref(),
         None,
+        tenant_id.as_deref(),
     )
     .await;
 
@@ -1103,13 +1109,7 @@ pub async fn login(
         );
     }
 
-    let roles: Vec<String> = sqlx::query_scalar(
-        "SELECT r.name FROM roles r JOIN user_roles ur ON ur.role_id = r.id WHERE ur.user_id = $1",
-    )
-    .bind(&user_id)
-    .fetch_all(&state.db)
-    .await
-    .unwrap_or_else(|_| vec!["user".to_string()]);
+    let roles = db::fetch_user_roles(&state.db, &user_id).await;
 
     let (access_token, expires_at) = signing::create_access_token(
         signing::AccessTokenInput {
@@ -1139,11 +1139,8 @@ pub async fn login(
     };
 
     // ── Geolocation / impossible-travel detection ──────────────────────
-    let login_ip_str = {
-        use crate::middleware::fingerprint::extract_client_ip;
-        extract_client_ip(&login_req_headers, None)
-    };
-    let login_ip_type = super::geolocation::classify_ip(&login_ip_str);
+    let login_ip_str = &login_client_ip;
+    let login_ip_type = super::geolocation::classify_ip(login_ip_str);
     let login_geo = super::geolocation::geolocate_ip(&login_ip_str);
     let login_lat = login_geo.map(|(lat, _)| lat);
     let login_lon = login_geo.map(|(_, lon)| lon);
@@ -1312,7 +1309,7 @@ pub async fn login(
         }
     }
 
-    db::enforce_refresh_token_limit(&state.db, &user_id, MAX_REFRESH_TOKENS_PER_USER).await;
+    db::enforce_refresh_token_limit(&state.db, &user_id, db::MAX_REFRESH_TOKENS_PER_USER).await;
 
     tracing::info!(user_id = %user_id, email = %db_email, "Login success");
 
@@ -1334,7 +1331,7 @@ pub async fn login(
             Some(&user_id),
             AuditAction::USER_LOGIN,
             "/auth/login",
-            ip.as_deref().unwrap_or("0.0.0.0"),
+            &login_client_ip,
             ua.as_deref(),
             None,
             RESULT_SUCCESS,
@@ -1397,6 +1394,7 @@ pub async fn logout(
                 })
         });
     let cookie_rt = extract_refresh_cookie(req.headers(), tenant_slug.as_deref());
+    let logout_client_ip = extract_client_ip(req.headers(), None);
 
     let body: LogoutRequest = axum::Json::from_request(req, &state)
         .await
@@ -1460,7 +1458,7 @@ pub async fn logout(
             claims.as_ref().map(|c| c.sub.as_str()),
             AuditAction::USER_LOGOUT,
             "/auth/logout",
-            "0.0.0.0",
+            &logout_client_ip,
             None,
             None,
             RESULT_SUCCESS,
@@ -1485,31 +1483,68 @@ pub async fn delete_account(
     State(state): State<AppState>,
     req: axum::extract::Request,
 ) -> Result<impl IntoResponse, AppError> {
-    let claims = req.extensions().get::<signing::Claims>().cloned();
+    let delete_client_ip = extract_client_ip(req.headers(), None);
+    let claims = req
+        .extensions()
+        .get::<signing::Claims>()
+        .cloned()
+        .ok_or(AppError::Unauthorized {
+            error: "unauthorized",
+            message: "Not authenticated".into(),
+        })?;
 
-    let user_id = claims.map(|c| c.sub).ok_or(AppError::Unauthorized {
-        error: "unauthorized",
-        message: "Not authenticated".into(),
-    })?;
+    let user_id = claims.sub.clone();
+
+    // Verify tenant scoping: the user's token tenant must match the request tenant context
+    let tenant = req.extensions().get::<TenantContext>().cloned();
+    let tenant_id = tenant.as_ref().map(|t| t.tenant_id.clone());
+    if let (Some(ref claim_tid), Some(ref req_tid)) = (&claims.tenant_id, &tenant_id) {
+        if claim_tid != req_tid {
+            return Err(AppError::Forbidden {
+                error: "forbidden",
+                message: "Tenant mismatch".into(),
+            });
+        }
+    }
 
     tracing::info!(user_id = %user_id, "Deleting account");
+
+    // Revoke all refresh tokens for this user before deletion
+    sqlx::query("UPDATE refresh_tokens SET revoked = TRUE WHERE user_id = $1")
+        .bind(&user_id)
+        .execute(&state.db)
+        .await?;
 
     sqlx::query("DELETE FROM users WHERE id = $1")
         .bind(&user_id)
         .execute(&state.db)
         .await?;
 
-    // Dispatch webhook event — get tenant_id from the claims
-    if let Some(ref tid) = req
-        .extensions()
-        .get::<TenantContext>()
-        .map(|t| t.tenant_id.clone())
-    {
+    // Dispatch webhook event
+    if let Some(ref tid) = tenant_id {
         super::webhook_engine::dispatch_event(
             &state.db,
             tid,
             "user.deleted",
             serde_json::json!({ "user_id": user_id }),
+        )
+        .await;
+    }
+
+    // Audit log
+    if state.config.compliance.audit_log_enabled {
+        audit::log_audit(
+            &state.db,
+            tenant_id.as_deref().unwrap_or("global"),
+            Some(&user_id),
+            AuditAction::USER_ACCOUNT_DELETE,
+            "/auth/delete-account",
+            &delete_client_ip,
+            None,
+            None,
+            RESULT_SUCCESS,
+            None,
+            &state.config.compliance.mode.to_string(),
         )
         .await;
     }

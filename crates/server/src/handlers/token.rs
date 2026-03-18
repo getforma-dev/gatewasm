@@ -22,8 +22,6 @@ use crate::security_config::TenantSecurityConfig;
 use crate::types::*;
 use crate::AppState;
 
-const MAX_REFRESH_TOKENS_PER_USER: i64 = 10;
-
 #[derive(Debug, Clone, FromRow)]
 struct RefreshTokenRow {
     token_hash: String,
@@ -231,13 +229,7 @@ async fn handle_auth_code(
 
     let (email, name, avatar, email_verified) = user_row;
 
-    let roles: Vec<String> = sqlx::query_scalar(
-        "SELECT r.name FROM roles r JOIN user_roles ur ON ur.role_id = r.id WHERE ur.user_id = $1",
-    )
-    .bind(&user_id)
-    .fetch_all(&state.db)
-    .await
-    .unwrap_or_else(|_| vec!["user".to_string()]);
+    let roles = db::fetch_user_roles(&state.db, &user_id).await;
 
     let auth_method = if auth_provider.as_deref() == Some("email") {
         "password"
@@ -291,7 +283,7 @@ async fn handle_auth_code(
     .execute(&state.db)
     .await?;
 
-    db::enforce_refresh_token_limit(&state.db, &user_id, MAX_REFRESH_TOKENS_PER_USER).await;
+    db::enforce_refresh_token_limit(&state.db, &user_id, db::MAX_REFRESH_TOKENS_PER_USER).await;
 
     let mut headers = HeaderMap::new();
     append_refresh_cookie_headers(
@@ -348,6 +340,7 @@ async fn handle_refresh(
     request_id: &str,
     security_config: &TenantSecurityConfig,
 ) -> Result<axum::response::Response, AppError> {
+    let client_ip = extract_client_ip(&headers, None);
     let explicit_refresh_token = body.refresh_token.clone();
     let cookie_flow = explicit_refresh_token.is_none();
     let now = Utc::now();
@@ -442,7 +435,7 @@ async fn handle_refresh(
                     Some(&row.user_id),
                     AuditAction::USER_TOKEN_REVOKED,
                     "/auth/token",
-                    "0.0.0.0",
+                    &client_ip,
                     None,
                     None,
                     RESULT_FAILURE,
@@ -568,7 +561,7 @@ async fn handle_refresh(
                         Some(&user_id),
                         AuditAction::USER_TOKEN_REVOKED,
                         "/auth/token",
-                        "0.0.0.0",
+                        &client_ip,
                         None,
                         None,
                         RESULT_FAILURE,
@@ -669,13 +662,7 @@ async fn handle_refresh(
         message: "User not found".into(),
     })?;
 
-    let roles: Vec<String> = sqlx::query_scalar(
-        "SELECT r.name FROM roles r JOIN user_roles ur ON ur.role_id = r.id WHERE ur.user_id = $1",
-    )
-    .bind(&user_id)
-    .fetch_all(&state.db)
-    .await
-    .unwrap_or_else(|_| vec!["user".to_string()]);
+    let roles = db::fetch_user_roles(&state.db, &user_id).await;
 
     // ── DPoP proof validation (sender-constrained tokens) ────────────
     let dpop_cnf = validate_dpop_if_needed(
@@ -737,7 +724,7 @@ async fn handle_refresh(
 
     tx.commit().await?;
 
-    db::enforce_refresh_token_limit(&state.db, &user_id, MAX_REFRESH_TOKENS_PER_USER).await;
+    db::enforce_refresh_token_limit(&state.db, &user_id, db::MAX_REFRESH_TOKENS_PER_USER).await;
 
     if state.config.compliance.audit_log_enabled {
         audit::log_audit(
@@ -746,7 +733,7 @@ async fn handle_refresh(
             Some(&user_id),
             AuditAction::USER_TOKEN_REFRESH,
             "/auth/token",
-            "0.0.0.0",
+            &client_ip,
             None,
             None,
             RESULT_SUCCESS,
