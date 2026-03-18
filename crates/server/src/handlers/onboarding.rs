@@ -276,19 +276,6 @@ pub async fn create_tenant(
         });
     }
 
-    // Check slug uniqueness
-    let exists = sqlx::query_scalar::<_, String>("SELECT id FROM tenants WHERE slug = $1")
-        .bind(&slug)
-        .fetch_optional(&state.db)
-        .await?;
-
-    if exists.is_some() {
-        return Err(AppError::Conflict {
-            error: "slug_taken",
-            message: format!("Tenant slug '{}' is already in use", slug),
-        });
-    }
-
     let tenant_id = format!("ten_{}", uuid::Uuid::new_v4());
     let api_key = format!("mgmt_{}", uuid::Uuid::new_v4());
     let api_key_prefix = &api_key[..api_key.len().min(13)];
@@ -297,10 +284,27 @@ pub async fn create_tenant(
 
     let default_login_redirect = default_login_redirect(&state.config.server_url, &slug);
 
-    sqlx::query(
+    // Copy password hash from platform tenant credentials (read before transaction)
+    let platform_hash = sqlx::query_scalar::<_, String>(
+        "SELECT hashed_password FROM credentials WHERE user_id = $1 AND provider = 'email' LIMIT 1",
+    )
+    .bind(&user.user_id)
+    .fetch_optional(&state.db)
+    .await?;
+
+    let owner_name = user.name.as_deref().unwrap_or("");
+    let admin_user_id = format!("usr_{}", uuid::Uuid::new_v4());
+    let admin_cred_id = format!("cred_{}", uuid::Uuid::new_v4());
+
+    // ── Atomic transaction: tenant + entitlements + admin user ────────
+    let mut tx = state.db.begin().await?;
+
+    // Atomic slug uniqueness: INSERT with ON CONFLICT to avoid SELECT-then-INSERT race
+    let result = sqlx::query(
         "INSERT INTO tenants (id, name, slug, owner_email, api_key_hash, api_key_prefix, \
          allowed_providers, max_users, plan, trial_ends_at, owner_user_id, login_redirect_url) \
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)",
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) \
+         ON CONFLICT (slug) DO NOTHING",
     )
     .bind(&tenant_id)
     .bind(body.name.trim())
@@ -314,8 +318,15 @@ pub async fn create_tenant(
     .bind(trial_ends_at)
     .bind(&user.user_id)
     .bind(&default_login_redirect)
-    .execute(&state.db)
+    .execute(&mut *tx)
     .await?;
+
+    if result.rows_affected() == 0 {
+        return Err(AppError::Conflict {
+            error: "slug_taken",
+            message: format!("Tenant slug '{}' is already in use", slug),
+        });
+    }
 
     sqlx::query(
         "INSERT INTO tenant_entitlements \
@@ -324,25 +335,10 @@ pub async fn create_tenant(
          ON CONFLICT (tenant_id) DO NOTHING",
     )
     .bind(&tenant_id)
-    .execute(&state.db)
+    .execute(&mut *tx)
     .await?;
 
     // ── Auto-create owner as admin on new tenant ─────────────
-    let admin_user_id = format!("usr_{}", uuid::Uuid::new_v4());
-    let admin_cred_id = format!("cred_{}", uuid::Uuid::new_v4());
-
-    // Copy password hash from platform tenant credentials
-    let platform_hash = sqlx::query_scalar::<_, String>(
-        "SELECT hashed_password FROM credentials WHERE user_id = $1 AND provider = 'email' LIMIT 1",
-    )
-    .bind(&user.user_id)
-    .fetch_optional(&state.db)
-    .await?;
-
-    let owner_name = user.name.as_deref().unwrap_or("");
-
-    let mut tx = state.db.begin().await?;
-
     sqlx::query(
         "INSERT INTO users (id, email, name, email_verified, tenant_id) VALUES ($1, $2, $3, TRUE, $4)",
     )

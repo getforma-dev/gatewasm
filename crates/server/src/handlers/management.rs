@@ -144,19 +144,6 @@ pub async fn create_tenant(
         });
     }
 
-    // Check slug uniqueness
-    let exists = sqlx::query_scalar::<_, String>("SELECT id FROM tenants WHERE slug = $1")
-        .bind(&slug)
-        .fetch_optional(&state.db)
-        .await?;
-
-    if exists.is_some() {
-        return Err(AppError::Conflict {
-            error: "slug_taken",
-            message: format!("Tenant slug '{}' is already in use", slug),
-        });
-    }
-
     let tenant_id = format!("ten_{}", uuid::Uuid::new_v4());
     let api_key = format!("mgmt_{}", uuid::Uuid::new_v4());
     let api_key_prefix = &api_key[..api_key.len().min(13)]; // "mgmt_" + 8 chars
@@ -170,8 +157,9 @@ pub async fn create_tenant(
     let signup_mode = normalize_signup_mode(body.signup_mode.as_deref())?;
     let default_login_redirect = default_login_redirect(&state.config.server_url, &slug);
 
-    sqlx::query(
-        "INSERT INTO tenants (id, name, slug, owner_email, api_key_hash, api_key_prefix, allowed_providers, max_users, login_redirect_url, signup_mode) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)",
+    // Atomic slug uniqueness: INSERT with ON CONFLICT to avoid SELECT-then-INSERT race
+    let result = sqlx::query(
+        "INSERT INTO tenants (id, name, slug, owner_email, api_key_hash, api_key_prefix, allowed_providers, max_users, login_redirect_url, signup_mode) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) ON CONFLICT (slug) DO NOTHING",
     )
     .bind(&tenant_id)
     .bind(&body.name)
@@ -185,6 +173,13 @@ pub async fn create_tenant(
     .bind(&signup_mode)
     .execute(&state.db)
     .await?;
+
+    if result.rows_affected() == 0 {
+        return Err(AppError::Conflict {
+            error: "slug_taken",
+            message: format!("Tenant slug '{}' is already in use", slug),
+        });
+    }
 
     sqlx::query(
         "INSERT INTO tenant_entitlements \

@@ -3,6 +3,7 @@ use axum::{
     middleware::Next,
     response::Response,
 };
+use chrono::Utc;
 use hmac::{Hmac, Mac};
 use sha2::Sha256;
 use sqlx::Row;
@@ -87,6 +88,20 @@ async fn resolve_from_api_key(api_key: &str, state: &AppState) -> Result<TenantC
             error: "tenant_suspended",
             message: "This tenant has been suspended".into(),
         });
+    }
+
+    // Check trial expiry (mirrors extract_tenant logic)
+    let plan: Option<String> = row.get("plan");
+    let trial_ends_at: Option<chrono::DateTime<Utc>> = row.get("trial_ends_at");
+    if plan.as_deref().unwrap_or("trial") == "trial" {
+        if let Some(trial_ends) = trial_ends_at {
+            if trial_ends < Utc::now() {
+                return Err(AppError::Forbidden {
+                    error: "trial_expired",
+                    message: "Trial has expired. Visit /get-started to upgrade.".into(),
+                });
+            }
+        }
     }
 
     Ok(TenantContext::from_db_row(&row, &state.config.server_url))

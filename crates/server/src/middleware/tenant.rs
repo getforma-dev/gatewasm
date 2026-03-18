@@ -130,6 +130,14 @@ impl TenantCache {
             map.remove(slug);
         }
     }
+
+    /// Evict all expired entries from the cache.
+    pub fn evict_expired(&self) {
+        if let Ok(mut map) = self.inner.write() {
+            let ttl = std::time::Duration::from_secs(Self::TTL_SECS);
+            map.retain(|_, (_, inserted_at)| inserted_at.elapsed() < ttl);
+        }
+    }
 }
 
 /// Middleware that extracts the tenant from the URL path, header, or subdomain.

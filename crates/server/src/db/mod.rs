@@ -157,6 +157,11 @@ async fn run_migrations(pool: &PgPool) -> Result<(), sqlx::Error> {
             "SSF streams + outbox + geo columns",
             include_str!("pg_migrations/025_ssf.sql"),
         ),
+        (
+            26,
+            "tenant FK constraints",
+            include_str!("pg_migrations/026_tenant_fk_constraints.sql"),
+        ),
     ];
 
     for &(version, label, sql) in migrations {

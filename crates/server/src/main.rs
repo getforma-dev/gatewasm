@@ -69,8 +69,9 @@ async fn main() {
         ir_modules,
     };
 
-    // Clone pool/keys for background workers before state is moved
+    // Clone pool/keys/cache for background workers before state is moved
     let retry_pool = state.db.clone();
+    let bg_tenant_cache = state.tenant_cache.clone();
     let ssf_pool = state.db.clone();
     let ssf_keys = state.keys.clone();
 
@@ -186,10 +187,11 @@ async fn main() {
             tokio::time::sleep(std::time::Duration::from_secs(30)).await;
             handlers::webhook_engine::process_retries(&retry_pool).await;
             tick += 1;
-            // Clean up expired DPoP jti entries + PAR requests every ~5 minutes (10 ticks * 30s)
+            // Clean up expired DPoP jti entries + PAR requests + tenant cache every ~5 minutes (10 ticks * 30s)
             if tick % 10 == 0 {
                 middleware::dpop::cleanup_expired_jti(&retry_pool).await;
                 handlers::par::cleanup_expired_par(&retry_pool).await;
+                bg_tenant_cache.evict_expired();
             }
         }
     });
