@@ -1,0 +1,21 @@
+{
+  "private": true,
+  "scripts": {
+    "db": "docker compose up -d db",
+    "db:test": "docker compose up -d db db-test",
+    "db:stop": "docker compose down",
+    "db:reset": "docker compose exec db psql -U gatewasm -d gatewasm -c 'DROP SCHEMA public CASCADE; CREATE SCHEMA public;'",
+    "build": "cd admin && npm run build",
+    "build:ssr": "cd admin && npm run build:ssr",
+    "dev:frontend": "cd admin && npm run dev",
+    "dev:server": "cargo run -p gatewasm-server",
+    "dev": "concurrently -n server,frontend -c blue,green \"npm run dev:server\" \"npm run dev:frontend\"",
+    "test": "cargo test --lib",
+    "test:integration": "cargo test -p gatewasm-server --test integration",
+    "test:e2e": "cd admin && npx playwright test",
+    "typecheck": "cd admin && npm run typecheck"
+  },
+  "devDependencies": {
+    "concurrently": "^9.0.0"
+  }
+}
