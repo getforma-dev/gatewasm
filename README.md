@@ -35,18 +35,50 @@ npm run dev
 
 Open http://localhost:3001
 
-## Development
+## Commands
 
-```bash
-npm run dev             # Server + frontend watch (one terminal)
-npm run build:ssr       # Production build with SSR IR
-npm run test            # Rust unit tests
-npm run test:e2e        # Playwright E2E (needs running server)
-npm run typecheck       # TypeScript type check
-npm run db:reset        # Wipe dev database
-```
+### Development
 
-See [LOCAL-DEV.md](LOCAL-DEV.md) for full setup instructions.
+| Command | What it does |
+|---------|-------------|
+| `npm run dev` | Start server + frontend watch in one terminal |
+| `npm run dev:server` | Start Rust server only |
+| `npm run dev:frontend` | Start frontend watch only (esbuild, rebuilds on save) |
+| `npm run build` | Production frontend build (no SSR) |
+| `npm run build:ssr` | Production frontend build with SSR IR emission |
+
+### Database
+
+| Command | What it does |
+|---------|-------------|
+| `npm run db` | Start dev PostgreSQL container |
+| `npm run db:test` | Start dev + test PostgreSQL containers |
+| `npm run db:studio` | Open pgweb DB viewer at http://localhost:8081 |
+| `npm run db:studio:test` | Open pgweb for test DB at http://localhost:8082 |
+| `npm run db:clear` | Delete all user data (keep tables, tenants, roles) |
+| `npm run db:reset` | Wipe entire database (server re-runs migrations on restart) |
+| `npm run db:reset:test` | Wipe test database |
+| `npm run db:stop` | Stop all Docker containers |
+
+### Testing
+
+| Command | What it does |
+|---------|-------------|
+| `npm run test` | Rust unit tests (no DB needed) |
+| `npm run test:integration` | Rust integration tests (needs PostgreSQL) |
+| `npm run test:e2e` | Playwright E2E tests (needs running server) |
+| `npm run typecheck` | TypeScript type check |
+
+### Cleanup
+
+| Command | What it deletes | When to use |
+|---------|----------------|-------------|
+| `npm run clean` | node_modules (root + admin) | Dependency issues |
+| `npm run clean:build` | admin/dist + target | Stale build artifacts |
+| `npm run clean:all` | Everything + lockfiles + npm cache | Nuclear option |
+| `npm run fresh` | clean:all → reinstall → rebuild SSR | Start completely over |
+
+See [LOCAL-DEV.md](LOCAL-DEV.md) for full setup guide.
 See [RUNBOOK.md](RUNBOOK.md) for deployment procedures.
 
 ## Architecture

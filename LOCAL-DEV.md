@@ -83,14 +83,11 @@ Both should show `(healthy)`. The dev DB runs on port **5434** (not 5432, to avo
 
 ## 2. Database GUI (pgweb)
 
-A browser-based Postgres viewer is included in docker-compose. No install needed.
+A browser-based Postgres viewer is included in docker-compose. No install needed — browse tables, run queries, export data.
 
 ```bash
-# Start pgweb for the dev database
-docker compose up -d pgweb
-
-# Start pgweb for the test database
-docker compose up -d pgweb-test
+npm run db:studio       # Dev DB → http://localhost:8081
+npm run db:studio:test  # Test DB → http://localhost:8082
 ```
 
 | GUI | URL | Database |
@@ -133,6 +130,18 @@ User:     gatewasm
 Password: gatewasm
 SSL:      off
 ```
+
+### Resetting data
+
+Two levels of reset — pick the right one:
+
+| Command | What it does | When to use |
+|---------|-------------|-------------|
+| `npm run db:clear` | Deletes all user data (users, sessions, tokens, audit logs, webhooks, etc.) but **keeps tables, tenants, roles, and config** | Want a clean slate without waiting for migrations |
+| `npm run db:reset` | Drops everything — tables, indexes, constraints. Server re-runs all 26 migrations on next start | Schema changes, broken migrations, total reset |
+| `npm run db:reset:test` | Same as reset but for the test database | Before re-running integration tests |
+
+`db:clear` is what you want 90% of the time — it's fast (no migration re-run) and keeps your tenant setup intact.
 
 ---
 
