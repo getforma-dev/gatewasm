@@ -2,7 +2,7 @@ use axum::{
     extract::{FromRequest, Path, Query, State},
     http::StatusCode,
     response::IntoResponse,
-    Json,
+    Extension, Json,
 };
 use serde::Deserialize;
 use sqlx::Row;
@@ -94,9 +94,8 @@ pub struct DeliveriesQuery {
 /// GET /manage/webhooks — List all webhooks for this tenant.
 pub async fn list_webhooks(
     State(state): State<AppState>,
-    req: axum::extract::Request,
+    Extension(tenant): Extension<TenantContext>,
 ) -> Result<impl IntoResponse, AppError> {
-    let tenant = tenant_from_req(&req)?;
 
     let rows = sqlx::query(
         "SELECT id, url, events, active, description, created_at, updated_at \
@@ -220,9 +219,8 @@ pub async fn create_webhook(
 pub async fn get_webhook(
     State(state): State<AppState>,
     Path(webhook_id): Path<String>,
-    req: axum::extract::Request,
+    Extension(tenant): Extension<TenantContext>,
 ) -> Result<impl IntoResponse, AppError> {
-    let tenant = tenant_from_req(&req)?;
 
     let row = sqlx::query(
         "SELECT id, url, secret, events, active, description, created_at, updated_at \
@@ -349,9 +347,8 @@ pub async fn update_webhook(
 pub async fn delete_webhook(
     State(state): State<AppState>,
     Path(webhook_id): Path<String>,
-    req: axum::extract::Request,
+    Extension(tenant): Extension<TenantContext>,
 ) -> Result<impl IntoResponse, AppError> {
-    let tenant = tenant_from_req(&req)?;
 
     let result = sqlx::query("DELETE FROM webhooks WHERE id = $1 AND tenant_id = $2")
         .bind(&webhook_id)
@@ -376,9 +373,8 @@ pub async fn list_deliveries(
     State(state): State<AppState>,
     Path(webhook_id): Path<String>,
     Query(query): Query<DeliveriesQuery>,
-    req: axum::extract::Request,
+    Extension(tenant): Extension<TenantContext>,
 ) -> Result<impl IntoResponse, AppError> {
-    let tenant = tenant_from_req(&req)?;
 
     // Verify webhook belongs to tenant
     let exists =
@@ -436,9 +432,8 @@ pub async fn list_deliveries(
 pub async fn test_webhook(
     State(state): State<AppState>,
     Path(webhook_id): Path<String>,
-    req: axum::extract::Request,
+    Extension(tenant): Extension<TenantContext>,
 ) -> Result<impl IntoResponse, AppError> {
-    let tenant = tenant_from_req(&req)?;
 
     let row = sqlx::query(
         "SELECT id, url, secret, events FROM webhooks WHERE id = $1 AND tenant_id = $2",

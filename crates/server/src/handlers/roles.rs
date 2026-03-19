@@ -2,7 +2,7 @@ use axum::{
     extract::{FromRequest, Path, State},
     http::StatusCode,
     response::IntoResponse,
-    Json,
+    Extension, Json,
 };
 use serde::Deserialize;
 use sqlx::Row;
@@ -70,9 +70,8 @@ pub struct AssignRoleRequest {
 /// GET /manage/roles — List all roles (system + custom) for this tenant.
 pub async fn list_roles(
     State(state): State<AppState>,
-    req: axum::extract::Request,
+    Extension(tenant): Extension<TenantContext>,
 ) -> Result<impl IntoResponse, AppError> {
-    let tenant = tenant_from_req(&req)?;
 
     let rows = sqlx::query(
         "SELECT id, name, description, is_system, permissions_jsonb, tenant_id, created_at \
@@ -272,9 +271,8 @@ pub async fn update_role(
 pub async fn delete_role(
     State(state): State<AppState>,
     Path(role_id): Path<String>,
-    req: axum::extract::Request,
+    Extension(tenant): Extension<TenantContext>,
 ) -> Result<impl IntoResponse, AppError> {
-    let tenant = tenant_from_req(&req)?;
 
     let row = sqlx::query("SELECT id, is_system, tenant_id FROM roles WHERE id = $1")
         .bind(&role_id)
@@ -392,9 +390,8 @@ pub async fn assign_role(
 pub async fn remove_role(
     State(state): State<AppState>,
     Path((user_id, role_id)): Path<(String, String)>,
-    req: axum::extract::Request,
+    Extension(tenant): Extension<TenantContext>,
 ) -> Result<impl IntoResponse, AppError> {
-    let tenant = tenant_from_req(&req)?;
 
     // Verify user belongs to this tenant
     let user_exists =

@@ -2,7 +2,7 @@ use axum::{
     extract::{FromRequest, Path, State},
     http::StatusCode,
     response::IntoResponse,
-    Json,
+    Extension, Json,
 };
 use serde::Deserialize;
 use sqlx::Row;
@@ -95,9 +95,8 @@ async fn ensure_org_belongs_to_tenant(
 /// GET /manage/organizations — List organizations for the authenticated tenant.
 pub async fn list_organizations(
     State(state): State<AppState>,
-    req: axum::extract::Request,
+    Extension(tenant): Extension<TenantContext>,
 ) -> Result<impl IntoResponse, AppError> {
-    let tenant = tenant_from_req(&req)?;
 
     let rows = sqlx::query(
         "SELECT id, name, slug, metadata, created_at, updated_at \
@@ -201,9 +200,8 @@ pub async fn create_organization(
 pub async fn get_organization(
     State(state): State<AppState>,
     Path(organization_id): Path<String>,
-    req: axum::extract::Request,
+    Extension(tenant): Extension<TenantContext>,
 ) -> Result<impl IntoResponse, AppError> {
-    let tenant = tenant_from_req(&req)?;
 
     let row = sqlx::query(
         "SELECT id, name, slug, metadata, created_at, updated_at \
@@ -317,9 +315,8 @@ pub async fn update_organization(
 pub async fn delete_organization(
     State(state): State<AppState>,
     Path(organization_id): Path<String>,
-    req: axum::extract::Request,
+    Extension(tenant): Extension<TenantContext>,
 ) -> Result<impl IntoResponse, AppError> {
-    let tenant = tenant_from_req(&req)?;
 
     let result = sqlx::query("DELETE FROM organizations WHERE id = $1 AND tenant_id = $2")
         .bind(&organization_id)
@@ -341,9 +338,8 @@ pub async fn delete_organization(
 pub async fn list_members(
     State(state): State<AppState>,
     Path(organization_id): Path<String>,
-    req: axum::extract::Request,
+    Extension(tenant): Extension<TenantContext>,
 ) -> Result<impl IntoResponse, AppError> {
-    let tenant = tenant_from_req(&req)?;
     ensure_org_belongs_to_tenant(&state, &organization_id, &tenant.tenant_id).await?;
 
     let rows = sqlx::query(
@@ -439,9 +435,8 @@ pub async fn add_member(
 pub async fn remove_member(
     State(state): State<AppState>,
     Path((organization_id, user_id)): Path<(String, String)>,
-    req: axum::extract::Request,
+    Extension(tenant): Extension<TenantContext>,
 ) -> Result<impl IntoResponse, AppError> {
-    let tenant = tenant_from_req(&req)?;
     ensure_org_belongs_to_tenant(&state, &organization_id, &tenant.tenant_id).await?;
 
     let result = sqlx::query(

@@ -74,12 +74,11 @@ fn create_router_inner(state: AppState, rate_limit_enabled: bool) -> Router {
 
     // MFA endpoints are auth-protected but exempt from compliance-middleware
     // lockouts so users can complete MFA enrollment/challenge.
+    let mfa_verify_route = Router::new().route("/auth/mfa/verify", post(mfa::verify));
     let mfa_verify_route = if rate_limit_enabled {
-        Router::new()
-            .route("/auth/mfa/verify", post(mfa::verify))
-            .layer(rate_limit::mfa_verify_limiter())
+        mfa_verify_route.layer(rate_limit::mfa_verify_limiter())
     } else {
-        Router::new().route("/auth/mfa/verify", post(mfa::verify))
+        mfa_verify_route
     };
 
     let mfa_routes = Router::new()
@@ -109,72 +108,47 @@ fn create_router_inner(state: AppState, rate_limit_enabled: bool) -> Router {
         .layer(middleware::from_fn_with_state(state.clone(), require_auth));
 
     // WebAuthn public routes (login — no JWT required)
+    let webauthn_login_routes = Router::new()
+        .route(
+            "/auth/webauthn/login/begin",
+            post(webauthn::login_begin),
+        )
+        .route(
+            "/auth/webauthn/login/complete",
+            post(webauthn::login_complete),
+        );
     let webauthn_login_routes = if rate_limit_enabled {
-        Router::new()
-            .route(
-                "/auth/webauthn/login/begin",
-                post(webauthn::login_begin),
-            )
-            .route(
-                "/auth/webauthn/login/complete",
-                post(webauthn::login_complete),
-            )
-            .layer(rate_limit::login_limiter())
+        webauthn_login_routes.layer(rate_limit::login_limiter())
     } else {
-        Router::new()
-            .route(
-                "/auth/webauthn/login/begin",
-                post(webauthn::login_begin),
-            )
-            .route(
-                "/auth/webauthn/login/complete",
-                post(webauthn::login_complete),
-            )
+        webauthn_login_routes
     };
 
     // ── Public auth routes (with optional rate limiting) ────────────
+    let register_routes = Router::new().route("/auth/register", post(auth::register));
+    let login_routes = Router::new().route("/auth/login", post(auth::login));
+    let token_routes = Router::new().route("/auth/token", post(token::token_exchange));
+    let password_reset_routes = Router::new()
+        .route(
+            "/auth/forgot-password",
+            post(password_reset::forgot_password),
+        )
+        .route("/auth/reset-password", post(password_reset::reset_password));
+    let verify_email_routes = Router::new().route("/auth/verify-email", get(auth::verify_email));
+
     let auth_routes = if rate_limit_enabled {
-        let register_routes = Router::new()
-            .route("/auth/register", post(auth::register))
-            .layer(rate_limit::register_limiter());
-
-        let login_routes = Router::new()
-            .route("/auth/login", post(auth::login))
-            .layer(rate_limit::login_limiter());
-
-        let token_routes = Router::new()
-            .route("/auth/token", post(token::token_exchange))
-            .layer(rate_limit::token_limiter());
-
-        let password_reset_routes = Router::new()
-            .route(
-                "/auth/forgot-password",
-                post(password_reset::forgot_password),
-            )
-            .route("/auth/reset-password", post(password_reset::reset_password))
-            .layer(rate_limit::register_limiter());
-
-        let verify_email_routes = Router::new()
-            .route("/auth/verify-email", get(auth::verify_email))
-            .layer(rate_limit::register_limiter());
-
+        Router::new()
+            .merge(register_routes.layer(rate_limit::register_limiter()))
+            .merge(login_routes.layer(rate_limit::login_limiter()))
+            .merge(token_routes.layer(rate_limit::token_limiter()))
+            .merge(password_reset_routes.layer(rate_limit::register_limiter()))
+            .merge(verify_email_routes.layer(rate_limit::register_limiter()))
+    } else {
         Router::new()
             .merge(register_routes)
             .merge(login_routes)
             .merge(token_routes)
             .merge(password_reset_routes)
             .merge(verify_email_routes)
-    } else {
-        Router::new()
-            .route("/auth/register", post(auth::register))
-            .route("/auth/login", post(auth::login))
-            .route("/auth/token", post(token::token_exchange))
-            .route(
-                "/auth/forgot-password",
-                post(password_reset::forgot_password),
-            )
-            .route("/auth/reset-password", post(password_reset::reset_password))
-            .route("/auth/verify-email", get(auth::verify_email))
     };
 
     // ── Tenant-scoped auth (all auth routes go through tenant middleware) ──
@@ -194,40 +168,132 @@ fn create_router_inner(state: AppState, rate_limit_enabled: bool) -> Router {
             extract_tenant,
         ));
 
+    // ── Shared route builders for /manage/* and /admin/* ────────────
+    // Both route trees expose the same user/config/invite/role/webhook/org
+    // handlers with different prefixes and different auth middleware.
+
+    /// Build the shared user + config + invite route tree under `prefix`.
+    fn shared_base_routes(prefix: &str) -> Router<AppState> {
+        Router::new()
+            .route(
+                &format!("{prefix}/users"),
+                get(management::list_users).post(management::admin_create_user),
+            )
+            .route(&format!("{prefix}/users/{{id}}"), get(management::get_user))
+            .route(
+                &format!("{prefix}/users/{{id}}"),
+                delete(management::delete_user),
+            )
+            .route(
+                &format!("{prefix}/users/{{id}}/block"),
+                post(management::block_user),
+            )
+            .route(
+                &format!("{prefix}/users/{{id}}/unblock"),
+                post(management::unblock_user),
+            )
+            .route(
+                &format!("{prefix}/users/{{id}}/revoke-sessions"),
+                post(management::revoke_user_sessions),
+            )
+            .route(
+                &format!("{prefix}/users/{{id}}/roles"),
+                post(roles::assign_role),
+            )
+            .route(
+                &format!("{prefix}/users/{{id}}/roles/{{role_id}}"),
+                delete(roles::remove_role),
+            )
+            .route(
+                &format!("{prefix}/config"),
+                get(management::get_config).patch(management::update_config),
+            )
+            .route(
+                &format!("{prefix}/invites"),
+                get(management::list_tenant_invites).post(management::create_tenant_invite),
+            )
+            .route(
+                &format!("{prefix}/invites/{{id}}/revoke"),
+                post(management::revoke_tenant_invite),
+            )
+    }
+
+    fn shared_roles_routes(prefix: &str, state: &AppState) -> Router<AppState> {
+        Router::new()
+            .route(
+                &format!("{prefix}/roles"),
+                get(roles::list_roles).post(roles::create_role),
+            )
+            .route(
+                &format!("{prefix}/roles/{{id}}"),
+                patch(roles::update_role).delete(roles::delete_role),
+            )
+            .layer(middleware::from_fn_with_state(
+                state.clone(),
+                require_custom_roles,
+            ))
+    }
+
+    fn shared_webhook_routes(prefix: &str, state: &AppState) -> Router<AppState> {
+        Router::new()
+            .route(
+                &format!("{prefix}/webhooks"),
+                get(webhooks::list_webhooks).post(webhooks::create_webhook),
+            )
+            .route(
+                &format!("{prefix}/webhooks/{{id}}"),
+                get(webhooks::get_webhook)
+                    .patch(webhooks::update_webhook)
+                    .delete(webhooks::delete_webhook),
+            )
+            .route(
+                &format!("{prefix}/webhooks/{{id}}/deliveries"),
+                get(webhooks::list_deliveries),
+            )
+            .route(
+                &format!("{prefix}/webhooks/{{id}}/test"),
+                post(webhooks::test_webhook),
+            )
+            .layer(middleware::from_fn_with_state(
+                state.clone(),
+                require_webhooks,
+            ))
+    }
+
+    fn shared_org_routes(prefix: &str, state: &AppState) -> Router<AppState> {
+        Router::new()
+            .route(
+                &format!("{prefix}/organizations"),
+                get(organizations::list_organizations).post(organizations::create_organization),
+            )
+            .route(
+                &format!("{prefix}/organizations/{{id}}"),
+                get(organizations::get_organization)
+                    .patch(organizations::update_organization)
+                    .delete(organizations::delete_organization),
+            )
+            .route(
+                &format!("{prefix}/organizations/{{id}}/members"),
+                get(organizations::list_members).post(organizations::add_member),
+            )
+            .route(
+                &format!("{prefix}/organizations/{{id}}/members/{{user_id}}"),
+                delete(organizations::remove_member),
+            )
+            .layer(middleware::from_fn_with_state(
+                state.clone(),
+                require_organizations,
+            ))
+    }
+
     // ── Management API (authenticated with mgmt_ key) ──────────────
-    let manage_base_routes = Router::new()
-        .route(
-            "/manage/users",
-            get(management::list_users).post(management::admin_create_user),
-        )
-        .route("/manage/users/{id}", get(management::get_user))
-        .route("/manage/users/{id}", delete(management::delete_user))
-        .route("/manage/users/{id}/block", post(management::block_user))
-        .route("/manage/users/{id}/unblock", post(management::unblock_user))
-        .route(
-            "/manage/users/{id}/revoke-sessions",
-            post(management::revoke_user_sessions),
-        )
-        .route("/manage/users/{id}/roles", post(roles::assign_role))
-        .route(
-            "/manage/users/{id}/roles/{role_id}",
-            delete(roles::remove_role),
-        )
+    let manage_routes = Router::new()
+        .merge(shared_base_routes("/manage"))
         .route("/manage/stats", get(management::tenant_stats))
         .route("/manage/audit-log", get(management::audit_log))
-        .route("/manage/config", get(management::get_config))
-        .route("/manage/config", patch(management::update_config))
         .route(
             "/manage/tenants/{id}/security",
             patch(management::update_security_config),
-        )
-        .route(
-            "/manage/invites",
-            get(management::list_tenant_invites).post(management::create_tenant_invite),
-        )
-        .route(
-            "/manage/invites/{id}/revoke",
-            post(management::revoke_tenant_invite),
         )
         .route(
             "/manage/certificates",
@@ -236,97 +302,35 @@ fn create_router_inner(state: AppState, rate_limit_enabled: bool) -> Router {
         .route(
             "/manage/certificates/{fingerprint}",
             delete(mtls::revoke_certificate),
-        );
-
-    let manage_roles_routes = Router::new()
-        .route(
-            "/manage/roles",
-            get(roles::list_roles).post(roles::create_role),
         )
-        .route(
-            "/manage/roles/{id}",
-            patch(roles::update_role).delete(roles::delete_role),
+        .merge(shared_roles_routes("/manage", &state))
+        .merge(shared_webhook_routes("/manage", &state))
+        .merge(shared_org_routes("/manage", &state))
+        .merge(
+            Router::new()
+                .route(
+                    "/manage/ssf/streams",
+                    get(ssf::list_streams).post(ssf::create_stream),
+                )
+                .route(
+                    "/manage/ssf/streams/{id}",
+                    get(ssf::get_stream)
+                        .patch(ssf::update_stream)
+                        .delete(ssf::delete_stream),
+                )
+                .route(
+                    "/manage/ssf/streams/{id}/verify",
+                    post(ssf::verify_stream),
+                )
+                .route(
+                    "/manage/ssf/streams/{id}/rotate-secret",
+                    post(ssf::rotate_secret),
+                )
+                .route(
+                    "/manage/ssf/streams/{id}/poll",
+                    post(ssf::poll_stream),
+                ),
         )
-        .layer(middleware::from_fn_with_state(
-            state.clone(),
-            require_custom_roles,
-        ));
-
-    let manage_webhook_routes = Router::new()
-        .route(
-            "/manage/webhooks",
-            get(webhooks::list_webhooks).post(webhooks::create_webhook),
-        )
-        .route(
-            "/manage/webhooks/{id}",
-            get(webhooks::get_webhook)
-                .patch(webhooks::update_webhook)
-                .delete(webhooks::delete_webhook),
-        )
-        .route(
-            "/manage/webhooks/{id}/deliveries",
-            get(webhooks::list_deliveries),
-        )
-        .route("/manage/webhooks/{id}/test", post(webhooks::test_webhook))
-        .layer(middleware::from_fn_with_state(
-            state.clone(),
-            require_webhooks,
-        ));
-
-    let manage_org_routes = Router::new()
-        .route(
-            "/manage/organizations",
-            get(organizations::list_organizations).post(organizations::create_organization),
-        )
-        .route(
-            "/manage/organizations/{id}",
-            get(organizations::get_organization)
-                .patch(organizations::update_organization)
-                .delete(organizations::delete_organization),
-        )
-        .route(
-            "/manage/organizations/{id}/members",
-            get(organizations::list_members).post(organizations::add_member),
-        )
-        .route(
-            "/manage/organizations/{id}/members/{user_id}",
-            delete(organizations::remove_member),
-        )
-        .layer(middleware::from_fn_with_state(
-            state.clone(),
-            require_organizations,
-        ));
-
-    let manage_ssf_routes = Router::new()
-        .route(
-            "/manage/ssf/streams",
-            get(ssf::list_streams).post(ssf::create_stream),
-        )
-        .route(
-            "/manage/ssf/streams/{id}",
-            get(ssf::get_stream)
-                .patch(ssf::update_stream)
-                .delete(ssf::delete_stream),
-        )
-        .route(
-            "/manage/ssf/streams/{id}/verify",
-            post(ssf::verify_stream),
-        )
-        .route(
-            "/manage/ssf/streams/{id}/rotate-secret",
-            post(ssf::rotate_secret),
-        )
-        .route(
-            "/manage/ssf/streams/{id}/poll",
-            post(ssf::poll_stream),
-        );
-
-    let manage_routes = Router::new()
-        .merge(manage_base_routes)
-        .merge(manage_roles_routes)
-        .merge(manage_webhook_routes)
-        .merge(manage_org_routes)
-        .merge(manage_ssf_routes)
         .layer(middleware::from_fn_with_state(
             state.clone(),
             require_management_auth,
@@ -374,101 +378,13 @@ fn create_router_inner(state: AppState, rate_limit_enabled: bool) -> Router {
         ));
 
     // ── Admin API (JWT + admin role, tenant-scoped) ─────────────────
-    let admin_base_routes = Router::new()
-        .route(
-            "/admin/users",
-            get(management::list_users).post(management::admin_create_user),
-        )
-        .route("/admin/users/{id}", get(management::get_user))
-        .route("/admin/users/{id}", delete(management::delete_user))
-        .route("/admin/users/{id}/block", post(management::block_user))
-        .route("/admin/users/{id}/unblock", post(management::unblock_user))
-        .route(
-            "/admin/users/{id}/revoke-sessions",
-            post(management::revoke_user_sessions),
-        )
-        .route("/admin/users/{id}/roles", post(roles::assign_role))
-        .route(
-            "/admin/users/{id}/roles/{role_id}",
-            delete(roles::remove_role),
-        )
+    let admin_routes = Router::new()
+        .merge(shared_base_routes("/admin"))
         .route("/admin/stats", get(admin::stats))
         .route("/admin/audit-log", get(admin::audit_log))
-        .route("/admin/config", get(management::get_config))
-        .route("/admin/config", patch(management::update_config))
-        .route(
-            "/admin/invites",
-            get(management::list_tenant_invites).post(management::create_tenant_invite),
-        )
-        .route(
-            "/admin/invites/{id}/revoke",
-            post(management::revoke_tenant_invite),
-        );
-
-    let admin_roles_routes = Router::new()
-        .route(
-            "/admin/roles",
-            get(roles::list_roles).post(roles::create_role),
-        )
-        .route(
-            "/admin/roles/{id}",
-            patch(roles::update_role).delete(roles::delete_role),
-        )
-        .layer(middleware::from_fn_with_state(
-            state.clone(),
-            require_custom_roles,
-        ));
-
-    let admin_webhook_routes = Router::new()
-        .route(
-            "/admin/webhooks",
-            get(webhooks::list_webhooks).post(webhooks::create_webhook),
-        )
-        .route(
-            "/admin/webhooks/{id}",
-            get(webhooks::get_webhook)
-                .patch(webhooks::update_webhook)
-                .delete(webhooks::delete_webhook),
-        )
-        .route(
-            "/admin/webhooks/{id}/deliveries",
-            get(webhooks::list_deliveries),
-        )
-        .route("/admin/webhooks/{id}/test", post(webhooks::test_webhook))
-        .layer(middleware::from_fn_with_state(
-            state.clone(),
-            require_webhooks,
-        ));
-
-    let admin_org_routes = Router::new()
-        .route(
-            "/admin/organizations",
-            get(organizations::list_organizations).post(organizations::create_organization),
-        )
-        .route(
-            "/admin/organizations/{id}",
-            get(organizations::get_organization)
-                .patch(organizations::update_organization)
-                .delete(organizations::delete_organization),
-        )
-        .route(
-            "/admin/organizations/{id}/members",
-            get(organizations::list_members).post(organizations::add_member),
-        )
-        .route(
-            "/admin/organizations/{id}/members/{user_id}",
-            delete(organizations::remove_member),
-        )
-        .layer(middleware::from_fn_with_state(
-            state.clone(),
-            require_organizations,
-        ));
-
-    let admin_routes = Router::new()
-        .merge(admin_base_routes)
-        .merge(admin_roles_routes)
-        .merge(admin_webhook_routes)
-        .merge(admin_org_routes)
+        .merge(shared_roles_routes("/admin", &state))
+        .merge(shared_webhook_routes("/admin", &state))
+        .merge(shared_org_routes("/admin", &state))
         .layer(middleware::from_fn(require_admin_role))
         .layer(middleware::from_fn_with_state(state.clone(), require_auth))
         .layer(middleware::from_fn_with_state(

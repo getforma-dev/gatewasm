@@ -40,48 +40,42 @@ pub async fn stats(
     let total_users: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM users WHERE tenant_id = $1")
         .bind(&tenant_id)
         .fetch_one(&state.db)
-        .await
-        .unwrap_or(0);
+        .await?;
 
     let verified_users: i64 = sqlx::query_scalar(
         "SELECT COUNT(*) FROM users WHERE tenant_id = $1 AND email_verified = TRUE",
     )
     .bind(&tenant_id)
     .fetch_one(&state.db)
-    .await
-    .unwrap_or(0);
+    .await?;
 
     let active_sessions: i64 = sqlx::query_scalar(
         "SELECT COUNT(*) FROM refresh_tokens WHERE tenant_id = $1 AND revoked = FALSE AND expires_at > NOW()",
     )
     .bind(&tenant_id)
     .fetch_one(&state.db)
-    .await
-    .unwrap_or(0);
+    .await?;
 
     let blocked_users: i64 = sqlx::query_scalar(
         "SELECT COUNT(*) FROM users WHERE tenant_id = $1 AND locked_until > NOW()",
     )
     .bind(&tenant_id)
     .fetch_one(&state.db)
-    .await
-    .unwrap_or(0);
+    .await?;
 
     let logins_24h: i64 = sqlx::query_scalar(
         "SELECT COUNT(*) FROM login_attempts WHERE user_id IN (SELECT id FROM users WHERE tenant_id = $1) AND success = TRUE AND created_at > NOW() - INTERVAL '24 hours'",
     )
     .bind(&tenant_id)
     .fetch_one(&state.db)
-    .await
-    .unwrap_or(0);
+    .await?;
 
     let failed_logins_24h: i64 = sqlx::query_scalar(
         "SELECT COUNT(*) FROM login_attempts WHERE user_id IN (SELECT id FROM users WHERE tenant_id = $1) AND success = FALSE AND created_at > NOW() - INTERVAL '24 hours'",
     )
     .bind(&tenant_id)
     .fetch_one(&state.db)
-    .await
-    .unwrap_or(0);
+    .await?;
 
     let providers: Vec<(String, i64)> = sqlx::query_as(
         "SELECT c.provider, COUNT(*) FROM credentials c JOIN users u ON u.id = c.user_id WHERE u.tenant_id = $1 GROUP BY c.provider",

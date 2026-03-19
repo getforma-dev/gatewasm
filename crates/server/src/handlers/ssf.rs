@@ -7,7 +7,7 @@ use axum::{
     extract::{FromRequest, Path, State},
     http::StatusCode,
     response::IntoResponse,
-    Json,
+    Extension, Json,
 };
 use serde::Deserialize;
 use sqlx::Row;
@@ -227,9 +227,8 @@ pub async fn create_stream(
 /// GET /manage/ssf/streams — List SSF streams for tenant.
 pub async fn list_streams(
     State(state): State<AppState>,
-    req: axum::extract::Request,
+    Extension(tenant): Extension<TenantContext>,
 ) -> Result<impl IntoResponse, AppError> {
-    let tenant = tenant_from_req(&req)?;
     require_caep(&tenant)?;
 
     let rows = sqlx::query(
@@ -270,9 +269,8 @@ pub async fn list_streams(
 pub async fn get_stream(
     State(state): State<AppState>,
     Path(stream_id): Path<String>,
-    req: axum::extract::Request,
+    Extension(tenant): Extension<TenantContext>,
 ) -> Result<impl IntoResponse, AppError> {
-    let tenant = tenant_from_req(&req)?;
     require_caep(&tenant)?;
 
     let stream_uuid = uuid::Uuid::parse_str(&stream_id).map_err(|_| AppError::BadRequest {
@@ -446,9 +444,8 @@ pub async fn update_stream(
 pub async fn delete_stream(
     State(state): State<AppState>,
     Path(stream_id): Path<String>,
-    req: axum::extract::Request,
+    Extension(tenant): Extension<TenantContext>,
 ) -> Result<impl IntoResponse, AppError> {
-    let tenant = tenant_from_req(&req)?;
     require_caep(&tenant)?;
 
     let stream_uuid = uuid::Uuid::parse_str(&stream_id).map_err(|_| AppError::BadRequest {
@@ -478,9 +475,8 @@ pub async fn delete_stream(
 pub async fn verify_stream(
     State(state): State<AppState>,
     Path(stream_id): Path<String>,
-    req: axum::extract::Request,
+    Extension(tenant): Extension<TenantContext>,
 ) -> Result<impl IntoResponse, AppError> {
-    let tenant = tenant_from_req(&req)?;
     require_caep(&tenant)?;
 
     let stream_uuid = uuid::Uuid::parse_str(&stream_id).map_err(|_| AppError::BadRequest {
@@ -553,9 +549,8 @@ pub async fn verify_stream(
 pub async fn rotate_secret(
     State(state): State<AppState>,
     Path(stream_id): Path<String>,
-    req: axum::extract::Request,
+    Extension(tenant): Extension<TenantContext>,
 ) -> Result<impl IntoResponse, AppError> {
-    let tenant = tenant_from_req(&req)?;
     require_caep(&tenant)?;
 
     let stream_uuid = uuid::Uuid::parse_str(&stream_id).map_err(|_| AppError::BadRequest {

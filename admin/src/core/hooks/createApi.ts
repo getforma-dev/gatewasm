@@ -1,5 +1,17 @@
 import type { Auth } from './createAuth';
 
+export class ApiError extends Error {
+  status: number;
+  code: string;
+
+  constructor(message: string, status: number, code: string) {
+    super(message);
+    this.name = 'ApiError';
+    this.status = status;
+    this.code = code;
+  }
+}
+
 export function createApi(auth: Auth) {
   async function request<T = Record<string, unknown>>(
     path: string,
@@ -37,7 +49,11 @@ export function createApi(auth: Auth) {
 
     if (!res.ok) {
       const data = await res.json().catch(() => ({}));
-      throw new Error(data.error || data.message || 'Request failed');
+      throw new ApiError(
+        data.message || data.error || 'Request failed',
+        res.status,
+        data.error || 'unknown_error',
+      );
     }
 
     return res.json();

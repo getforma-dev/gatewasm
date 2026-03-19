@@ -52,6 +52,8 @@ export function createAuth(opts: AuthOptions) {
   }
 
   async function logout(): Promise<void> {
+    stopAutoRefresh();
+    setAccessToken(null);
     fetch(baseUrl + '/auth/logout', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },

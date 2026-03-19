@@ -2,7 +2,7 @@ use axum::{
     extract::{FromRequest, Path, Query, State},
     http::StatusCode,
     response::IntoResponse,
-    Json,
+    Extension, Json,
 };
 use chrono::Utc;
 use serde::Deserialize;
@@ -18,6 +18,18 @@ use crate::middleware::tenant::TenantContext;
 use crate::redirects::{default_login_redirect, validate_login_redirect_input};
 use crate::security_config::TenantSecurityConfig;
 use crate::AppState;
+
+// ── Helpers ──────────────────────────────────────────────────────────────
+
+fn tenant_from_req(req: &axum::extract::Request) -> Result<TenantContext, AppError> {
+    req.extensions()
+        .get::<TenantContext>()
+        .cloned()
+        .ok_or(AppError::Unauthorized {
+            error: "unauthorized",
+            message: "Missing tenant context".into(),
+        })
+}
 
 // ── Validation helpers ──────────────────────────────────────────────────
 
@@ -584,14 +596,7 @@ pub async fn list_users(
     State(state): State<AppState>,
     req: axum::extract::Request,
 ) -> Result<impl IntoResponse, AppError> {
-    let tenant =
-        req.extensions()
-            .get::<TenantContext>()
-            .cloned()
-            .ok_or(AppError::Unauthorized {
-                error: "unauthorized",
-                message: "Missing tenant context".into(),
-            })?;
+    let tenant = tenant_from_req(&req)?;
 
     let params: ListUsersQuery = Query::try_from_uri(req.uri())
         .unwrap_or(Query(ListUsersQuery {
@@ -658,16 +663,8 @@ pub async fn list_users(
 pub async fn get_user(
     State(state): State<AppState>,
     Path(user_id): Path<String>,
-    req: axum::extract::Request,
+    Extension(tenant): Extension<TenantContext>,
 ) -> Result<impl IntoResponse, AppError> {
-    let tenant =
-        req.extensions()
-            .get::<TenantContext>()
-            .cloned()
-            .ok_or(AppError::Unauthorized {
-                error: "unauthorized",
-                message: "Missing tenant context".into(),
-            })?;
 
     let row = sqlx::query_as::<_, (String, String, Option<String>, Option<String>, bool, i32, Option<chrono::DateTime<Utc>>, chrono::DateTime<Utc>)>(
         "SELECT id, email, name, avatar, email_verified, COALESCE(login_attempts, 0), locked_until, created_at FROM users WHERE id = $1 AND tenant_id = $2",
@@ -720,16 +717,8 @@ pub async fn get_user(
 pub async fn delete_user(
     State(state): State<AppState>,
     Path(user_id): Path<String>,
-    req: axum::extract::Request,
+    Extension(tenant): Extension<TenantContext>,
 ) -> Result<impl IntoResponse, AppError> {
-    let tenant =
-        req.extensions()
-            .get::<TenantContext>()
-            .cloned()
-            .ok_or(AppError::Unauthorized {
-                error: "unauthorized",
-                message: "Missing tenant context".into(),
-            })?;
 
     let result = sqlx::query("DELETE FROM users WHERE id = $1 AND tenant_id = $2")
         .bind(&user_id)
@@ -761,16 +750,8 @@ pub async fn delete_user(
 pub async fn block_user(
     State(state): State<AppState>,
     Path(user_id): Path<String>,
-    req: axum::extract::Request,
+    Extension(tenant): Extension<TenantContext>,
 ) -> Result<impl IntoResponse, AppError> {
-    let tenant =
-        req.extensions()
-            .get::<TenantContext>()
-            .cloned()
-            .ok_or(AppError::Unauthorized {
-                error: "unauthorized",
-                message: "Missing tenant context".into(),
-            })?;
 
     // Lock for a very long time (effectively permanent until unblocked)
     let lock_until = Utc::now() + chrono::Duration::days(36500);
@@ -809,16 +790,8 @@ pub async fn block_user(
 pub async fn unblock_user(
     State(state): State<AppState>,
     Path(user_id): Path<String>,
-    req: axum::extract::Request,
+    Extension(tenant): Extension<TenantContext>,
 ) -> Result<impl IntoResponse, AppError> {
-    let tenant =
-        req.extensions()
-            .get::<TenantContext>()
-            .cloned()
-            .ok_or(AppError::Unauthorized {
-                error: "unauthorized",
-                message: "Missing tenant context".into(),
-            })?;
 
     let result = sqlx::query(
         "UPDATE users SET locked_until = NULL, login_attempts = 0 WHERE id = $1 AND tenant_id = $2",
@@ -846,16 +819,8 @@ pub async fn unblock_user(
 /// GET /manage/stats — Tenant usage statistics.
 pub async fn tenant_stats(
     State(state): State<AppState>,
-    req: axum::extract::Request,
+    Extension(tenant): Extension<TenantContext>,
 ) -> Result<impl IntoResponse, AppError> {
-    let tenant =
-        req.extensions()
-            .get::<TenantContext>()
-            .cloned()
-            .ok_or(AppError::Unauthorized {
-                error: "unauthorized",
-                message: "Missing tenant context".into(),
-            })?;
 
     // Consolidated stats: user counts + session counts + login attempts in two queries
     let stats_row = sqlx::query_as::<_, (i64, i64, i64, i64, i64, i64)>(
@@ -906,14 +871,7 @@ pub async fn audit_log(
     State(state): State<AppState>,
     req: axum::extract::Request,
 ) -> Result<impl IntoResponse, AppError> {
-    let tenant =
-        req.extensions()
-            .get::<TenantContext>()
-            .cloned()
-            .ok_or(AppError::Unauthorized {
-                error: "unauthorized",
-                message: "Missing tenant context".into(),
-            })?;
+    let tenant = tenant_from_req(&req)?;
 
     let params: AuditLogQuery = Query::try_from_uri(req.uri())
         .unwrap_or(Query(AuditLogQuery {
@@ -963,17 +921,8 @@ pub async fn audit_log(
 
 /// GET /manage/config — Get tenant configuration.
 pub async fn get_config(
-    State(_state): State<AppState>,
-    req: axum::extract::Request,
+    Extension(tenant): Extension<TenantContext>,
 ) -> Result<impl IntoResponse, AppError> {
-    let tenant =
-        req.extensions()
-            .get::<TenantContext>()
-            .cloned()
-            .ok_or(AppError::Unauthorized {
-                error: "unauthorized",
-                message: "Missing tenant context".into(),
-            })?;
 
     Ok(Json(serde_json::json!({
         "tenant_id": tenant.tenant_id,
@@ -994,14 +943,7 @@ pub async fn update_config(
     State(state): State<AppState>,
     req: axum::extract::Request,
 ) -> Result<impl IntoResponse, AppError> {
-    let tenant =
-        req.extensions()
-            .get::<TenantContext>()
-            .cloned()
-            .ok_or(AppError::Unauthorized {
-                error: "unauthorized",
-                message: "Missing tenant context".into(),
-            })?;
+    let tenant = tenant_from_req(&req)?;
 
     let body: UpdateConfigRequest = axum::Json::from_request(req, &state)
         .await
@@ -1151,14 +1093,7 @@ pub async fn list_tenant_invites(
     State(state): State<AppState>,
     req: axum::extract::Request,
 ) -> Result<impl IntoResponse, AppError> {
-    let tenant =
-        req.extensions()
-            .get::<TenantContext>()
-            .cloned()
-            .ok_or(AppError::Unauthorized {
-                error: "unauthorized",
-                message: "Missing tenant context".into(),
-            })?;
+    let tenant = tenant_from_req(&req)?;
 
     let params: ListTenantInvitesQuery = Query::try_from_uri(req.uri())
         .unwrap_or(Query(ListTenantInvitesQuery {
@@ -1280,14 +1215,7 @@ pub async fn create_tenant_invite(
     State(state): State<AppState>,
     req: axum::extract::Request,
 ) -> Result<impl IntoResponse, AppError> {
-    let tenant =
-        req.extensions()
-            .get::<TenantContext>()
-            .cloned()
-            .ok_or(AppError::Unauthorized {
-                error: "unauthorized",
-                message: "Missing tenant context".into(),
-            })?;
+    let tenant = tenant_from_req(&req)?;
     let inviter_claims = req.extensions().get::<signing::Claims>().cloned();
 
     let body: CreateTenantInviteRequest =
@@ -1399,16 +1327,8 @@ pub async fn create_tenant_invite(
 pub async fn revoke_tenant_invite(
     State(state): State<AppState>,
     Path(invite_id): Path<String>,
-    req: axum::extract::Request,
+    Extension(tenant): Extension<TenantContext>,
 ) -> Result<impl IntoResponse, AppError> {
-    let tenant =
-        req.extensions()
-            .get::<TenantContext>()
-            .cloned()
-            .ok_or(AppError::Unauthorized {
-                error: "unauthorized",
-                message: "Missing tenant context".into(),
-            })?;
 
     let result = sqlx::query(
         "UPDATE tenant_user_invites
@@ -1439,16 +1359,8 @@ pub async fn revoke_tenant_invite(
 pub async fn revoke_user_sessions(
     State(state): State<AppState>,
     Path(user_id): Path<String>,
-    req: axum::extract::Request,
+    Extension(tenant): Extension<TenantContext>,
 ) -> Result<impl IntoResponse, AppError> {
-    let tenant =
-        req.extensions()
-            .get::<TenantContext>()
-            .cloned()
-            .ok_or(AppError::Unauthorized {
-                error: "unauthorized",
-                message: "Missing tenant context".into(),
-            })?;
 
     // Verify user belongs to this tenant
     let exists =
@@ -1503,14 +1415,7 @@ pub async fn admin_create_user(
     State(state): State<AppState>,
     req: axum::extract::Request,
 ) -> Result<impl IntoResponse, AppError> {
-    let tenant =
-        req.extensions()
-            .get::<TenantContext>()
-            .cloned()
-            .ok_or(AppError::Unauthorized {
-                error: "unauthorized",
-                message: "Missing tenant context".into(),
-            })?;
+    let tenant = tenant_from_req(&req)?;
 
     let body: AdminCreateUserRequest = axum::Json::from_request(req, &state)
         .await
@@ -1630,14 +1535,7 @@ pub async fn update_security_config(
     req: axum::extract::Request,
 ) -> Result<impl IntoResponse, AppError> {
     // Extract tenant context from the mgmt key (injected by require_management_auth)
-    let tenant = req
-        .extensions()
-        .get::<TenantContext>()
-        .cloned()
-        .ok_or(AppError::Unauthorized {
-            error: "unauthorized",
-            message: "Missing tenant context".into(),
-        })?;
+    let tenant = tenant_from_req(&req)?;
 
     // Verify the path tenant_id matches the authenticated tenant
     if tenant.tenant_id != tenant_id {
