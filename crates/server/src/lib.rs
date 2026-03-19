@@ -11,6 +11,7 @@ pub mod ir;
 pub mod jwt;
 pub mod middleware;
 pub mod redirects;
+pub mod responses;
 pub mod security_config;
 pub mod types;
 

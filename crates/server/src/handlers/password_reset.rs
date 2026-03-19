@@ -7,6 +7,7 @@ use crate::email;
 use crate::error::AppError;
 use crate::handlers::auth::normalize_email;
 use crate::middleware::tenant::TenantContext;
+use crate::responses::MessageResponse;
 use crate::types::*;
 use crate::AppState;
 
@@ -107,9 +108,9 @@ pub async fn forgot_password(
     // Always return success to prevent email enumeration
     Ok((
         StatusCode::OK,
-        Json(serde_json::json!({
-            "message": "If an account with that email exists, a password reset link has been sent."
-        })),
+        Json(MessageResponse {
+            message: "If an account with that email exists, a password reset link has been sent.",
+        }),
     ))
 }
 
@@ -210,8 +211,8 @@ pub async fn reset_password(
 
     Ok((
         StatusCode::OK,
-        Json(serde_json::json!({
-            "message": "Password has been reset successfully. Please log in with your new password."
-        })),
+        Json(MessageResponse {
+            message: "Password has been reset successfully. Please log in with your new password.",
+        }),
     ))
 }

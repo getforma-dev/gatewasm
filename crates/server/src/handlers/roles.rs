@@ -9,6 +9,7 @@ use sqlx::Row;
 
 use crate::error::AppError;
 use crate::middleware::tenant::TenantContext;
+use crate::responses::MessageResponse;
 use crate::AppState;
 
 /// Permission keys that can be assigned to custom roles.
@@ -264,7 +265,7 @@ pub async fn update_role(
             .await?;
     }
 
-    Ok(Json(serde_json::json!({ "message": "Role updated" })))
+    Ok(Json(MessageResponse { message: "Role updated" }))
 }
 
 /// DELETE /manage/roles/{id} — Delete a custom role.
@@ -313,7 +314,7 @@ pub async fn delete_role(
 
     tracing::info!(role_id = %role_id, tenant = %tenant.tenant_id, "Custom role deleted");
 
-    Ok(Json(serde_json::json!({ "message": "Role deleted" })))
+    Ok(Json(MessageResponse { message: "Role deleted" }))
 }
 
 /// POST /manage/users/{id}/roles — Assign a role to a user.
@@ -383,7 +384,7 @@ pub async fn assign_role(
 
     tracing::info!(user_id = %user_id, role_id = %body.role_id, tenant = %tenant.tenant_id, "Role assigned");
 
-    Ok(Json(serde_json::json!({ "message": "Role assigned" })))
+    Ok(Json(MessageResponse { message: "Role assigned" }))
 }
 
 /// DELETE /manage/users/{id}/roles/{role_id} — Remove a role from a user.
@@ -432,7 +433,7 @@ pub async fn remove_role(
 
     tracing::info!(user_id = %user_id, role_id = %role_id, tenant = %tenant.tenant_id, "Role removed");
 
-    Ok(Json(serde_json::json!({ "message": "Role removed" })))
+    Ok(Json(MessageResponse { message: "Role removed" }))
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────

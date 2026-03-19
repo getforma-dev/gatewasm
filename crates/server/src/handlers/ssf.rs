@@ -17,6 +17,7 @@ use crate::middleware::fingerprint::extract_client_ip;
 use crate::handlers::webhooks::is_private_url;
 use crate::error::AppError;
 use crate::middleware::tenant::TenantContext;
+use crate::responses::MessageResponse;
 use crate::AppState;
 
 /// Valid SSF event types (CAEP + SSF core).
@@ -437,7 +438,7 @@ pub async fn update_stream(
 
     tracing::info!(stream_id = %stream_id, tenant = %tenant.tenant_id, "SSF stream updated");
 
-    Ok(Json(serde_json::json!({ "message": "Stream updated" })))
+    Ok(Json(MessageResponse { message: "Stream updated" }))
 }
 
 /// DELETE /manage/ssf/streams/:id — Delete stream (cascades to outbox entries).
@@ -468,7 +469,7 @@ pub async fn delete_stream(
 
     tracing::info!(stream_id = %stream_id, tenant = %tenant.tenant_id, "SSF stream deleted");
 
-    Ok(Json(serde_json::json!({ "message": "Stream deleted" })))
+    Ok(Json(MessageResponse { message: "Stream deleted" }))
 }
 
 /// POST /manage/ssf/streams/:id/verify — Send a verification event.

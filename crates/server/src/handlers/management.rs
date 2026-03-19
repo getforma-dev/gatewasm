@@ -16,6 +16,7 @@ use crate::jwt::signing;
 use crate::middleware::entitlements::ensure_user_capacity;
 use crate::middleware::tenant::TenantContext;
 use crate::redirects::{default_login_redirect, validate_login_redirect_input};
+use crate::responses::MessageResponse;
 use crate::security_config::TenantSecurityConfig;
 use crate::AppState;
 
@@ -232,6 +233,21 @@ pub async fn create_tenant(
 }
 
 /// GET /platform/tenants — List all tenants.
+#[derive(sqlx::FromRow)]
+struct TenantListRow {
+    id: String,
+    name: String,
+    slug: String,
+    owner_email: String,
+    status: String,
+    signup_mode: String,
+    allowed_providers: serde_json::Value,
+    max_users: i32,
+    mau_count: i32,
+    created_at: chrono::DateTime<Utc>,
+    security_config: serde_json::Value,
+}
+
 pub async fn list_tenants(
     State(state): State<AppState>,
     Query(params): Query<ListTenantsQuery>,
@@ -240,7 +256,7 @@ pub async fn list_tenants(
     let offset = params.offset.unwrap_or(0);
 
     let tenants = if let Some(status) = &params.status {
-        sqlx::query_as::<_, (String, String, String, String, String, String, serde_json::Value, i32, i32, chrono::DateTime<Utc>, serde_json::Value)>(
+        sqlx::query_as::<_, TenantListRow>(
             "SELECT id, name, slug, owner_email, status, COALESCE(signup_mode, 'open') AS signup_mode, allowed_providers, max_users, mau_count, created_at, COALESCE(security_config, '{}') AS security_config FROM tenants WHERE status = $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3",
         )
         .bind(status)
@@ -249,7 +265,7 @@ pub async fn list_tenants(
         .fetch_all(&state.db)
         .await?
     } else {
-        sqlx::query_as::<_, (String, String, String, String, String, String, serde_json::Value, i32, i32, chrono::DateTime<Utc>, serde_json::Value)>(
+        sqlx::query_as::<_, TenantListRow>(
             "SELECT id, name, slug, owner_email, status, COALESCE(signup_mode, 'open') AS signup_mode, allowed_providers, max_users, mau_count, created_at, COALESCE(security_config, '{}') AS security_config FROM tenants ORDER BY created_at DESC LIMIT $1 OFFSET $2",
         )
         .bind(limit)
@@ -260,24 +276,22 @@ pub async fn list_tenants(
 
     let items: Vec<serde_json::Value> = tenants
         .into_iter()
-        .map(
-            |(id, name, slug, owner, status, signup_mode, providers, max_users, mau, created, sec_config_json)| {
-                let sec_config = crate::security_config::TenantSecurityConfig::from_json(&sec_config_json);
-                serde_json::json!({
-                    "id": id,
-                    "name": name,
-                    "slug": slug,
-                    "owner_email": owner,
-                    "status": status,
-                    "signup_mode": signup_mode,
-                    "allowed_providers": providers,
-                    "max_users": max_users,
-                    "mau_count": mau,
-                    "security_config": sec_config,
-                    "created_at": created.to_rfc3339(),
-                })
-            },
-        )
+        .map(|row| {
+            let sec_config = crate::security_config::TenantSecurityConfig::from_json(&row.security_config);
+            serde_json::json!({
+                "id": row.id,
+                "name": row.name,
+                "slug": row.slug,
+                "owner_email": row.owner_email,
+                "status": row.status,
+                "signup_mode": row.signup_mode,
+                "allowed_providers": row.allowed_providers,
+                "max_users": row.max_users,
+                "mau_count": row.mau_count,
+                "security_config": sec_config,
+                "created_at": row.created_at.to_rfc3339(),
+            })
+        })
         .collect();
 
     Ok(Json(serde_json::json!({
@@ -287,12 +301,29 @@ pub async fn list_tenants(
     })))
 }
 
+#[derive(sqlx::FromRow)]
+struct TenantDetailRow {
+    id: String,
+    name: String,
+    slug: String,
+    owner_email: String,
+    status: String,
+    signup_mode: String,
+    allowed_providers: serde_json::Value,
+    allowed_origins: serde_json::Value,
+    max_users: i32,
+    mau_count: i32,
+    created_at: chrono::DateTime<Utc>,
+    updated_at: chrono::DateTime<Utc>,
+    security_config: serde_json::Value,
+}
+
 /// GET /platform/tenants/:id — Get a single tenant.
 pub async fn get_tenant(
     State(state): State<AppState>,
     Path(tenant_id): Path<String>,
 ) -> Result<impl IntoResponse, AppError> {
-    let row = sqlx::query_as::<_, (String, String, String, String, String, String, serde_json::Value, serde_json::Value, i32, i32, chrono::DateTime<Utc>, chrono::DateTime<Utc>, serde_json::Value)>(
+    let row = sqlx::query_as::<_, TenantDetailRow>(
         "SELECT id, name, slug, owner_email, status, COALESCE(signup_mode, 'open') AS signup_mode, allowed_providers, allowed_origins, max_users, mau_count, created_at, updated_at, COALESCE(security_config, '{}') AS security_config FROM tenants WHERE id = $1",
     )
     .bind(&tenant_id)
@@ -303,46 +334,30 @@ pub async fn get_tenant(
         message: format!("No tenant with id '{}'", tenant_id),
     })?;
 
-    let (
-        id,
-        name,
-        slug,
-        owner,
-        status,
-        signup_mode,
-        providers,
-        origins,
-        max_users,
-        mau,
-        created,
-        updated,
-        security_config_json,
-    ) = row;
-
-    let security_config = crate::security_config::TenantSecurityConfig::from_json(&security_config_json);
+    let security_config = crate::security_config::TenantSecurityConfig::from_json(&row.security_config);
 
     // Count users for this tenant
     let user_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM users WHERE tenant_id = $1")
-        .bind(&id)
+        .bind(&row.id)
         .fetch_one(&state.db)
         .await
         .unwrap_or(0);
 
     Ok(Json(serde_json::json!({
-        "id": id,
-        "name": name,
-        "slug": slug,
-        "owner_email": owner,
-        "status": status,
-        "signup_mode": signup_mode,
-        "allowed_providers": providers,
-        "allowed_origins": origins,
-        "max_users": max_users,
-        "mau_count": mau,
+        "id": row.id,
+        "name": row.name,
+        "slug": row.slug,
+        "owner_email": row.owner_email,
+        "status": row.status,
+        "signup_mode": row.signup_mode,
+        "allowed_providers": row.allowed_providers,
+        "allowed_origins": row.allowed_origins,
+        "max_users": row.max_users,
+        "mau_count": row.mau_count,
         "user_count": user_count,
         "security_config": security_config,
-        "created_at": created.to_rfc3339(),
-        "updated_at": updated.to_rfc3339(),
+        "created_at": row.created_at.to_rfc3339(),
+        "updated_at": row.updated_at.to_rfc3339(),
     })))
 }
 
@@ -591,6 +606,16 @@ pub struct UpdateConfigRequest {
     pub signup_mode: Option<String>,
 }
 
+#[derive(sqlx::FromRow)]
+struct UserListRow {
+    id: String,
+    email: String,
+    name: Option<String>,
+    avatar: Option<String>,
+    email_verified: bool,
+    created_at: chrono::DateTime<Utc>,
+}
+
 /// GET /manage/users — List users for the authenticated tenant.
 pub async fn list_users(
     State(state): State<AppState>,
@@ -611,7 +636,7 @@ pub async fn list_users(
 
     let users = if let Some(ref email_filter) = params.email {
         let pattern = format!("%{}%", email_filter.to_lowercase());
-        sqlx::query_as::<_, (String, String, Option<String>, Option<String>, bool, chrono::DateTime<Utc>)>(
+        sqlx::query_as::<_, UserListRow>(
             "SELECT id, email, name, avatar, email_verified, created_at FROM users WHERE tenant_id = $1 AND email ILIKE $2 ORDER BY created_at DESC LIMIT $3 OFFSET $4",
         )
         .bind(&tenant.tenant_id)
@@ -621,7 +646,7 @@ pub async fn list_users(
         .fetch_all(&state.db)
         .await?
     } else {
-        sqlx::query_as::<_, (String, String, Option<String>, Option<String>, bool, chrono::DateTime<Utc>)>(
+        sqlx::query_as::<_, UserListRow>(
             "SELECT id, email, name, avatar, email_verified, created_at FROM users WHERE tenant_id = $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3",
         )
         .bind(&tenant.tenant_id)
@@ -639,14 +664,14 @@ pub async fn list_users(
 
     let items: Vec<serde_json::Value> = users
         .into_iter()
-        .map(|(id, email, name, avatar, verified, created)| {
+        .map(|row| {
             serde_json::json!({
-                "id": id,
-                "email": email,
-                "name": name,
-                "avatar": avatar,
-                "email_verified": verified,
-                "created_at": created.to_rfc3339(),
+                "id": row.id,
+                "email": row.email,
+                "name": row.name,
+                "avatar": row.avatar,
+                "email_verified": row.email_verified,
+                "created_at": row.created_at.to_rfc3339(),
             })
         })
         .collect();
@@ -659,6 +684,18 @@ pub async fn list_users(
     })))
 }
 
+#[derive(sqlx::FromRow)]
+struct UserDetailRow {
+    id: String,
+    email: String,
+    name: Option<String>,
+    avatar: Option<String>,
+    email_verified: bool,
+    login_attempts: i32,
+    locked_until: Option<chrono::DateTime<Utc>>,
+    created_at: chrono::DateTime<Utc>,
+}
+
 /// GET /manage/users/:id — Get a single user for the authenticated tenant.
 pub async fn get_user(
     State(state): State<AppState>,
@@ -666,8 +703,8 @@ pub async fn get_user(
     Extension(tenant): Extension<TenantContext>,
 ) -> Result<impl IntoResponse, AppError> {
 
-    let row = sqlx::query_as::<_, (String, String, Option<String>, Option<String>, bool, i32, Option<chrono::DateTime<Utc>>, chrono::DateTime<Utc>)>(
-        "SELECT id, email, name, avatar, email_verified, COALESCE(login_attempts, 0), locked_until, created_at FROM users WHERE id = $1 AND tenant_id = $2",
+    let row = sqlx::query_as::<_, UserDetailRow>(
+        "SELECT id, email, name, avatar, email_verified, COALESCE(login_attempts, 0) AS login_attempts, locked_until, created_at FROM users WHERE id = $1 AND tenant_id = $2",
     )
     .bind(&user_id)
     .bind(&tenant.tenant_id)
@@ -678,8 +715,6 @@ pub async fn get_user(
         message: format!("No user with id '{}' in this tenant", user_id),
     })?;
 
-    let (id, email, name, avatar, verified, login_attempts, locked_until, created) = row;
-
     // Consolidated query: roles, permissions, providers, and active sessions in one round-trip
     let detail_row = sqlx::query_as::<_, (serde_json::Value, serde_json::Value, serde_json::Value, i64)>(
         "SELECT \
@@ -688,7 +723,7 @@ pub async fn get_user(
            COALESCE((SELECT jsonb_agg(provider) FROM credentials WHERE user_id = $1), '[]'::jsonb), \
            (SELECT COUNT(*) FROM refresh_tokens WHERE user_id = $1 AND revoked = FALSE AND expires_at > NOW())",
     )
-    .bind(&id)
+    .bind(&row.id)
     .fetch_one(&state.db)
     .await?;
 
@@ -698,18 +733,18 @@ pub async fn get_user(
     let providers: Vec<String> = serde_json::from_value(providers_json).unwrap_or_default();
 
     Ok(Json(serde_json::json!({
-        "id": id,
-        "email": email,
-        "name": name,
-        "avatar": avatar,
-        "email_verified": verified,
+        "id": row.id,
+        "email": row.email,
+        "name": row.name,
+        "avatar": row.avatar,
+        "email_verified": row.email_verified,
         "roles": roles,
         "permissions": permissions,
         "providers": providers,
-        "login_attempts": login_attempts,
-        "locked_until": locked_until.map(|dt| dt.to_rfc3339()),
+        "login_attempts": row.login_attempts,
+        "locked_until": row.locked_until.map(|dt| dt.to_rfc3339()),
         "active_sessions": active_sessions,
-        "created_at": created.to_rfc3339(),
+        "created_at": row.created_at.to_rfc3339(),
     })))
 }
 
@@ -816,6 +851,16 @@ pub async fn unblock_user(
     })))
 }
 
+#[derive(sqlx::FromRow)]
+struct TenantStatsRow {
+    total_users: i64,
+    verified_users: i64,
+    blocked_users: i64,
+    active_sessions: i64,
+    logins_24h: i64,
+    failed_logins_24h: i64,
+}
+
 /// GET /manage/stats — Tenant usage statistics.
 pub async fn tenant_stats(
     State(state): State<AppState>,
@@ -823,22 +868,20 @@ pub async fn tenant_stats(
 ) -> Result<impl IntoResponse, AppError> {
 
     // Consolidated stats: user counts + session counts + login attempts in two queries
-    let stats_row = sqlx::query_as::<_, (i64, i64, i64, i64, i64, i64)>(
+    let stats = sqlx::query_as::<_, TenantStatsRow>(
         "SELECT \
-           COUNT(*), \
-           COUNT(*) FILTER (WHERE email_verified = TRUE), \
-           COUNT(*) FILTER (WHERE locked_until > NOW()), \
-           (SELECT COUNT(*) FROM refresh_tokens WHERE tenant_id = $1 AND revoked = FALSE AND expires_at > NOW()), \
-           (SELECT COUNT(*) FROM login_attempts WHERE user_id IN (SELECT id FROM users WHERE tenant_id = $1) AND success = TRUE AND created_at > NOW() - INTERVAL '24 hours'), \
-           (SELECT COUNT(*) FROM login_attempts WHERE user_id IN (SELECT id FROM users WHERE tenant_id = $1) AND success = FALSE AND created_at > NOW() - INTERVAL '24 hours') \
+           COUNT(*) AS total_users, \
+           COUNT(*) FILTER (WHERE email_verified = TRUE) AS verified_users, \
+           COUNT(*) FILTER (WHERE locked_until > NOW()) AS blocked_users, \
+           (SELECT COUNT(*) FROM refresh_tokens WHERE tenant_id = $1 AND revoked = FALSE AND expires_at > NOW()) AS active_sessions, \
+           (SELECT COUNT(*) FROM login_attempts WHERE user_id IN (SELECT id FROM users WHERE tenant_id = $1) AND success = TRUE AND created_at > NOW() - INTERVAL '24 hours') AS logins_24h, \
+           (SELECT COUNT(*) FROM login_attempts WHERE user_id IN (SELECT id FROM users WHERE tenant_id = $1) AND success = FALSE AND created_at > NOW() - INTERVAL '24 hours') AS failed_logins_24h \
          FROM users WHERE tenant_id = $1",
     )
     .bind(&tenant.tenant_id)
     .fetch_one(&state.db)
     .await
-    .unwrap_or((0, 0, 0, 0, 0, 0));
-
-    let (total_users, verified_users, blocked_users, active_sessions, logins_24h, failed_logins_24h) = stats_row;
+    .unwrap_or(TenantStatsRow { total_users: 0, verified_users: 0, blocked_users: 0, active_sessions: 0, logins_24h: 0, failed_logins_24h: 0 });
 
     let providers: Vec<(String, i64)> = sqlx::query_as(
         "SELECT c.provider, COUNT(*) FROM credentials c JOIN users u ON u.id = c.user_id WHERE u.tenant_id = $1 GROUP BY c.provider",
@@ -856,14 +899,26 @@ pub async fn tenant_stats(
 
     Ok(Json(serde_json::json!({
         "tenant_id": tenant.tenant_id,
-        "total_users": total_users,
-        "verified_users": verified_users,
-        "blocked_users": blocked_users,
-        "active_sessions": active_sessions,
-        "logins_24h": logins_24h,
-        "failed_logins_24h": failed_logins_24h,
+        "total_users": stats.total_users,
+        "verified_users": stats.verified_users,
+        "blocked_users": stats.blocked_users,
+        "active_sessions": stats.active_sessions,
+        "logins_24h": stats.logins_24h,
+        "failed_logins_24h": stats.failed_logins_24h,
         "providers": provider_breakdown,
     })))
+}
+
+#[derive(sqlx::FromRow)]
+struct AuditLogRow {
+    id: String,
+    email: String,
+    user_id: Option<String>,
+    success: bool,
+    ip_address: Option<String>,
+    user_agent: Option<String>,
+    failure_reason: Option<String>,
+    created_at: chrono::DateTime<Utc>,
 }
 
 /// GET /manage/audit-log — Login attempts for the authenticated tenant.
@@ -884,7 +939,7 @@ pub async fn audit_log(
     let offset = params.offset.unwrap_or(0);
 
     // Base query: join login_attempts with users to scope by tenant_id
-    let rows = sqlx::query_as::<_, (String, String, Option<String>, bool, Option<String>, Option<String>, Option<String>, chrono::DateTime<Utc>)>(
+    let rows = sqlx::query_as::<_, AuditLogRow>(
         "SELECT la.id, la.email, la.user_id, la.success, la.ip_address, la.user_agent, la.failure_reason, la.created_at
          FROM login_attempts la
          WHERE la.user_id IN (SELECT id FROM users WHERE tenant_id = $1)
@@ -898,16 +953,16 @@ pub async fn audit_log(
 
     let items: Vec<serde_json::Value> = rows
         .into_iter()
-        .map(|(id, email, user_id, success, ip, ua, reason, created)| {
+        .map(|row| {
             serde_json::json!({
-                "id": id,
-                "email": email,
-                "user_id": user_id,
-                "success": success,
-                "ip_address": ip,
-                "user_agent": ua,
-                "failure_reason": reason,
-                "created_at": created.to_rfc3339(),
+                "id": row.id,
+                "email": row.email,
+                "user_id": row.user_id,
+                "success": row.success,
+                "ip_address": row.ip_address,
+                "user_agent": row.user_agent,
+                "failure_reason": row.failure_reason,
+                "created_at": row.created_at.to_rfc3339(),
             })
         })
         .collect();
@@ -1069,9 +1124,7 @@ pub async fn update_config(
 
     tracing::info!(tenant_id = %tenant.tenant_id, "Tenant config updated via management API");
 
-    Ok(Json(serde_json::json!({
-        "message": "Configuration updated successfully"
-    })))
+    Ok(Json(MessageResponse { message: "Configuration updated successfully" }))
 }
 
 #[derive(Debug, Deserialize)]

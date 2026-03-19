@@ -16,6 +16,7 @@ use crate::middleware::platform_user::PlatformUser;
 use crate::redirects::{
     default_login_redirect, resolve_login_redirect, validate_login_redirect_input,
 };
+use crate::responses::MessageResponse;
 use crate::{AppState, RenderMode};
 
 /// Slugs reserved for system routes — cannot be used as tenant slugs.
@@ -669,9 +670,7 @@ pub async fn update_my_tenant(
     state.tenant_cache.invalidate(&slug);
     tracing::info!(tenant_id = %tenant_id, "Self-serve tenant config updated");
 
-    Ok(Json(serde_json::json!({
-        "message": "Configuration updated successfully"
-    })))
+    Ok(Json(MessageResponse { message: "Configuration updated successfully" }))
 }
 
 /// DELETE /platform/self-serve/tenants/{id} — Soft-delete a tenant owned by the authenticated user.

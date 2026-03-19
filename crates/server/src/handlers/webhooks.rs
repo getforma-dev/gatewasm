@@ -9,6 +9,7 @@ use sqlx::Row;
 
 use crate::error::AppError;
 use crate::middleware::tenant::TenantContext;
+use crate::responses::MessageResponse;
 use crate::AppState;
 
 /// Reject URLs targeting private/internal network addresses (SSRF prevention).
@@ -340,7 +341,7 @@ pub async fn update_webhook(
             .await?;
     }
 
-    Ok(Json(serde_json::json!({ "message": "Webhook updated" })))
+    Ok(Json(MessageResponse { message: "Webhook updated" }))
 }
 
 /// DELETE /manage/webhooks/{id} — Delete webhook + deliveries.
@@ -365,7 +366,7 @@ pub async fn delete_webhook(
 
     tracing::info!(webhook_id = %webhook_id, tenant = %tenant.tenant_id, "Webhook deleted");
 
-    Ok(Json(serde_json::json!({ "message": "Webhook deleted" })))
+    Ok(Json(MessageResponse { message: "Webhook deleted" }))
 }
 
 /// GET /manage/webhooks/{id}/deliveries — Delivery history (paginated).

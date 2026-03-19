@@ -16,6 +16,7 @@ use crate::jwt::signing;
 use crate::middleware::entitlements::ensure_user_capacity;
 use crate::middleware::fingerprint::extract_client_ip;
 use crate::middleware::tenant::TenantContext;
+use crate::responses::MessageResponse;
 use crate::types::*;
 use crate::AppState;
 
@@ -1698,6 +1699,17 @@ pub async fn me(
     })))
 }
 
+#[derive(sqlx::FromRow)]
+struct LoginHistoryRow {
+    id: String,
+    email: String,
+    success: bool,
+    ip_address: Option<String>,
+    user_agent: Option<String>,
+    failure_reason: Option<String>,
+    created_at: chrono::DateTime<Utc>,
+}
+
 pub async fn login_history(
     State(state): State<AppState>,
     req: axum::extract::Request,
@@ -1711,7 +1723,7 @@ pub async fn login_history(
                 message: "Not authenticated".into(),
             })?;
 
-    let rows = sqlx::query_as::<_, (String, String, bool, Option<String>, Option<String>, Option<String>, chrono::DateTime<Utc>)>(
+    let rows = sqlx::query_as::<_, LoginHistoryRow>(
         "SELECT id, email, success, ip_address, user_agent, failure_reason, created_at FROM login_attempts WHERE user_id = $1 ORDER BY created_at DESC LIMIT 20",
     )
     .bind(&claims.sub)
@@ -1720,15 +1732,15 @@ pub async fn login_history(
 
     let attempts: Vec<serde_json::Value> = rows
         .into_iter()
-        .map(|(id, email, success, ip, ua, reason, created_at)| {
+        .map(|row| {
             serde_json::json!({
-                "id": id,
-                "email": email,
-                "success": success,
-                "ip_address": ip,
-                "user_agent": ua,
-                "failure_reason": reason,
-                "created_at": created_at.to_rfc3339(),
+                "id": row.id,
+                "email": row.email,
+                "success": row.success,
+                "ip_address": row.ip_address,
+                "user_agent": row.user_agent,
+                "failure_reason": row.failure_reason,
+                "created_at": row.created_at.to_rfc3339(),
             })
         })
         .collect();
@@ -1780,9 +1792,7 @@ pub async fn verify_email(
         .await;
     }
 
-    Ok(Json(serde_json::json!({
-        "message": "Email verified successfully"
-    })))
+    Ok(Json(MessageResponse { message: "Email verified successfully" }))
 }
 
 #[cfg(test)]

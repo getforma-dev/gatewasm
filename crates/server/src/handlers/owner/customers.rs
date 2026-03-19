@@ -157,29 +157,29 @@ fn sort_clause(raw: Option<&str>) -> &'static str {
     }
 }
 
+#[derive(sqlx::FromRow)]
+struct CustomerSnapshotRow {
+    user_id: String,
+    email: String,
+    name: Option<String>,
+    status: String,
+    category: String,
+    risk_level: String,
+    company_name: Option<String>,
+    billing_ref: Option<String>,
+    notes: Option<String>,
+    lifecycle_stage: Option<String>,
+    blocked_reason: Option<String>,
+    last_contacted_at: Option<DateTime<Utc>>,
+    created_at: DateTime<Utc>,
+    updated_at: DateTime<Utc>,
+}
+
 async fn fetch_customer_snapshot(
     state: &AppState,
     customer_id: &str,
 ) -> Result<serde_json::Value, AppError> {
-    let row = sqlx::query_as::<
-        _,
-        (
-            String,
-            String,
-            Option<String>,
-            String,
-            String,
-            String,
-            Option<String>,
-            Option<String>,
-            Option<String>,
-            Option<String>,
-            Option<String>,
-            Option<DateTime<Utc>>,
-            DateTime<Utc>,
-            DateTime<Utc>,
-        ),
-    >(
+    let row = sqlx::query_as::<_, CustomerSnapshotRow>(
         "SELECT pa.user_id, u.email, u.name, pa.status,
                 COALESCE(pa.category, 'standard') AS category,
                 COALESCE(pa.risk_level, 'normal') AS risk_level,
@@ -232,42 +232,44 @@ async fn fetch_customer_snapshot(
     .await
     .unwrap_or(None);
 
-    let (
-        user_id,
-        email,
-        name,
-        status,
-        category,
-        risk_level,
-        company_name,
-        billing_ref,
-        notes,
-        lifecycle_stage,
-        blocked_reason,
-        last_contacted_at,
-        created_at,
-        updated_at,
-    ) = row;
-
     Ok(serde_json::json!({
-        "user_id": user_id,
-        "email": email,
-        "name": name,
-        "status": status,
-        "category": category,
-        "risk_level": risk_level,
-        "lifecycle_stage": lifecycle_stage,
-        "company_name": company_name,
-        "billing_ref": billing_ref,
-        "notes": notes,
-        "blocked_reason": blocked_reason,
-        "last_contacted_at": last_contacted_at.map(|d| d.to_rfc3339()),
+        "user_id": row.user_id,
+        "email": row.email,
+        "name": row.name,
+        "status": row.status,
+        "category": row.category,
+        "risk_level": row.risk_level,
+        "lifecycle_stage": row.lifecycle_stage,
+        "company_name": row.company_name,
+        "billing_ref": row.billing_ref,
+        "notes": row.notes,
+        "blocked_reason": row.blocked_reason,
+        "last_contacted_at": row.last_contacted_at.map(|d| d.to_rfc3339()),
         "tenant_count": tenant_count,
         "lifetime_revenue_cents": lifetime_revenue_cents,
         "last_payment_at": last_payment_at.map(|d| d.to_rfc3339()),
-        "created_at": created_at.to_rfc3339(),
-        "updated_at": updated_at.to_rfc3339(),
+        "created_at": row.created_at.to_rfc3339(),
+        "updated_at": row.updated_at.to_rfc3339(),
     }))
+}
+
+#[derive(sqlx::FromRow)]
+struct CustomerListRow {
+    user_id: String,
+    email: String,
+    name: Option<String>,
+    status: String,
+    company_name: Option<String>,
+    billing_ref: Option<String>,
+    category: String,
+    risk_level: String,
+    lifecycle_stage: String,
+    created_at: DateTime<Utc>,
+    tenant_count: i64,
+    lifetime_revenue_cents: i64,
+    trial_expiring_tenants: i64,
+    failed_logins_24h: i64,
+    payment_failed_30d: i64,
 }
 
 /// GET /platform/admin/customers — List customer platform accounts.
@@ -400,26 +402,7 @@ pub async fn list_customers(
         order_by
     );
 
-    let rows = sqlx::query_as::<
-        _,
-        (
-            String,
-            String,
-            Option<String>,
-            String,
-            Option<String>,
-            Option<String>,
-            String,
-            String,
-            String,
-            DateTime<Utc>,
-            i64,
-            i64,
-            i64,
-            i64,
-            i64,
-        ),
-    >(&list_sql)
+    let rows = sqlx::query_as::<_, CustomerListRow>(&list_sql)
     .bind(q_pattern.as_deref())
     .bind(status_filter.as_deref())
     .bind(category_filter.as_deref())
@@ -468,43 +451,25 @@ pub async fn list_customers(
 
     let customers: Vec<serde_json::Value> = rows
         .into_iter()
-        .map(
-            |(
-                user_id,
-                email,
-                name,
-                status,
-                company_name,
-                billing_ref,
-                category,
-                risk_level,
-                lifecycle_stage,
-                created_at,
-                tenant_count,
-                lifetime_revenue_cents,
-                trial_expiring_tenants,
-                failed_logins_24h,
-                payment_failed_30d,
-            )| {
+        .map(|row| {
                 serde_json::json!({
-                    "user_id": user_id,
-                    "email": email,
-                    "name": name,
-                    "status": status,
-                    "category": category,
-                    "risk_level": risk_level,
-                    "lifecycle_stage": lifecycle_stage,
-                    "company_name": company_name,
-                    "billing_ref": billing_ref,
-                    "tenant_count": tenant_count,
-                    "lifetime_revenue_cents": lifetime_revenue_cents,
-                    "trial_expiring_tenants": trial_expiring_tenants,
-                    "failed_logins_24h": failed_logins_24h,
-                    "payment_failed_30d": payment_failed_30d,
-                    "created_at": created_at.to_rfc3339(),
+                    "user_id": row.user_id,
+                    "email": row.email,
+                    "name": row.name,
+                    "status": row.status,
+                    "category": row.category,
+                    "risk_level": row.risk_level,
+                    "lifecycle_stage": row.lifecycle_stage,
+                    "company_name": row.company_name,
+                    "billing_ref": row.billing_ref,
+                    "tenant_count": row.tenant_count,
+                    "lifetime_revenue_cents": row.lifetime_revenue_cents,
+                    "trial_expiring_tenants": row.trial_expiring_tenants,
+                    "failed_logins_24h": row.failed_logins_24h,
+                    "payment_failed_30d": row.payment_failed_30d,
+                    "created_at": row.created_at.to_rfc3339(),
                 })
-            },
-        )
+        })
         .collect();
 
     let status_facets = sqlx::query_as::<_, (String, i64)>(
@@ -563,29 +528,29 @@ pub async fn get_customer(
     Ok(Json(serde_json::json!({ "customer": customer })))
 }
 
+#[derive(sqlx::FromRow)]
+struct CustomerTenantRow {
+    id: String,
+    name: String,
+    slug: String,
+    status: String,
+    plan: String,
+    max_users: i32,
+    trial_ends_at: Option<chrono::DateTime<Utc>>,
+    created_at: chrono::DateTime<Utc>,
+    user_count: i64,
+    active_sessions: i64,
+    logins_24h: i64,
+    active_users_7d: i64,
+    payment_failed_30d: i64,
+}
+
 /// GET /platform/admin/customers/{id}/tenants — List customer tenants.
 pub async fn list_customer_tenants(
     State(state): State<AppState>,
     Path(customer_id): Path<String>,
 ) -> Result<impl IntoResponse, AppError> {
-    let tenants = sqlx::query_as::<
-        _,
-        (
-            String,
-            String,
-            String,
-            String,
-            String,
-            i32,
-            Option<chrono::DateTime<Utc>>,
-            chrono::DateTime<Utc>,
-            i64,
-            i64,
-            i64,
-            i64,
-            i64,
-        ),
-    >(
+    let tenants = sqlx::query_as::<_, CustomerTenantRow>(
         "WITH scoped_tenants AS (
             SELECT
                 t.id,
@@ -665,45 +630,49 @@ pub async fn list_customer_tenants(
 
     let items: Vec<serde_json::Value> = tenants
         .into_iter()
-        .map(
-            |(
-                id,
-                name,
-                slug,
-                status,
-                plan,
-                max_users,
-                trial_ends_at,
-                created_at,
-                user_count,
-                active_sessions,
-                logins_24h,
-                active_users_7d,
-                payment_failed_30d,
-            )| {
-                serde_json::json!({
-                    "id": id,
-                    "name": name,
-                    "slug": slug,
-                    "status": status,
-                    "plan": plan,
-                    "max_users": max_users,
-                    "trial_ends_at": trial_ends_at.map(|d| d.to_rfc3339()),
-                    "created_at": created_at.to_rfc3339(),
-                    "user_count": user_count,
-                    "active_sessions": active_sessions,
-                    "logins_24h": logins_24h,
-                    "active_users_7d": active_users_7d,
-                    "payment_failed_30d": payment_failed_30d,
-                })
-            },
-        )
+        .map(|row| {
+            serde_json::json!({
+                "id": row.id,
+                "name": row.name,
+                "slug": row.slug,
+                "status": row.status,
+                "plan": row.plan,
+                "max_users": row.max_users,
+                "trial_ends_at": row.trial_ends_at.map(|d| d.to_rfc3339()),
+                "created_at": row.created_at.to_rfc3339(),
+                "user_count": row.user_count,
+                "active_sessions": row.active_sessions,
+                "logins_24h": row.logins_24h,
+                "active_users_7d": row.active_users_7d,
+                "payment_failed_30d": row.payment_failed_30d,
+            })
+        })
         .collect();
 
     Ok(Json(serde_json::json!({
         "customer_id": customer_id,
         "tenants": items,
     })))
+}
+
+#[derive(sqlx::FromRow)]
+struct OwnerTenantListRow {
+    id: String,
+    slug: String,
+    name: String,
+    status: String,
+    plan: String,
+    owner_user_id: Option<String>,
+    owner_email: Option<String>,
+    company_name: Option<String>,
+    trial_ends_at: Option<DateTime<Utc>>,
+    created_at: DateTime<Utc>,
+    user_count: i64,
+    active_sessions: i64,
+    last_login_at: Option<DateTime<Utc>>,
+    failed_logins_24h: i64,
+    active_users_7d: i64,
+    payment_failed_30d: i64,
 }
 
 /// GET /platform/admin/tenants — Global tenant inventory for provider ops.
@@ -740,27 +709,7 @@ pub async fn list_tenants(
     let plan_filter = normalize_optional_field(&params.plan).map(|s| s.to_lowercase());
     let owner_filter = normalize_optional_field(&params.owner_user_id);
 
-    let rows = sqlx::query_as::<
-        _,
-        (
-            String,
-            String,
-            String,
-            String,
-            String,
-            Option<String>,
-            Option<String>,
-            Option<String>,
-            Option<DateTime<Utc>>,
-            DateTime<Utc>,
-            i64,
-            i64,
-            Option<DateTime<Utc>>,
-            i64,
-            i64,
-            i64,
-        ),
-    >(
+    let rows = sqlx::query_as::<_, OwnerTenantListRow>(
         "WITH filtered_tenants AS (
             SELECT
                 t.id,
@@ -901,45 +850,26 @@ pub async fn list_tenants(
 
     let tenants: Vec<serde_json::Value> = rows
         .into_iter()
-        .map(
-            |(
-                id,
-                slug,
-                name,
-                status,
-                plan,
-                owner_user_id,
-                owner_email,
-                owner_company,
-                trial_ends_at,
-                created_at,
-                user_count,
-                active_sessions,
-                last_login_at,
-                failed_logins_24h,
-                active_users_7d,
-                payment_failed_30d,
-            )| {
-                serde_json::json!({
-                    "id": id,
-                    "slug": slug,
-                    "name": name,
-                    "status": status,
-                    "plan": plan,
-                    "owner_user_id": owner_user_id,
-                    "owner_email": owner_email,
-                    "owner_company": owner_company,
-                    "trial_ends_at": trial_ends_at.map(|d| d.to_rfc3339()),
-                    "created_at": created_at.to_rfc3339(),
-                    "user_count": user_count,
-                    "active_sessions": active_sessions,
-                    "last_login_at": last_login_at.map(|d| d.to_rfc3339()),
-                    "failed_logins_24h": failed_logins_24h,
-                    "active_users_7d": active_users_7d,
-                    "payment_failed_30d": payment_failed_30d,
-                })
-            },
-        )
+        .map(|row| {
+            serde_json::json!({
+                "id": row.id,
+                "slug": row.slug,
+                "name": row.name,
+                "status": row.status,
+                "plan": row.plan,
+                "owner_user_id": row.owner_user_id,
+                "owner_email": row.owner_email,
+                "owner_company": row.company_name,
+                "trial_ends_at": row.trial_ends_at.map(|d| d.to_rfc3339()),
+                "created_at": row.created_at.to_rfc3339(),
+                "user_count": row.user_count,
+                "active_sessions": row.active_sessions,
+                "last_login_at": row.last_login_at.map(|d| d.to_rfc3339()),
+                "failed_logins_24h": row.failed_logins_24h,
+                "active_users_7d": row.active_users_7d,
+                "payment_failed_30d": row.payment_failed_30d,
+            })
+        })
         .collect();
 
     Ok(Json(serde_json::json!({
@@ -952,6 +882,62 @@ pub async fn list_tenants(
             "plan": plan_facets.into_iter().map(|(k, v)| serde_json::json!({"key": k, "count": v})).collect::<Vec<_>>(),
         }
     })))
+}
+
+#[derive(sqlx::FromRow)]
+struct LifecycleEventRow {
+    id: String,
+    action: String,
+    actor_user_id: Option<String>,
+    actor_email: Option<String>,
+    resource: String,
+    request_id: String,
+    tenant_id: Option<String>,
+    details: serde_json::Value,
+    created_at: DateTime<Utc>,
+}
+
+#[derive(sqlx::FromRow)]
+struct LoginAttemptRow {
+    id: String,
+    success: bool,
+    ip_address: Option<String>,
+    user_agent: Option<String>,
+    failure_reason: Option<String>,
+    created_at: DateTime<Utc>,
+}
+
+#[derive(sqlx::FromRow)]
+struct AuditEventRow {
+    event_id: String,
+    action: String,
+    resource: String,
+    result: String,
+    failure_reason: Option<String>,
+    ip_address: Option<String>,
+    user_agent: Option<String>,
+    timestamp: DateTime<Utc>,
+}
+
+#[derive(sqlx::FromRow)]
+struct PaymentSummaryRow {
+    paid_cents: i64,
+    pending_cents: i64,
+    failed_cents: i64,
+    refunded_cents: i64,
+    total_events: i64,
+}
+
+#[derive(sqlx::FromRow)]
+struct RecentPaymentRow {
+    id: String,
+    tenant_id: Option<String>,
+    amount_cents: i64,
+    currency: String,
+    status: String,
+    external_invoice_id: Option<String>,
+    receipt_url: Option<String>,
+    created_at: DateTime<Utc>,
 }
 
 /// GET /platform/admin/customers/{id}/insights
@@ -968,20 +954,7 @@ pub async fn customer_insights(
         .unwrap_or("")
         .to_string();
 
-    let lifecycle_rows = sqlx::query_as::<
-        _,
-        (
-            String,
-            String,
-            Option<String>,
-            Option<String>,
-            String,
-            String,
-            Option<String>,
-            serde_json::Value,
-            DateTime<Utc>,
-        ),
-    >(
+    let lifecycle_rows = sqlx::query_as::<_, LifecycleEventRow>(
         "SELECT id, action, actor_user_id, actor_email, resource,
                 COALESCE(request_id, id) AS request_id,
                 tenant_id, details, created_at
@@ -997,46 +970,24 @@ pub async fn customer_insights(
 
     let lifecycle_history: Vec<serde_json::Value> = lifecycle_rows
         .into_iter()
-        .map(
-            |(
-                id,
-                action,
-                actor_user_id,
-                actor_email,
-                resource,
-                request_id,
-                tenant_id,
-                details,
-                created_at,
-            )| {
-                serde_json::json!({
-                    "id": id,
-                    "action": action,
-                    "actor_user_id": actor_user_id,
-                    "actor_email": actor_email,
-                    "resource": resource,
-                    "request_id": request_id,
-                    "tenant_id": tenant_id,
-                    "details": details,
-                    "created_at": created_at.to_rfc3339(),
-                })
-            },
-        )
+        .map(|row| {
+            serde_json::json!({
+                "id": row.id,
+                "action": row.action,
+                "actor_user_id": row.actor_user_id,
+                "actor_email": row.actor_email,
+                "resource": row.resource,
+                "request_id": row.request_id,
+                "tenant_id": row.tenant_id,
+                "details": row.details,
+                "created_at": row.created_at.to_rfc3339(),
+            })
+        })
         .collect();
 
     let mut auth_events: Vec<(DateTime<Utc>, serde_json::Value)> = Vec::new();
 
-    let login_rows = sqlx::query_as::<
-        _,
-        (
-            String,
-            bool,
-            Option<String>,
-            Option<String>,
-            Option<String>,
-            DateTime<Utc>,
-        ),
-    >(
+    let login_rows = sqlx::query_as::<_, LoginAttemptRow>(
         "SELECT id, success, ip_address, user_agent, failure_reason, created_at
          FROM login_attempts
          WHERE tenant_id = 'ten_platform'
@@ -1050,35 +1001,23 @@ pub async fn customer_insights(
     .await
     .unwrap_or_default();
 
-    for (id, success, ip_address, user_agent, failure_reason, created_at) in login_rows {
+    for row in login_rows {
         auth_events.push((
-            created_at,
+            row.created_at,
             serde_json::json!({
-                "id": id,
+                "id": row.id,
                 "source": "login_attempt",
-                "action": if success { "login.success" } else { "login.failure" },
-                "result": if success { "success" } else { "failure" },
-                "ip_address": ip_address,
-                "user_agent": user_agent,
-                "failure_reason": failure_reason,
-                "created_at": created_at.to_rfc3339(),
+                "action": if row.success { "login.success" } else { "login.failure" },
+                "result": if row.success { "success" } else { "failure" },
+                "ip_address": row.ip_address,
+                "user_agent": row.user_agent,
+                "failure_reason": row.failure_reason,
+                "created_at": row.created_at.to_rfc3339(),
             }),
         ));
     }
 
-    let audit_rows = sqlx::query_as::<
-        _,
-        (
-            String,
-            String,
-            String,
-            String,
-            Option<String>,
-            Option<String>,
-            Option<String>,
-            DateTime<Utc>,
-        ),
-    >(
+    let audit_rows = sqlx::query_as::<_, AuditEventRow>(
         "SELECT event_id, action, resource, result, failure_reason, ip_address, user_agent, timestamp
          FROM audit_log
          WHERE tenant_id = 'ten_platform'
@@ -1091,21 +1030,19 @@ pub async fn customer_insights(
     .await
     .unwrap_or_default();
 
-    for (event_id, action, resource, result, failure_reason, ip_address, user_agent, timestamp) in
-        audit_rows
-    {
+    for row in audit_rows {
         auth_events.push((
-            timestamp,
+            row.timestamp,
             serde_json::json!({
-                "id": event_id,
+                "id": row.event_id,
                 "source": "audit_log",
-                "action": action,
-                "resource": resource,
-                "result": result,
-                "failure_reason": failure_reason,
-                "ip_address": ip_address,
-                "user_agent": user_agent,
-                "created_at": timestamp.to_rfc3339(),
+                "action": row.action,
+                "resource": row.resource,
+                "result": row.result,
+                "failure_reason": row.failure_reason,
+                "ip_address": row.ip_address,
+                "user_agent": row.user_agent,
+                "created_at": row.timestamp.to_rfc3339(),
             }),
         ));
     }
@@ -1114,7 +1051,7 @@ pub async fn customer_insights(
     let recent_auth_events: Vec<serde_json::Value> =
         auth_events.into_iter().take(60).map(|(_, ev)| ev).collect();
 
-    let payment_summary = sqlx::query_as::<_, (i64, i64, i64, i64, i64)>(
+    let payment_summary = sqlx::query_as::<_, PaymentSummaryRow>(
         "SELECT
             COALESCE(SUM(amount_cents) FILTER (WHERE status = 'paid'), 0)::BIGINT AS paid_cents,
             COALESCE(SUM(amount_cents) FILTER (WHERE status = 'pending'), 0)::BIGINT AS pending_cents,
@@ -1127,21 +1064,9 @@ pub async fn customer_insights(
     .bind(&customer_id)
     .fetch_one(&state.db)
     .await
-    .unwrap_or((0, 0, 0, 0, 0));
+    .unwrap_or(PaymentSummaryRow { paid_cents: 0, pending_cents: 0, failed_cents: 0, refunded_cents: 0, total_events: 0 });
 
-    let recent_payment_rows = sqlx::query_as::<
-        _,
-        (
-            String,
-            Option<String>,
-            i64,
-            String,
-            String,
-            Option<String>,
-            Option<String>,
-            DateTime<Utc>,
-        ),
-    >(
+    let recent_payment_rows = sqlx::query_as::<_, RecentPaymentRow>(
         "SELECT id, tenant_id, amount_cents::BIGINT, currency, status, external_invoice_id, receipt_url, created_at
          FROM provider_billing_events
          WHERE customer_user_id = $1
@@ -1155,29 +1080,18 @@ pub async fn customer_insights(
 
     let recent_payments: Vec<serde_json::Value> = recent_payment_rows
         .into_iter()
-        .map(
-            |(
-                id,
-                tenant_id,
-                amount_cents,
-                currency,
-                status,
-                external_invoice_id,
-                receipt_url,
-                created_at,
-            )| {
-                serde_json::json!({
-                    "id": id,
-                    "tenant_id": tenant_id,
-                    "amount_cents": amount_cents,
-                    "currency": currency,
-                    "status": status,
-                    "external_invoice_id": external_invoice_id,
-                    "receipt_url": receipt_url,
-                    "created_at": created_at.to_rfc3339(),
-                })
-            },
-        )
+        .map(|row| {
+            serde_json::json!({
+                "id": row.id,
+                "tenant_id": row.tenant_id,
+                "amount_cents": row.amount_cents,
+                "currency": row.currency,
+                "status": row.status,
+                "external_invoice_id": row.external_invoice_id,
+                "receipt_url": row.receipt_url,
+                "created_at": row.created_at.to_rfc3339(),
+            })
+        })
         .collect();
 
     Ok(Json(serde_json::json!({
@@ -1185,11 +1099,11 @@ pub async fn customer_insights(
         "lifecycle_history": lifecycle_history,
         "recent_auth_events": recent_auth_events,
         "payment_summary": {
-            "paid_cents": payment_summary.0,
-            "pending_cents": payment_summary.1,
-            "failed_cents": payment_summary.2,
-            "refunded_cents": payment_summary.3,
-            "total_events": payment_summary.4,
+            "paid_cents": payment_summary.paid_cents,
+            "pending_cents": payment_summary.pending_cents,
+            "failed_cents": payment_summary.failed_cents,
+            "refunded_cents": payment_summary.refunded_cents,
+            "total_events": payment_summary.total_events,
         },
         "recent_payments": recent_payments,
     })))
