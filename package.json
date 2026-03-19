@@ -4,7 +4,10 @@
     "db": "docker compose up -d db",
     "db:test": "docker compose up -d db db-test",
     "db:stop": "docker compose down",
-    "db:reset": "docker compose exec db psql -U gatewasm -d gatewasm -c 'DROP SCHEMA public CASCADE; CREATE SCHEMA public;'",
+    "db:studio": "docker compose up -d db pgweb && echo '\\n  Dev DB → http://localhost:8081\\n'",
+    "db:studio:test": "docker compose up -d db-test pgweb-test && echo '\\n  Test DB → http://localhost:8082\\n'",
+    "db:reset": "docker compose exec db psql -U gatewasm -d gatewasm -c 'DROP SCHEMA public CASCADE; CREATE SCHEMA public;' && echo 'Dev DB wiped — restart server to re-run migrations'",
+    "db:reset:test": "docker compose exec db-test psql -U gatewasm -d gatewasm_test -c 'DROP SCHEMA public CASCADE; CREATE SCHEMA public;' && echo 'Test DB wiped'",
     "build": "cd admin && npm run build",
     "build:ssr": "cd admin && npm run build:ssr",
     "dev:frontend": "cd admin && npm run dev",
@@ -14,9 +17,10 @@
     "test:integration": "cargo test -p gatewasm-server --test integration",
     "test:e2e": "cd admin && npx playwright test",
     "typecheck": "cd admin && npm run typecheck",
-    "clean": "rm -rf node_modules admin/node_modules admin/dist target",
-    "clean:npm": "rm -rf node_modules package-lock.json admin/node_modules admin/package-lock.json && npm cache clean --force",
-    "fresh": "npm run clean:npm && npm install && cd admin && npm install && cd .. && npm run build:ssr"
+    "clean": "rm -rf node_modules admin/node_modules",
+    "clean:build": "rm -rf admin/dist target",
+    "clean:all": "rm -rf node_modules admin/node_modules admin/dist target package-lock.json admin/package-lock.json && npm cache clean --force",
+    "fresh": "npm run clean:all && npm install && cd admin && npm install && cd .. && npm run build:ssr"
   },
   "devDependencies": {
     "concurrently": "^9.0.0"
