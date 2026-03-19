@@ -1,18 +1,18 @@
 use axum::{
     extract::{FromRequest, Path, Query, State},
-    response::{Html, IntoResponse, Redirect},
+    response::IntoResponse,
     Json,
 };
-use chrono::{DateTime, Duration, Utc};
+use chrono::{DateTime, Utc};
 use serde::Deserialize;
 
 use crate::error::AppError;
-use crate::html_template::{render_page, PageConfig};
-use crate::handlers::auth as auth_handlers;
-use crate::handlers::auth::normalize_email;
-use crate::jwt::signing;
-use crate::middleware::platform_user::PlatformUser;
-use crate::{AppState, RenderMode};
+use crate::AppState;
+
+use super::{
+    clamp_limit, normalize_optional_field, owner_claims, parse_rfc3339_opt, record_owner_event,
+    request_id_from_req, OwnerEvent,
+};
 
 #[derive(Debug, Deserialize)]
 pub struct ListCustomersQuery {
@@ -35,48 +35,6 @@ pub struct ListTenantsQuery {
     pub status: Option<String>,
     pub plan: Option<String>,
     pub owner_user_id: Option<String>,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct OwnerAnalyticsQuery {
-    pub days: Option<i64>,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct OwnerTimelineQuery {
-    pub limit: Option<i64>,
-    pub offset: Option<i64>,
-    pub actor: Option<String>,
-    pub action: Option<String>,
-    pub resource: Option<String>,
-    pub request_id: Option<String>,
-    pub from: Option<String>,
-    pub to: Option<String>,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct ListPaymentsQuery {
-    pub limit: Option<i64>,
-    pub offset: Option<i64>,
-    pub status: Option<String>,
-    pub customer_user_id: Option<String>,
-    pub from: Option<String>,
-    pub to: Option<String>,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct CreatePaymentEventRequest {
-    pub customer_user_id: String,
-    pub tenant_id: Option<String>,
-    pub amount_cents: i64,
-    pub currency: Option<String>,
-    pub status: Option<String>,
-    pub external_invoice_id: Option<String>,
-    pub receipt_url: Option<String>,
-    pub period_start: Option<String>,
-    pub period_end: Option<String>,
-    pub notes: Option<String>,
-    pub metadata: Option<serde_json::Value>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -108,45 +66,6 @@ pub struct ExtendAccessRequest {
     pub tenant_ids: Option<Vec<String>>,
 }
 
-#[derive(Debug, Deserialize)]
-pub struct CreateOwnerInviteRequest {
-    pub email: String,
-    pub expires_in_hours: Option<i64>,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct AcceptOwnerInviteRequest {
-    pub token: String,
-}
-
-fn clamp_limit(limit: Option<i64>, default_limit: i64, max_limit: i64) -> i64 {
-    let value = limit.unwrap_or(default_limit);
-    value.clamp(1, max_limit)
-}
-
-fn parse_rfc3339_opt(
-    raw: &Option<String>,
-    field: &'static str,
-) -> Result<Option<DateTime<Utc>>, AppError> {
-    match raw {
-        Some(value) if !value.trim().is_empty() => DateTime::parse_from_rfc3339(value.trim())
-            .map(|dt| dt.with_timezone(&Utc))
-            .map(Some)
-            .map_err(|_| AppError::BadRequest {
-                error: "invalid_datetime",
-                message: format!("Invalid RFC3339 datetime for '{}'", field),
-            }),
-        _ => Ok(None),
-    }
-}
-
-fn normalize_optional_field(value: &Option<String>) -> Option<String> {
-    value
-        .as_ref()
-        .map(|v| v.trim().to_string())
-        .filter(|v| !v.is_empty())
-}
-
 fn sort_clause(raw: Option<&str>) -> &'static str {
     match raw.unwrap_or("created_desc") {
         "created_asc" => "fc.created_at ASC",
@@ -156,354 +75,117 @@ fn sort_clause(raw: Option<&str>) -> &'static str {
     }
 }
 
-fn owner_claims(req: &axum::extract::Request) -> Result<signing::Claims, AppError> {
-    req.extensions()
-        .get::<signing::Claims>()
-        .cloned()
-        .ok_or(AppError::Unauthorized {
-            error: "unauthorized",
-            message: "Not authenticated".into(),
-        })
-}
-
-fn request_id_from_req(req: &axum::extract::Request) -> Option<String> {
-    req.headers()
-        .get("x-request-id")
-        .and_then(|v| v.to_str().ok())
-        .map(|v| v.trim().to_string())
-        .filter(|v| !v.is_empty())
-}
-
-struct OwnerEvent<'a> {
-    customer_user_id: Option<&'a str>,
-    tenant_id: Option<&'a str>,
-    actor_user_id: Option<&'a str>,
-    actor_email: Option<&'a str>,
-    action: &'a str,
-    resource: &'a str,
-    request_id: Option<&'a str>,
-    details: serde_json::Value,
-}
-
-struct OwnerRefreshSessionValidation {
-    valid: bool,
-    reason: &'static str,
-}
-
-async fn validate_owner_refresh_session(
+async fn fetch_customer_snapshot(
     state: &AppState,
-    headers: &axum::http::HeaderMap,
-) -> Result<OwnerRefreshSessionValidation, sqlx::Error> {
-    let refresh_tokens =
-        auth_handlers::extract_refresh_cookie_candidates(headers, Some("platform"));
-    if refresh_tokens.is_empty() {
-        return Ok(OwnerRefreshSessionValidation {
-            valid: false,
-            reason: "missing_cookie",
-        });
-    }
-
-    let refresh_hashes: Vec<String> = refresh_tokens
-        .iter()
-        .map(|token| signing::hash_token(token))
-        .collect();
-
-    let rows = sqlx::query_as::<_, (bool, bool, bool, bool, bool, bool)>(
-        "SELECT
-            rt.revoked,
-            (rt.expires_at > NOW()) AS not_expired,
-            (rt.auth_method = 'sso') AS auth_method_ok,
-            rt.mfa_verified,
-            (u.tenant_id = 'ten_platform') AS user_tenant_ok,
-            EXISTS(
-                SELECT 1
-                FROM user_roles ur
-                WHERE ur.user_id = rt.user_id
-                  AND ur.tenant_id = 'ten_platform'
-                  AND ur.role_id = 'role_platform_owner'
-            ) AS owner_role_ok
-         FROM refresh_tokens rt
-         JOIN users u ON u.id = rt.user_id
-         WHERE rt.token_hash = ANY($1)
-           AND rt.tenant_id = 'ten_platform'
-         ORDER BY rt.expires_at DESC",
+    customer_id: &str,
+) -> Result<serde_json::Value, AppError> {
+    let row = sqlx::query_as::<
+        _,
+        (
+            String,
+            String,
+            Option<String>,
+            String,
+            String,
+            String,
+            Option<String>,
+            Option<String>,
+            Option<String>,
+            Option<String>,
+            Option<String>,
+            Option<DateTime<Utc>>,
+            DateTime<Utc>,
+            DateTime<Utc>,
+        ),
+    >(
+        "SELECT pa.user_id, u.email, u.name, pa.status,
+                COALESCE(pa.category, 'standard') AS category,
+                COALESCE(pa.risk_level, 'normal') AS risk_level,
+                pa.company_name, pa.billing_ref, pa.notes,
+                COALESCE(pa.lifecycle_stage, 'active') AS lifecycle_stage,
+                pa.blocked_reason, pa.last_contacted_at, pa.created_at, pa.updated_at
+         FROM platform_accounts pa
+         JOIN users u ON u.id = pa.user_id
+         WHERE pa.user_id = $1
+           AND u.tenant_id = 'ten_platform'",
     )
-    .bind(&refresh_hashes)
-    .fetch_all(&state.db)
-    .await?;
+    .bind(customer_id)
+    .fetch_optional(&state.db)
+    .await?
+    .ok_or(AppError::NotFound {
+        error: "customer_not_found",
+        message: "Customer not found".into(),
+    })?;
 
-    if rows.is_empty() {
-        return Ok(OwnerRefreshSessionValidation {
-            valid: false,
-            reason: "token_not_found",
-        });
-    };
-
-    let is_prod = state.config.is_production();
-
-    if rows.iter().any(
-        |(revoked, not_expired, auth_method_ok, mfa_verified, user_tenant_ok, owner_role_ok)| {
-            !*revoked
-                && *not_expired
-                && (!is_prod || *auth_method_ok)
-                && (!is_prod || *mfa_verified)
-                && *user_tenant_ok
-                && *owner_role_ok
-        },
-    ) {
-        return Ok(OwnerRefreshSessionValidation {
-            valid: true,
-            reason: "ok",
-        });
-    }
-
-    let (revoked, not_expired, auth_method_ok, mfa_verified, user_tenant_ok, owner_role_ok) =
-        rows[0];
-    let reason = if revoked {
-        "token_revoked"
-    } else if !not_expired {
-        "token_expired"
-    } else if !user_tenant_ok {
-        "wrong_tenant"
-    } else if !owner_role_ok {
-        "missing_owner_role"
-    } else if is_prod && !auth_method_ok {
-        "owner_sso_required"
-    } else if is_prod && !mfa_verified {
-        "mfa_not_verified"
-    } else {
-        "session_invalid"
-    };
-
-    Ok(OwnerRefreshSessionValidation {
-        valid: false,
-        reason,
-    })
-}
-
-async fn record_owner_event(state: &AppState, event: OwnerEvent<'_>) -> Result<(), sqlx::Error> {
-    sqlx::query(
-        "INSERT INTO owner_timeline_events
-         (id, customer_user_id, tenant_id, actor_user_id, actor_email, action, resource, request_id, details, created_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW())",
+    let tenant_count: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*)
+         FROM tenants
+         WHERE owner_user_id = $1
+           AND id != 'ten_platform'
+           AND status != 'deleted'",
     )
-    .bind(format!("oev_{}", uuid::Uuid::new_v4()))
-    .bind(event.customer_user_id)
-    .bind(event.tenant_id)
-    .bind(event.actor_user_id)
-    .bind(event.actor_email)
-    .bind(event.action)
-    .bind(event.resource)
-    .bind(event.request_id)
-    .bind(event.details)
-    .execute(&state.db)
-    .await?;
-
-    Ok(())
-}
-
-/// GET /platform/admin/stats — Provider-level summary stats.
-pub async fn owner_stats(State(state): State<AppState>) -> Result<impl IntoResponse, AppError> {
-    let (
-        customers,
-        active_customers,
-        suspended_customers,
-        rejected_customers,
-        tenants,
-        active_tenants,
-        suspended_tenants,
-        trial_expiring_7d,
-        tenant_end_users,
-        revenue_30d_cents,
-        paid_receipts_30d,
-        failed_logins_24h,
-    ) = sqlx::query_as::<_, (i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64)>(
-        "WITH customer_counts AS (
-            SELECT
-                COUNT(*) FILTER (WHERE status != 'deleted')::BIGINT AS customers,
-                COUNT(*) FILTER (WHERE status = 'active')::BIGINT AS active_customers,
-                COUNT(*) FILTER (WHERE status = 'suspended')::BIGINT AS suspended_customers,
-                COUNT(*) FILTER (WHERE status = 'rejected')::BIGINT AS rejected_customers
-            FROM platform_accounts
-        ),
-        tenant_counts AS (
-            SELECT
-                COUNT(*) FILTER (WHERE id != 'ten_platform' AND status != 'deleted')::BIGINT AS tenants,
-                COUNT(*) FILTER (WHERE id != 'ten_platform' AND status = 'active')::BIGINT AS active_tenants,
-                COUNT(*) FILTER (WHERE id != 'ten_platform' AND status = 'suspended')::BIGINT AS suspended_tenants,
-                COUNT(*) FILTER (
-                    WHERE id != 'ten_platform'
-                      AND status = 'active'
-                      AND COALESCE(plan, 'trial') = 'trial'
-                      AND trial_ends_at IS NOT NULL
-                      AND trial_ends_at <= NOW() + INTERVAL '7 days'
-                )::BIGINT AS trial_expiring_7d
-            FROM tenants
-        ),
-        user_counts AS (
-            SELECT COUNT(*)::BIGINT AS tenant_end_users
-            FROM users
-            WHERE tenant_id != 'ten_platform' AND tenant_id IS NOT NULL
-        ),
-        billing_counts AS (
-            SELECT
-                COALESCE(
-                    SUM((amount_cents)::BIGINT) FILTER (
-                        WHERE status = 'paid'
-                          AND created_at >= NOW() - INTERVAL '30 days'
-                    ),
-                    0
-                )::BIGINT AS revenue_30d_cents,
-                COUNT(*) FILTER (
-                    WHERE status = 'paid'
-                      AND created_at >= NOW() - INTERVAL '30 days'
-                )::BIGINT AS paid_receipts_30d
-            FROM provider_billing_events
-        ),
-        login_counts AS (
-            SELECT COUNT(*) FILTER (
-                WHERE tenant_id != 'ten_platform'
-                  AND success = FALSE
-                  AND created_at >= NOW() - INTERVAL '24 hours'
-            )::BIGINT AS failed_logins_24h
-            FROM login_attempts
-        )
-        SELECT
-            cc.customers,
-            cc.active_customers,
-            cc.suspended_customers,
-            cc.rejected_customers,
-            tc.tenants,
-            tc.active_tenants,
-            tc.suspended_tenants,
-            tc.trial_expiring_7d,
-            uc.tenant_end_users,
-            bc.revenue_30d_cents,
-            bc.paid_receipts_30d,
-            lc.failed_logins_24h
-        FROM customer_counts cc
-        CROSS JOIN tenant_counts tc
-        CROSS JOIN user_counts uc
-        CROSS JOIN billing_counts bc
-        CROSS JOIN login_counts lc",
-    )
+    .bind(customer_id)
     .fetch_one(&state.db)
-    .await?;
-
-    Ok(Json(serde_json::json!({
-        "customers": customers,
-        "active_customers": active_customers,
-        "suspended_customers": suspended_customers,
-        "rejected_customers": rejected_customers,
-        "tenants": tenants,
-        "active_tenants": active_tenants,
-        "suspended_tenants": suspended_tenants,
-        "tenant_end_users": tenant_end_users,
-        "trial_expiring_7d": trial_expiring_7d,
-        "revenue_30d_cents": revenue_30d_cents,
-        "paid_receipts_30d": paid_receipts_30d,
-        "failed_logins_24h": failed_logins_24h,
-    })))
-}
-
-/// GET /platform/admin/analytics — Time-series analytics for provider ops.
-pub async fn owner_analytics(
-    State(state): State<AppState>,
-    req: axum::extract::Request,
-) -> Result<impl IntoResponse, AppError> {
-    let params: OwnerAnalyticsQuery = Query::try_from_uri(req.uri())
-        .unwrap_or(Query(OwnerAnalyticsQuery { days: None }))
-        .0;
-    let days = params.days.unwrap_or(30).clamp(7, 180);
-    let window_start = Utc::now() - Duration::days(days);
-
-    let signup_rows = sqlx::query_as::<_, (String, i64)>(
-        "SELECT to_char(date_trunc('day', pa.created_at), 'YYYY-MM-DD') AS day, COUNT(*)
-         FROM platform_accounts pa
-         WHERE pa.created_at >= $1
-         GROUP BY day
-         ORDER BY day ASC",
-    )
-    .bind(window_start)
-    .fetch_all(&state.db)
     .await
-    .unwrap_or_default();
+    .unwrap_or(0);
 
-    let paid_rows = sqlx::query_as::<_, (String, i64)>(
-        "SELECT to_char(date_trunc('day', pbe.created_at), 'YYYY-MM-DD') AS day,
-                COALESCE(SUM(pbe.amount_cents), 0)::BIGINT
-         FROM provider_billing_events pbe
-         WHERE pbe.status = 'paid'
-           AND pbe.created_at >= $1
-         GROUP BY day
-         ORDER BY day ASC",
+    let lifetime_revenue_cents: i64 = sqlx::query_scalar(
+        "SELECT COALESCE(SUM(amount_cents), 0)::BIGINT
+         FROM provider_billing_events
+         WHERE customer_user_id = $1
+           AND status = 'paid'",
     )
-    .bind(window_start)
-    .fetch_all(&state.db)
+    .bind(customer_id)
+    .fetch_one(&state.db)
     .await
-    .unwrap_or_default();
+    .unwrap_or(0);
 
-    let login_rows = sqlx::query_as::<_, (String, i64, i64)>(
-        "SELECT to_char(date_trunc('day', la.created_at), 'YYYY-MM-DD') AS day,
-                COUNT(*) FILTER (WHERE la.success = TRUE) AS success_count,
-                COUNT(*) FILTER (WHERE la.success = FALSE) AS failure_count
-         FROM login_attempts la
-         WHERE la.tenant_id != 'ten_platform'
-           AND la.created_at >= $1
-         GROUP BY day
-         ORDER BY day ASC",
+    let last_payment_at: Option<DateTime<Utc>> = sqlx::query_scalar(
+        "SELECT MAX(created_at)
+         FROM provider_billing_events
+         WHERE customer_user_id = $1",
     )
-    .bind(window_start)
-    .fetch_all(&state.db)
+    .bind(customer_id)
+    .fetch_optional(&state.db)
     .await
-    .unwrap_or_default();
+    .unwrap_or(None);
 
-    let top_categories = sqlx::query_as::<_, (String, i64)>(
-        "SELECT COALESCE(NULLIF(pa.category, ''), 'standard') AS category, COUNT(*)
-         FROM platform_accounts pa
-         WHERE pa.status != 'deleted'
-         GROUP BY category
-         ORDER BY COUNT(*) DESC
-         LIMIT 8",
-    )
-    .fetch_all(&state.db)
-    .await
-    .unwrap_or_default();
+    let (
+        user_id,
+        email,
+        name,
+        status,
+        category,
+        risk_level,
+        company_name,
+        billing_ref,
+        notes,
+        lifecycle_stage,
+        blocked_reason,
+        last_contacted_at,
+        created_at,
+        updated_at,
+    ) = row;
 
-    let customer_signups: Vec<serde_json::Value> = signup_rows
-        .into_iter()
-        .map(|(day, count)| serde_json::json!({ "day": day, "count": count }))
-        .collect();
-
-    let revenue_paid_cents: Vec<serde_json::Value> = paid_rows
-        .into_iter()
-        .map(|(day, cents)| serde_json::json!({ "day": day, "amount_cents": cents }))
-        .collect();
-
-    let login_volume: Vec<serde_json::Value> = login_rows
-        .into_iter()
-        .map(|(day, success_count, failure_count)| {
-            serde_json::json!({
-                "day": day,
-                "success_count": success_count,
-                "failure_count": failure_count,
-            })
-        })
-        .collect();
-
-    let categories: Vec<serde_json::Value> = top_categories
-        .into_iter()
-        .map(|(category, count)| serde_json::json!({ "category": category, "count": count }))
-        .collect();
-
-    Ok(Json(serde_json::json!({
-        "window_days": days,
-        "window_start": window_start.to_rfc3339(),
-        "customer_signups": customer_signups,
-        "revenue_paid_cents": revenue_paid_cents,
-        "login_volume": login_volume,
-        "top_categories": categories,
-    })))
+    Ok(serde_json::json!({
+        "user_id": user_id,
+        "email": email,
+        "name": name,
+        "status": status,
+        "category": category,
+        "risk_level": risk_level,
+        "lifecycle_stage": lifecycle_stage,
+        "company_name": company_name,
+        "billing_ref": billing_ref,
+        "notes": notes,
+        "blocked_reason": blocked_reason,
+        "last_contacted_at": last_contacted_at.map(|d| d.to_rfc3339()),
+        "tenant_count": tenant_count,
+        "lifetime_revenue_cents": lifetime_revenue_cents,
+        "last_payment_at": last_payment_at.map(|d| d.to_rfc3339()),
+        "created_at": created_at.to_rfc3339(),
+        "updated_at": updated_at.to_rfc3339(),
+    }))
 }
 
 /// GET /platform/admin/customers — List customer platform accounts.
@@ -1197,6 +879,7 @@ pub async fn customer_insights(
     Path(customer_id): Path<String>,
 ) -> Result<impl IntoResponse, AppError> {
     let customer = fetch_customer_snapshot(&state, &customer_id).await?;
+
     let customer_email = customer
         .get("email")
         .and_then(serde_json::Value::as_str)
@@ -1427,192 +1110,6 @@ pub async fn customer_insights(
             "total_events": payment_summary.4,
         },
         "recent_payments": recent_payments,
-    })))
-}
-
-/// GET /platform/admin/timeline — Provider audit timeline with filters.
-pub async fn owner_timeline(
-    State(state): State<AppState>,
-    req: axum::extract::Request,
-) -> Result<impl IntoResponse, AppError> {
-    let params: OwnerTimelineQuery = Query::try_from_uri(req.uri())
-        .unwrap_or(Query(OwnerTimelineQuery {
-            limit: None,
-            offset: None,
-            actor: None,
-            action: None,
-            resource: None,
-            request_id: None,
-            from: None,
-            to: None,
-        }))
-        .0;
-
-    let limit = clamp_limit(params.limit, 50, 250);
-    let offset = params.offset.unwrap_or(0).max(0);
-    let actor_filter = normalize_optional_field(&params.actor);
-    let actor_like = actor_filter.as_ref().map(|s| {
-        format!(
-            "%{}%",
-            s.to_lowercase().replace('%', "\\%").replace('_', "\\_")
-        )
-    });
-    let action_filter = normalize_optional_field(&params.action);
-    let resource_filter = normalize_optional_field(&params.resource);
-    let request_filter = normalize_optional_field(&params.request_id).map(|s| {
-        format!(
-            "%{}%",
-            s.to_lowercase().replace('%', "\\%").replace('_', "\\_")
-        )
-    });
-    let from = parse_rfc3339_opt(&params.from, "from")?;
-    let to = parse_rfc3339_opt(&params.to, "to")?;
-
-    let rows = sqlx::query_as::<
-        _,
-        (
-            String,
-            DateTime<Utc>,
-            Option<String>,
-            Option<String>,
-            String,
-            String,
-            String,
-            serde_json::Value,
-            String,
-            Option<String>,
-        ),
-    >(
-        "SELECT ev.event_id, ev.created_at, ev.actor_user_id, ev.actor_email, ev.action, ev.resource,
-                ev.request_id, ev.details, ev.source, ev.result
-         FROM (
-            SELECT oe.id AS event_id,
-                   oe.created_at,
-                   oe.actor_user_id,
-                   oe.actor_email,
-                   oe.action,
-                   oe.resource,
-                   COALESCE(oe.request_id, oe.id) AS request_id,
-                   oe.details,
-                   'owner_event'::TEXT AS source,
-                   NULL::TEXT AS result
-              FROM owner_timeline_events oe
-            UNION ALL
-            SELECT al.event_id,
-                   al.timestamp AS created_at,
-                   al.user_id AS actor_user_id,
-                   u.email AS actor_email,
-                   al.action,
-                   al.resource,
-                   al.event_id AS request_id,
-                   jsonb_build_object(
-                     'ip_address', al.ip_address,
-                     'user_agent', al.user_agent,
-                     'failure_reason', al.failure_reason,
-                     'compliance_mode', al.compliance_mode
-                   ) AS details,
-                   'audit_log'::TEXT AS source,
-                   al.result
-              FROM audit_log al
-              LEFT JOIN users u ON u.id = al.user_id
-         ) ev
-         WHERE ($1::TEXT IS NULL OR ev.actor_user_id = $1 OR COALESCE(ev.actor_email, '') ILIKE $2)
-           AND ($3::TEXT IS NULL OR ev.action = $3)
-           AND ($4::TEXT IS NULL OR ev.resource = $4)
-           AND ($5::TEXT IS NULL OR ev.request_id ILIKE $5)
-           AND ($6::TIMESTAMPTZ IS NULL OR ev.created_at >= $6)
-           AND ($7::TIMESTAMPTZ IS NULL OR ev.created_at <= $7)
-         ORDER BY ev.created_at DESC
-         LIMIT $8 OFFSET $9",
-    )
-    .bind(actor_filter.as_deref())
-    .bind(actor_like.as_deref())
-    .bind(action_filter.as_deref())
-    .bind(resource_filter.as_deref())
-    .bind(request_filter.as_deref())
-    .bind(from)
-    .bind(to)
-    .bind(limit)
-    .bind(offset)
-    .fetch_all(&state.db)
-    .await?;
-
-    let total: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*)
-         FROM (
-            SELECT oe.id AS event_id,
-                   oe.created_at,
-                   oe.actor_user_id,
-                   oe.actor_email,
-                   oe.action,
-                   oe.resource,
-                   COALESCE(oe.request_id, oe.id) AS request_id
-              FROM owner_timeline_events oe
-            UNION ALL
-            SELECT al.event_id,
-                   al.timestamp AS created_at,
-                   al.user_id AS actor_user_id,
-                   u.email AS actor_email,
-                   al.action,
-                   al.resource,
-                   al.event_id AS request_id
-              FROM audit_log al
-              LEFT JOIN users u ON u.id = al.user_id
-         ) ev
-         WHERE ($1::TEXT IS NULL OR ev.actor_user_id = $1 OR COALESCE(ev.actor_email, '') ILIKE $2)
-           AND ($3::TEXT IS NULL OR ev.action = $3)
-           AND ($4::TEXT IS NULL OR ev.resource = $4)
-           AND ($5::TEXT IS NULL OR ev.request_id ILIKE $5)
-           AND ($6::TIMESTAMPTZ IS NULL OR ev.created_at >= $6)
-           AND ($7::TIMESTAMPTZ IS NULL OR ev.created_at <= $7)",
-    )
-    .bind(actor_filter.as_deref())
-    .bind(actor_like.as_deref())
-    .bind(action_filter.as_deref())
-    .bind(resource_filter.as_deref())
-    .bind(request_filter.as_deref())
-    .bind(from)
-    .bind(to)
-    .fetch_one(&state.db)
-    .await
-    .unwrap_or(0);
-
-    let events: Vec<serde_json::Value> = rows
-        .into_iter()
-        .map(
-            |(
-                event_id,
-                created_at,
-                actor_user_id,
-                actor_email,
-                action,
-                resource,
-                request_id,
-                details,
-                source,
-                result,
-            )| {
-                serde_json::json!({
-                    "event_id": event_id,
-                    "created_at": created_at.to_rfc3339(),
-                    "actor_user_id": actor_user_id,
-                    "actor_email": actor_email,
-                    "action": action,
-                    "resource": resource,
-                    "request_id": request_id,
-                    "details": details,
-                    "source": source,
-                    "result": result,
-                })
-            },
-        )
-        .collect();
-
-    Ok(Json(serde_json::json!({
-        "events": events,
-        "total": total,
-        "limit": limit,
-        "offset": offset,
     })))
 }
 
@@ -2126,822 +1623,4 @@ pub async fn delete_customer_tenant(
         "status": "deleted",
         "revoked_refresh_tokens": revoked_refresh_tokens,
     })))
-}
-
-/// GET /platform/admin/payments — Provider billing events and receipts.
-pub async fn list_payments(
-    State(state): State<AppState>,
-    req: axum::extract::Request,
-) -> Result<impl IntoResponse, AppError> {
-    let params: ListPaymentsQuery = Query::try_from_uri(req.uri())
-        .unwrap_or(Query(ListPaymentsQuery {
-            limit: None,
-            offset: None,
-            status: None,
-            customer_user_id: None,
-            from: None,
-            to: None,
-        }))
-        .0;
-
-    let limit = clamp_limit(params.limit, 50, 250);
-    let offset = params.offset.unwrap_or(0).max(0);
-    let status_filter = normalize_optional_field(&params.status).map(|s| s.to_lowercase());
-    let customer_filter = normalize_optional_field(&params.customer_user_id);
-    let from = parse_rfc3339_opt(&params.from, "from")?;
-    let to = parse_rfc3339_opt(&params.to, "to")?;
-
-    let rows = sqlx::query_as::<
-        _,
-        (
-            String,
-            String,
-            String,
-            Option<String>,
-            Option<String>,
-            Option<String>,
-            i64,
-            String,
-            String,
-            Option<String>,
-            Option<String>,
-            Option<DateTime<Utc>>,
-            Option<DateTime<Utc>>,
-            DateTime<Utc>,
-        ),
-    >(
-        "SELECT pbe.id, pbe.customer_user_id, u.email, u.name, pbe.tenant_id, t.slug,
-                pbe.amount_cents::BIGINT, pbe.currency, pbe.status, pbe.external_invoice_id,
-                pbe.receipt_url, pbe.period_start, pbe.period_end, pbe.created_at
-         FROM provider_billing_events pbe
-         JOIN users u ON u.id = pbe.customer_user_id
-         LEFT JOIN tenants t ON t.id = pbe.tenant_id
-         WHERE u.tenant_id = 'ten_platform'
-           AND ($1::TEXT IS NULL OR pbe.customer_user_id = $1)
-           AND ($2::TEXT IS NULL OR pbe.status = $2)
-           AND ($3::TIMESTAMPTZ IS NULL OR pbe.created_at >= $3)
-           AND ($4::TIMESTAMPTZ IS NULL OR pbe.created_at <= $4)
-         ORDER BY pbe.created_at DESC
-         LIMIT $5 OFFSET $6",
-    )
-    .bind(customer_filter.as_deref())
-    .bind(status_filter.as_deref())
-    .bind(from)
-    .bind(to)
-    .bind(limit)
-    .bind(offset)
-    .fetch_all(&state.db)
-    .await?;
-
-    let total: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*)
-         FROM provider_billing_events pbe
-         WHERE ($1::TEXT IS NULL OR pbe.customer_user_id = $1)
-           AND ($2::TEXT IS NULL OR pbe.status = $2)
-           AND ($3::TIMESTAMPTZ IS NULL OR pbe.created_at >= $3)
-           AND ($4::TIMESTAMPTZ IS NULL OR pbe.created_at <= $4)",
-    )
-    .bind(customer_filter.as_deref())
-    .bind(status_filter.as_deref())
-    .bind(from)
-    .bind(to)
-    .fetch_one(&state.db)
-    .await
-    .unwrap_or(0);
-
-    let summary = sqlx::query_as::<_, (i64, i64, i64, i64, i64)>(
-        "SELECT
-            COALESCE(SUM(amount_cents) FILTER (WHERE status = 'paid'), 0)::BIGINT AS paid_cents,
-            COALESCE(SUM(amount_cents) FILTER (WHERE status = 'pending'), 0)::BIGINT AS pending_cents,
-            COALESCE(SUM(amount_cents) FILTER (WHERE status = 'refunded'), 0)::BIGINT AS refunded_cents,
-            COUNT(*) FILTER (WHERE status = 'paid') AS paid_count,
-            COUNT(*) FILTER (WHERE status = 'failed') AS failed_count
-         FROM provider_billing_events pbe
-         WHERE ($1::TEXT IS NULL OR pbe.customer_user_id = $1)
-           AND ($2::TEXT IS NULL OR pbe.status = $2)
-           AND ($3::TIMESTAMPTZ IS NULL OR pbe.created_at >= $3)
-           AND ($4::TIMESTAMPTZ IS NULL OR pbe.created_at <= $4)",
-    )
-    .bind(customer_filter.as_deref())
-    .bind(status_filter.as_deref())
-    .bind(from)
-    .bind(to)
-    .fetch_one(&state.db)
-    .await
-    .unwrap_or((0, 0, 0, 0, 0));
-
-    let payments: Vec<serde_json::Value> = rows
-        .into_iter()
-        .map(
-            |(
-                id,
-                customer_user_id,
-                customer_email,
-                customer_name,
-                tenant_id,
-                tenant_slug,
-                amount_cents,
-                currency,
-                status,
-                external_invoice_id,
-                receipt_url,
-                period_start,
-                period_end,
-                created_at,
-            )| {
-                serde_json::json!({
-                    "id": id,
-                    "customer_user_id": customer_user_id,
-                    "customer_email": customer_email,
-                    "customer_name": customer_name,
-                    "tenant_id": tenant_id,
-                    "tenant_slug": tenant_slug,
-                    "amount_cents": amount_cents,
-                    "currency": currency,
-                    "status": status,
-                    "external_invoice_id": external_invoice_id,
-                    "receipt_url": receipt_url,
-                    "period_start": period_start.map(|d| d.to_rfc3339()),
-                    "period_end": period_end.map(|d| d.to_rfc3339()),
-                    "created_at": created_at.to_rfc3339(),
-                })
-            },
-        )
-        .collect();
-
-    Ok(Json(serde_json::json!({
-        "payments": payments,
-        "total": total,
-        "limit": limit,
-        "offset": offset,
-        "summary": {
-            "paid_cents": summary.0,
-            "pending_cents": summary.1,
-            "refunded_cents": summary.2,
-            "paid_count": summary.3,
-            "failed_count": summary.4,
-        }
-    })))
-}
-
-/// POST /platform/admin/payments — Record a payment/receipt event.
-pub async fn create_payment(
-    State(state): State<AppState>,
-    req: axum::extract::Request,
-) -> Result<impl IntoResponse, AppError> {
-    let claims = owner_claims(&req)?;
-    let request_id = request_id_from_req(&req);
-    let body: CreatePaymentEventRequest =
-        axum::Json::<CreatePaymentEventRequest>::from_request(req, &state)
-            .await
-            .map_err(|_| AppError::BadRequest {
-                error: "invalid_request",
-                message: "Invalid payment payload".into(),
-            })?
-            .0;
-
-    if body.amount_cents <= 0 {
-        return Err(AppError::BadRequest {
-            error: "invalid_amount",
-            message: "amount_cents must be greater than zero".into(),
-        });
-    }
-
-    let customer_user_id = body.customer_user_id.trim().to_string();
-    if customer_user_id.is_empty() {
-        return Err(AppError::BadRequest {
-            error: "invalid_customer",
-            message: "customer_user_id is required".into(),
-        });
-    }
-
-    let customer_exists: bool = sqlx::query_scalar(
-        "SELECT EXISTS(
-            SELECT 1
-            FROM platform_accounts pa
-            JOIN users u ON u.id = pa.user_id
-            WHERE pa.user_id = $1 AND u.tenant_id = 'ten_platform'
-        )",
-    )
-    .bind(&customer_user_id)
-    .fetch_one(&state.db)
-    .await
-    .unwrap_or(false);
-    if !customer_exists {
-        return Err(AppError::NotFound {
-            error: "customer_not_found",
-            message: "Customer not found".into(),
-        });
-    }
-
-    let tenant_id = normalize_optional_field(&body.tenant_id);
-    if let Some(ref tid) = tenant_id {
-        let valid_tenant: bool = sqlx::query_scalar(
-            "SELECT EXISTS(
-                SELECT 1
-                FROM tenants
-                WHERE id = $1
-                  AND owner_user_id = $2
-                  AND status != 'deleted'
-            )",
-        )
-        .bind(tid)
-        .bind(&customer_user_id)
-        .fetch_one(&state.db)
-        .await
-        .unwrap_or(false);
-        if !valid_tenant {
-            return Err(AppError::BadRequest {
-                error: "invalid_tenant",
-                message: "tenant_id does not belong to the provided customer".into(),
-            });
-        }
-    }
-
-    let status = body
-        .status
-        .as_deref()
-        .unwrap_or("paid")
-        .trim()
-        .to_lowercase();
-    if !["pending", "paid", "failed", "refunded"].contains(&status.as_str()) {
-        return Err(AppError::BadRequest {
-            error: "invalid_payment_status",
-            message: "status must be one of: pending, paid, failed, refunded".into(),
-        });
-    }
-
-    let period_start = parse_rfc3339_opt(&body.period_start, "period_start")?;
-    let period_end = parse_rfc3339_opt(&body.period_end, "period_end")?;
-    let currency = body
-        .currency
-        .as_deref()
-        .unwrap_or("usd")
-        .trim()
-        .to_lowercase();
-    let external_invoice_id = normalize_optional_field(&body.external_invoice_id);
-    let receipt_url = normalize_optional_field(&body.receipt_url);
-    let notes = normalize_optional_field(&body.notes);
-    let metadata = body
-        .metadata
-        .clone()
-        .unwrap_or_else(|| serde_json::json!({}));
-
-    let payment_id = format!("pay_{}", uuid::Uuid::new_v4());
-    sqlx::query(
-        "INSERT INTO provider_billing_events
-         (id, customer_user_id, tenant_id, amount_cents, currency, status,
-          external_invoice_id, receipt_url, period_start, period_end, notes,
-          metadata, created_by_user_id, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, NOW(), NOW())",
-    )
-    .bind(&payment_id)
-    .bind(&customer_user_id)
-    .bind(tenant_id.as_deref())
-    .bind(body.amount_cents)
-    .bind(&currency)
-    .bind(&status)
-    .bind(external_invoice_id.as_deref())
-    .bind(receipt_url.as_deref())
-    .bind(period_start)
-    .bind(period_end)
-    .bind(notes.as_deref())
-    .bind(metadata)
-    .bind(&claims.sub)
-    .execute(&state.db)
-    .await?;
-
-    if let Err(error) = record_owner_event(
-        &state,
-        OwnerEvent {
-            customer_user_id: Some(&customer_user_id),
-            tenant_id: tenant_id.as_deref(),
-            actor_user_id: Some(&claims.sub),
-            actor_email: Some(claims.email.as_str()),
-            action: "billing.payment.recorded",
-            resource: "provider_billing_event",
-            request_id: request_id.as_deref(),
-            details: serde_json::json!({
-                "payment_id": &payment_id,
-                "amount_cents": body.amount_cents,
-                "currency": &currency,
-                "status": &status,
-                "external_invoice_id": &external_invoice_id,
-            }),
-        },
-    )
-    .await
-    {
-        tracing::warn!(customer_user_id = %customer_user_id, payment_id = %payment_id, %error, "Failed to record owner timeline event");
-    }
-
-    Ok((
-        axum::http::StatusCode::CREATED,
-        Json(serde_json::json!({
-            "payment": {
-                "id": payment_id,
-                "customer_user_id": customer_user_id,
-                "tenant_id": tenant_id,
-                "amount_cents": body.amount_cents,
-                "currency": currency,
-                "status": status,
-                "external_invoice_id": external_invoice_id,
-                "receipt_url": receipt_url,
-                "period_start": period_start.map(|d| d.to_rfc3339()),
-                "period_end": period_end.map(|d| d.to_rfc3339()),
-                "notes": notes,
-            }
-        })),
-    ))
-}
-
-async fn fetch_customer_snapshot(
-    state: &AppState,
-    customer_id: &str,
-) -> Result<serde_json::Value, AppError> {
-    let row = sqlx::query_as::<
-        _,
-        (
-            String,
-            String,
-            Option<String>,
-            String,
-            String,
-            String,
-            Option<String>,
-            Option<String>,
-            Option<String>,
-            Option<String>,
-            Option<String>,
-            Option<DateTime<Utc>>,
-            DateTime<Utc>,
-            DateTime<Utc>,
-        ),
-    >(
-        "SELECT pa.user_id, u.email, u.name, pa.status,
-                COALESCE(pa.category, 'standard') AS category,
-                COALESCE(pa.risk_level, 'normal') AS risk_level,
-                pa.company_name, pa.billing_ref, pa.notes,
-                COALESCE(pa.lifecycle_stage, 'active') AS lifecycle_stage,
-                pa.blocked_reason, pa.last_contacted_at, pa.created_at, pa.updated_at
-         FROM platform_accounts pa
-         JOIN users u ON u.id = pa.user_id
-         WHERE pa.user_id = $1
-           AND u.tenant_id = 'ten_platform'",
-    )
-    .bind(customer_id)
-    .fetch_optional(&state.db)
-    .await?
-    .ok_or(AppError::NotFound {
-        error: "customer_not_found",
-        message: "Customer not found".into(),
-    })?;
-
-    let tenant_count: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*)
-         FROM tenants
-         WHERE owner_user_id = $1
-           AND id != 'ten_platform'
-           AND status != 'deleted'",
-    )
-    .bind(customer_id)
-    .fetch_one(&state.db)
-    .await
-    .unwrap_or(0);
-
-    let lifetime_revenue_cents: i64 = sqlx::query_scalar(
-        "SELECT COALESCE(SUM(amount_cents), 0)::BIGINT
-         FROM provider_billing_events
-         WHERE customer_user_id = $1
-           AND status = 'paid'",
-    )
-    .bind(customer_id)
-    .fetch_one(&state.db)
-    .await
-    .unwrap_or(0);
-
-    let last_payment_at: Option<DateTime<Utc>> = sqlx::query_scalar(
-        "SELECT MAX(created_at)
-         FROM provider_billing_events
-         WHERE customer_user_id = $1",
-    )
-    .bind(customer_id)
-    .fetch_optional(&state.db)
-    .await
-    .unwrap_or(None);
-
-    let (
-        user_id,
-        email,
-        name,
-        status,
-        category,
-        risk_level,
-        company_name,
-        billing_ref,
-        notes,
-        lifecycle_stage,
-        blocked_reason,
-        last_contacted_at,
-        created_at,
-        updated_at,
-    ) = row;
-
-    Ok(serde_json::json!({
-        "user_id": user_id,
-        "email": email,
-        "name": name,
-        "status": status,
-        "category": category,
-        "risk_level": risk_level,
-        "lifecycle_stage": lifecycle_stage,
-        "company_name": company_name,
-        "billing_ref": billing_ref,
-        "notes": notes,
-        "blocked_reason": blocked_reason,
-        "last_contacted_at": last_contacted_at.map(|d| d.to_rfc3339()),
-        "tenant_count": tenant_count,
-        "lifetime_revenue_cents": lifetime_revenue_cents,
-        "last_payment_at": last_payment_at.map(|d| d.to_rfc3339()),
-        "created_at": created_at.to_rfc3339(),
-        "updated_at": updated_at.to_rfc3339(),
-    }))
-}
-
-/// GET /platform/admin/invites — List provider-owner invites.
-pub async fn list_owner_invites(
-    State(state): State<AppState>,
-    req: axum::extract::Request,
-) -> Result<impl IntoResponse, AppError> {
-    let _claims = owner_claims(&req)?;
-
-    // Keep statuses accurate for read paths.
-    let _ = sqlx::query(
-        "UPDATE owner_invites
-         SET status = 'expired', updated_at = NOW()
-         WHERE status = 'pending' AND expires_at < NOW()",
-    )
-    .execute(&state.db)
-    .await;
-
-    let rows = sqlx::query_as::<
-        _,
-        (
-            String,
-            String,
-            String,
-            String,
-            Option<String>,
-            chrono::DateTime<Utc>,
-            Option<chrono::DateTime<Utc>>,
-            Option<chrono::DateTime<Utc>>,
-            chrono::DateTime<Utc>,
-            chrono::DateTime<Utc>,
-        ),
-    >(
-        "SELECT oi.id, oi.email, oi.status, oi.invited_by_user_id, oi.accepted_by_user_id,
-                oi.expires_at, oi.accepted_at, oi.revoked_at, oi.created_at, oi.updated_at
-         FROM owner_invites oi
-         ORDER BY oi.created_at DESC
-         LIMIT 200",
-    )
-    .fetch_all(&state.db)
-    .await?;
-
-    let invites: Vec<serde_json::Value> = rows
-        .into_iter()
-        .map(
-            |(
-                id,
-                email,
-                status,
-                invited_by_user_id,
-                accepted_by_user_id,
-                expires_at,
-                accepted_at,
-                revoked_at,
-                created_at,
-                updated_at,
-            )| {
-                serde_json::json!({
-                    "id": id,
-                    "email": email,
-                    "status": status,
-                    "invited_by_user_id": invited_by_user_id,
-                    "accepted_by_user_id": accepted_by_user_id,
-                    "expires_at": expires_at.to_rfc3339(),
-                    "accepted_at": accepted_at.map(|v| v.to_rfc3339()),
-                    "revoked_at": revoked_at.map(|v| v.to_rfc3339()),
-                    "created_at": created_at.to_rfc3339(),
-                    "updated_at": updated_at.to_rfc3339(),
-                })
-            },
-        )
-        .collect();
-
-    Ok(Json(serde_json::json!({ "invites": invites })))
-}
-
-/// POST /platform/admin/invites — Create provider-owner invite.
-pub async fn create_owner_invite(
-    State(state): State<AppState>,
-    req: axum::extract::Request,
-) -> Result<impl IntoResponse, AppError> {
-    let claims = owner_claims(&req)?;
-    let body: CreateOwnerInviteRequest =
-        axum::Json::<CreateOwnerInviteRequest>::from_request(req, &state)
-            .await
-            .map_err(|_| AppError::BadRequest {
-                error: "invalid_request",
-                message: "Invalid request body. Required: email".into(),
-            })?
-            .0;
-
-    let email = normalize_email(&body.email);
-    if email.is_empty() || !crate::handlers::auth::is_valid_email(&email) {
-        return Err(AppError::BadRequest {
-            error: "invalid_email",
-            message: "A valid email is required".into(),
-        });
-    }
-
-    let expires_in = body.expires_in_hours.unwrap_or(72).clamp(1, 24 * 30);
-    let expires_at = Utc::now() + Duration::hours(expires_in);
-    let invite_id = format!("oinv_{}", uuid::Uuid::new_v4());
-    let invite_token = format!("oinv_{}", uuid::Uuid::new_v4());
-    let token_hash = signing::hash_token(&invite_token);
-
-    let mut tx = state.db.begin().await?;
-
-    // Ensure one active invite per email.
-    sqlx::query(
-        "UPDATE owner_invites
-         SET status = 'revoked', revoked_at = NOW(), updated_at = NOW()
-         WHERE status = 'pending' AND lower(email) = lower($1)",
-    )
-    .bind(&email)
-    .execute(&mut *tx)
-    .await?;
-
-    sqlx::query(
-        "INSERT INTO owner_invites
-         (id, email, token_hash, invited_by_user_id, status, expires_at, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, 'pending', $5, NOW(), NOW())",
-    )
-    .bind(&invite_id)
-    .bind(&email)
-    .bind(&token_hash)
-    .bind(&claims.sub)
-    .bind(expires_at)
-    .execute(&mut *tx)
-    .await?;
-
-    tx.commit().await?;
-
-    let invite_url = format!(
-        "{}/platform/login?owner_invite={}",
-        state.config.server_url, invite_token
-    );
-
-    Ok((
-        axum::http::StatusCode::CREATED,
-        Json(serde_json::json!({
-            "invite": {
-                "id": invite_id,
-                "email": email,
-                "status": "pending",
-                "expires_at": expires_at.to_rfc3339(),
-                "invited_by_user_id": claims.sub,
-            },
-            "invite_token": invite_token,
-            "invite_url": invite_url,
-        })),
-    ))
-}
-
-/// POST /platform/admin/invites/{id}/revoke
-/// — Revoke a pending provider-owner invite.
-pub async fn revoke_owner_invite(
-    State(state): State<AppState>,
-    Path(invite_id): Path<String>,
-    req: axum::extract::Request,
-) -> Result<impl IntoResponse, AppError> {
-    let _claims = owner_claims(&req)?;
-
-    let updated = sqlx::query(
-        "UPDATE owner_invites
-         SET status = 'revoked', revoked_at = NOW(), updated_at = NOW()
-         WHERE id = $1 AND status = 'pending'",
-    )
-    .bind(&invite_id)
-    .execute(&state.db)
-    .await?;
-
-    if updated.rows_affected() == 0 {
-        return Err(AppError::NotFound {
-            error: "invite_not_found",
-            message: "Pending invite not found".into(),
-        });
-    }
-
-    Ok(Json(serde_json::json!({
-        "success": true,
-        "invite_id": invite_id,
-        "status": "revoked",
-    })))
-}
-
-/// POST /platform/admin/invites/accept — Accept an owner invite as a platform user.
-pub async fn accept_owner_invite(
-    State(state): State<AppState>,
-    req: axum::extract::Request,
-) -> Result<impl IntoResponse, AppError> {
-    let platform_user =
-        req.extensions()
-            .get::<PlatformUser>()
-            .cloned()
-            .ok_or(AppError::Unauthorized {
-                error: "unauthorized",
-                message: "Platform authentication required".into(),
-            })?;
-    let body: AcceptOwnerInviteRequest =
-        axum::Json::<AcceptOwnerInviteRequest>::from_request(req, &state)
-            .await
-            .map_err(|_| AppError::BadRequest {
-                error: "invalid_request",
-                message: "Invalid request body. Required: token".into(),
-            })?
-            .0;
-
-    let token = body.token.trim();
-    if token.is_empty() {
-        return Err(AppError::BadRequest {
-            error: "invalid_invite_token",
-            message: "Invite token is required".into(),
-        });
-    }
-
-    let token_hash = signing::hash_token(token);
-    let user_email = normalize_email(&platform_user.email);
-    let mut tx = state.db.begin().await?;
-
-    let invite = sqlx::query_as::<
-        _,
-        (
-            String,
-            String,
-            String,
-            chrono::DateTime<Utc>,
-            Option<String>,
-        ),
-    >(
-        "SELECT id, email, status, expires_at, accepted_by_user_id
-         FROM owner_invites
-         WHERE token_hash = $1
-         LIMIT 1
-         FOR UPDATE",
-    )
-    .bind(&token_hash)
-    .fetch_optional(&mut *tx)
-    .await?
-    .ok_or(AppError::NotFound {
-        error: "invite_not_found",
-        message: "Invite not found".into(),
-    })?;
-
-    let (invite_id, invite_email, status, expires_at, accepted_by_user_id) = invite;
-    let invite_email_norm = normalize_email(&invite_email);
-    if invite_email_norm != user_email {
-        return Err(AppError::Forbidden {
-            error: "invite_email_mismatch",
-            message: "Invite email does not match the signed-in platform account".into(),
-        });
-    }
-
-    if status == "accepted" {
-        if accepted_by_user_id.as_deref() == Some(platform_user.user_id.as_str()) {
-            tx.commit().await?;
-            return Ok(Json(serde_json::json!({
-                "accepted": true,
-                "already_accepted": true,
-                "invite_id": invite_id,
-            })));
-        }
-        return Err(AppError::Forbidden {
-            error: "invite_already_used",
-            message: "This invite was already accepted by another account".into(),
-        });
-    }
-
-    if status == "revoked" {
-        return Err(AppError::BadRequest {
-            error: "invite_revoked",
-            message: "This invite has been revoked".into(),
-        });
-    }
-
-    if status == "expired" || expires_at < Utc::now() {
-        let _ = sqlx::query(
-            "UPDATE owner_invites SET status = 'expired', updated_at = NOW() WHERE id = $1",
-        )
-        .bind(&invite_id)
-        .execute(&mut *tx)
-        .await;
-
-        return Err(AppError::BadRequest {
-            error: "invite_expired",
-            message: "This invite has expired".into(),
-        });
-    }
-
-    sqlx::query(
-        "INSERT INTO platform_accounts (user_id, status, created_at, updated_at)
-         VALUES ($1, 'active', NOW(), NOW())
-         ON CONFLICT (user_id) DO NOTHING",
-    )
-    .bind(&platform_user.user_id)
-    .execute(&mut *tx)
-    .await?;
-
-    sqlx::query(
-        "INSERT INTO user_roles (user_id, role_id, tenant_id)
-         VALUES ($1, 'role_platform_owner', 'ten_platform')
-         ON CONFLICT DO NOTHING",
-    )
-    .bind(&platform_user.user_id)
-    .execute(&mut *tx)
-    .await?;
-
-    sqlx::query(
-        "UPDATE owner_invites
-         SET status = 'accepted',
-             accepted_by_user_id = $2,
-             accepted_at = NOW(),
-             updated_at = NOW()
-         WHERE id = $1",
-    )
-    .bind(&invite_id)
-    .bind(&platform_user.user_id)
-    .execute(&mut *tx)
-    .await?;
-
-    tx.commit().await?;
-
-    Ok(Json(serde_json::json!({
-        "accepted": true,
-        "already_accepted": false,
-        "invite_id": invite_id,
-        "email": platform_user.email,
-    })))
-}
-
-/// GET /platform/admin/dashboard — Provider control-plane dashboard.
-pub async fn dashboard_page(
-    State(state): State<AppState>,
-    headers: axum::http::HeaderMap,
-) -> impl IntoResponse {
-    let login_redirect = "/platform/login".to_string();
-
-    let request_id = headers
-        .get("x-request-id")
-        .and_then(|value| value.to_str().ok())
-        .map(|value| value.to_string());
-
-    match validate_owner_refresh_session(&state, &headers).await {
-        Ok(result) if result.valid => {}
-        Ok(result) => {
-            tracing::warn!(
-                request_id = request_id.as_deref().unwrap_or(""),
-                reason = result.reason,
-                "Owner dashboard session invalid; redirecting to login"
-            );
-            return Redirect::temporary(&login_redirect).into_response();
-        }
-        Err(error) => {
-            tracing::error!(%error, "Failed to validate owner refresh session for dashboard route");
-            return Redirect::temporary(&login_redirect).into_response();
-        }
-    }
-
-    let page = render_page(&PageConfig {
-        title: "Admin Dashboard — Forma Auth",
-        route_pattern: "/platform/admin/dashboard",
-        manifest: &state.asset_manifest,
-        config_script: None,
-        body_class: Some("owner-dashboard min-h-screen antialiased"),
-        personality_css: Some("body{background:#0a0a0c;color:#e8e6e3;--grid-opacity:0.25;--glow-size:700px;--glow-intensity:0.04;}"),
-        body_prefix: None,
-        render_mode: RenderMode::Phase1ClientMount,
-        ir_module: None,
-        slots: None,
-    });
-
-    (
-        [
-            (axum::http::header::CACHE_CONTROL, "no-store".to_string()),
-            (axum::http::header::HeaderName::from_static("content-security-policy"), page.csp),
-        ],
-        Html(page.html),
-    )
-        .into_response()
 }

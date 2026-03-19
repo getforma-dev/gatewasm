@@ -68,7 +68,7 @@ pub fn refresh_cookie_header(
             cookie_name, token, cookie_path, max_age
         )
     };
-    (SET_COOKIE, HeaderValue::from_str(&cookie).unwrap())
+    (SET_COOKIE, HeaderValue::from_str(&cookie).expect("cookie value is always valid: base64/hex token + alphanumeric slug"))
 }
 
 fn scoped_cookie_name(tenant_slug: &str) -> String {
@@ -164,7 +164,7 @@ pub fn clear_refresh_cookie(
             cookie_name, cookie_path
         )
     };
-    (SET_COOKIE, HeaderValue::from_str(&cookie).unwrap())
+    (SET_COOKIE, HeaderValue::from_str(&cookie).expect("cookie value is always valid: base64/hex token + alphanumeric slug"))
 }
 
 /// Clears the legacy cookie used prior to tenant-scoped cookie isolation.
@@ -175,7 +175,7 @@ pub fn clear_legacy_refresh_cookie(server_url: &str) -> (axum::http::HeaderName,
     } else {
         "refresh_token=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0"
     };
-    (SET_COOKIE, HeaderValue::from_str(cookie).unwrap())
+    (SET_COOKIE, HeaderValue::from_str(cookie).expect("cookie value is always valid: base64/hex token + alphanumeric slug"))
 }
 
 /// Clears the `__Host-refresh_token` cookie that may exist from production deployments
@@ -189,7 +189,7 @@ fn clear_host_legacy_refresh_cookie(
             HeaderValue::from_str(
                 "__Host-refresh_token=; HttpOnly; Secure; SameSite=None; Path=/; Max-Age=0",
             )
-            .unwrap(),
+            .expect("cookie value is always valid: base64/hex token + alphanumeric slug"),
         ))
     } else {
         None
@@ -211,7 +211,7 @@ fn clear_platform_legacy_path_cookie(server_url: &str) -> (axum::http::HeaderNam
             cookie_name
         )
     };
-    (SET_COOKIE, HeaderValue::from_str(&cookie).unwrap())
+    (SET_COOKIE, HeaderValue::from_str(&cookie).expect("cookie value is always valid: base64/hex token + alphanumeric slug"))
 }
 
 /// Appends Set-Cookie headers that issue the active refresh cookie and clear known legacy variants.
@@ -273,7 +273,7 @@ fn clear_pre_host_prefix_cookie(
         "{}=; HttpOnly; Secure; SameSite=None; Path={}; Max-Age=0",
         cookie_name, cookie_path
     );
-    Some((SET_COOKIE, HeaderValue::from_str(&cookie).unwrap()))
+    Some((SET_COOKIE, HeaderValue::from_str(&cookie).expect("cookie value is always valid: base64/hex token + alphanumeric slug")))
 }
 
 fn normalize_invite_token(token: Option<&str>) -> Option<String> {
