@@ -70,10 +70,8 @@ docker push 877573132739.dkr.ecr.us-east-1.amazonaws.com/gatewasm-server:latest
 ## 1. Start Local Databases
 
 ```bash
-cd /Users/victorvillacis/forma-code/auth-module-poc
-
 # Start both databases
-docker compose up -d db db-test
+npm run db:test
 
 # Verify they're healthy
 docker compose ps
@@ -140,49 +138,30 @@ SSL:      off
 
 ## 3. Run the Server Locally
 
-The `.env` file in the project root configures the server. After starting databases, just:
+The `.env` file in the project root configures the server. After starting databases:
 
 ```bash
-cd /Users/victorvillacis/forma-code/auth-module-poc
-
-cargo run -p gatewasm-server
+npm run dev
 ```
 
-Or override env vars inline:
-
-```bash
-PORT=3101 \
-HOST=127.0.0.1 \
-SERVER_URL=http://127.0.0.1:3101 \
-DATABASE_URL=postgres://gatewasm:gatewasm@localhost:5434/gatewasm \
-JWT_ISSUER=gatewasm \
-JWT_AUDIENCE=gatewasm-app \
-ALLOWED_ORIGINS=http://localhost:3000,http://localhost:5173 \
-PLATFORM_DOMAIN=localhost \
-PLATFORM_ADMIN_KEY=plat_local_dev_key \
-COMPLIANCE_MODE=standard \
-RUST_LOG=info \
-cargo run -p gatewasm-server
-```
+This starts both the Rust server and frontend watch mode (via `concurrently`) in one terminal. The server reads `.env` automatically via `dotenvy`.
 
 You should see:
 
 ```
-INFO gatewasm_server: Starting GateWASM server host=0.0.0.0 port=3099
-INFO gatewasm_server: Compliance mode compliance_mode=standard
-INFO gatewasm_server::db: Running migration version=1 label="initial schema"
-...
-INFO gatewasm_server::db: Migration applied successfully version=9 label="webhooks"
-INFO gatewasm_server: Database connected
-INFO gatewasm_server: GateWASM server listening addr=0.0.0.0:3099
+[server]  Starting GateWASM server host=0.0.0.0 port=3001
+[server]  Database connected
+[server]  Phase 2 SSR enabled for 8 route(s)
+[server]  GateWASM server listening addr=0.0.0.0:3001
+[frontend] ⚡ Done in 28ms
 ```
 
-Migrations (1-9) run automatically on startup.
+Migrations (1-26) run automatically on startup. When you edit a `.ts` file in `admin/src/`, the frontend rebuilds instantly — refresh the browser to see changes.
 
 ### Verify
 
 ```bash
-curl -s http://localhost:3099/health | jq
+curl -s http://localhost:3001/health | jq
 # {"status":"ok","db_status":"ok"}
 ```
 
@@ -193,7 +172,7 @@ curl -s http://localhost:3099/health | jq
 The server is multi-tenant. You need at least one tenant for `/t/{slug}/...` routes to work.
 
 ```bash
-BASE=http://localhost:3099
+BASE=http://localhost:3001
 
 # Create the "forma" tenant
 curl -s -X POST $BASE/platform/tenants \
@@ -216,7 +195,7 @@ curl -s -X PATCH $BASE/manage/config \
   -H "Authorization: Bearer <PASTE_MGMT_KEY_HERE>" \
   -H "Content-Type: application/json" \
   -d '{
-    "login_redirect_url": "http://localhost:3099/t/forma/dashboard",
+    "login_redirect_url": "http://localhost:3001/t/forma/dashboard",
     "allowed_providers": ["email"]
   }' | jq
 ```
@@ -225,7 +204,7 @@ curl -s -X PATCH $BASE/manage/config \
 
 ## 5. Test in Browser
 
-Open: **http://localhost:3099/t/forma/login**
+Open: **http://localhost:3001/t/forma/login**
 
 1. Register with any email/password
 2. You land on the dashboard at `/t/forma/dashboard`
@@ -244,18 +223,18 @@ Open: **http://localhost:3099/t/forma/login**
 ## 6. Run Tests
 
 ```bash
-cd /Users/victorvillacis/forma-code/auth-module-poc
+# Unit tests (no DB needed)
+npm run test
 
-# Make sure test database is running
-docker compose up -d db-test
+# Integration tests (needs PostgreSQL)
+npm run db:test
+npm run test:integration
 
-# Run all tests (143 integration tests, ~9 seconds)
-cargo test -p gatewasm-server
+# Playwright E2E (needs running server)
+npm run dev          # in one terminal
+npm run test:e2e     # in another
 
-# Run only integration tests
-cargo test -p gatewasm-server --test integration
-
-# Run a specific test
+# Run a specific Rust test
 cargo test -p gatewasm-server --test integration refresh_token_from_cookie
 
 # Run with output visible
@@ -281,7 +260,7 @@ All endpoints require `X-Tenant-Slug: forma` header (or use `/t/forma/...` URL p
 ### Public endpoints
 
 ```bash
-BASE=http://localhost:3099
+BASE=http://localhost:3001
 
 # Register
 curl -X POST $BASE/auth/register \
@@ -432,53 +411,64 @@ curl -X POST $BASE/platform/tenants \
 ## 8. Project Structure
 
 ```
-auth-module-poc/
-├── crates/
-│   ├── gatewasm-core/            # WASM module (client-side auth logic)
-│   └── gatewasm-server/          # Axum server (this is what you run)
-│       ├── src/
-│       │   ├── main.rs           # Entry point + graceful shutdown
-│       │   ├── lib.rs            # AppState, re-exports
-│       │   ├── config.rs         # AppConfig from env vars
-│       │   ├── error.rs          # AppError enum → JSON responses
-│       │   ├── types.rs          # Shared types
-│       │   ├── db/               # Database pool, migrations (001-009)
-│       │   ├── handlers/
-│       │   │   ├── mod.rs        # Router setup, all route registration
-│       │   │   ├── auth.rs       # Register, login, logout, me, verify-email
-│       │   │   ├── oauth.rs      # Google/GitHub OAuth PKCE flow
-│       │   │   ├── token.rs      # Token refresh, grant types
-│       │   │   ├── jwks.rs       # JWKS endpoint
-│       │   │   ├── management.rs # Tenant management API (mgmt_ key)
-│       │   │   ├── roles.rs      # Custom roles CRUD
-│       │   │   ├── webhooks.rs   # Webhook CRUD
-│       │   │   ├── webhook_engine.rs # Webhook dispatch + delivery + retry
-│       │   │   ├── password_reset.rs # Password reset flow
-│       │   │   ├── onboarding.rs # Self-serve tenant onboarding
-│       │   │   ├── hosted_login.rs   # Hosted login UI
-│       │   │   ├── hosted_dashboard.rs # Hosted dashboard UI
-│       │   │   └── platform_dashboard.rs # Platform admin dashboard
-│       │   ├── middleware/
-│       │   │   ├── mod.rs        # Middleware re-exports
-│       │   │   ├── auth.rs       # JWT auth extraction
-│       │   │   ├── tenant.rs     # Tenant resolution (header/subdomain/URL)
-│       │   │   ├── cors.rs       # CORS layer
-│       │   │   ├── rate_limit.rs # IP-based rate limiting
-│       │   │   ├── request_id.rs # Request ID injection
-│       │   │   └── permissions.rs # Permission resolution from roles
-│       │   ├── jwt/              # Ed25519 key management, token signing
-│       │   ├── crypto/           # Argon2id password hashing
-│       │   └── compliance/       # HIPAA/SOC2 validation engine
-│       ├── tests/
-│       │   └── integration.rs    # 143 integration tests
-│       └── Dockerfile            # Multi-stage build for AWS
-├── bridge/                       # gate-bridge.js + .d.ts (client SDK)
+gatewasm/
+├── package.json                  # Root dev scripts (npm run dev, test, etc.)
+├── crates/server/                # Axum server
+│   ├── src/
+│   │   ├── main.rs               # Entry point + background tasks
+│   │   ├── lib.rs                # AppState, module exports
+│   │   ├── config.rs             # AppConfig from env vars
+│   │   ├── error.rs              # AppError enum → JSON responses
+│   │   ├── responses.rs          # Typed response structs
+│   │   ├── types.rs              # Shared request/response types
+│   │   ├── db/                   # Database pool, migrations (001-026)
+│   │   ├── handlers/
+│   │   │   ├── mod.rs            # Router setup
+│   │   │   ├── auth.rs           # Register, login, logout, me, verify-email
+│   │   │   ├── oauth.rs          # Google/GitHub OAuth PKCE flow
+│   │   │   ├── token.rs          # Token refresh, grant types
+│   │   │   ├── mfa.rs            # TOTP setup, verify, recovery
+│   │   │   ├── webauthn.rs       # WebAuthn / FIDO2 passkeys
+│   │   │   ├── management.rs     # Tenant management API (mgmt_ key)
+│   │   │   ├── owner/            # Owner dashboard (split into submodules)
+│   │   │   │   ├── customers.rs  # Customer CRUD + lifecycle
+│   │   │   │   ├── analytics.rs  # Stats, analytics, timeline
+│   │   │   │   ├── billing.rs    # Payments
+│   │   │   │   ├── invites.rs    # Owner invitations
+│   │   │   │   └── dashboard.rs  # Page serving
+│   │   │   ├── onboarding.rs     # Self-serve tenant onboarding
+│   │   │   ├── webhooks.rs       # Webhook CRUD + SSRF filter
+│   │   │   ├── ssf.rs            # Security Event Framework streams
+│   │   │   └── ...
+│   │   ├── middleware/
+│   │   │   ├── tenant.rs         # Tenant resolution + cache
+│   │   │   ├── auth.rs           # JWT extraction
+│   │   │   ├── cors.rs           # Dynamic per-tenant CORS
+│   │   │   ├── csp.rs            # CSP headers (via forma-server)
+│   │   │   ├── rate_limit.rs     # IP-based rate limiting
+│   │   │   ├── entitlements.rs   # Plan enforcement
+│   │   │   ├── fingerprint.rs    # Client fingerprinting
+│   │   │   ├── dpop.rs           # DPoP proof validation
+│   │   │   └── ...
+│   │   ├── jwt/                  # Ed25519 key management, token signing
+│   │   ├── crypto/               # Argon2 password hashing
+│   │   ├── compliance/           # HIPAA compliance engine
+│   │   ├── html_template.rs      # SSR rendering (delegates to forma-server)
+│   │   └── ir/                   # FMIR binary IR loading (via forma-server)
+│   ├── tests/integration.rs      # Integration tests (needs PostgreSQL)
+│   └── Dockerfile                # Multi-stage build for AWS
+├── admin/                        # TypeScript frontend (FormaJS + esbuild)
+│   ├── build.ts                  # Build config (delegates to @getforma/build)
+│   ├── src/core/                 # Shared components, hooks, types
+│   ├── src/platform/             # Platform pages (login, onboarding, console)
+│   ├── src/tenant/               # Tenant pages (login, dashboard, admin)
+│   ├── src/admin/                # Owner dashboard
+│   └── e2e/                      # Playwright tests (84 tests)
+├── bridge/                       # gate-bridge.js client SDK
 ├── infra/                        # AWS CDK infrastructure
 ├── docker-compose.yml            # Local Postgres + pgweb
-├── .env                          # Local environment config
-├── RUNBOOK.md                    # AWS deployment operations
-├── ARCHITECTURE.md               # Technical architecture deep-dive
-├── CASE-STUDY.md                 # Development case study
+├── .env                          # Local config (gitignored)
+├── RUNBOOK.md                    # Deployment procedures
 └── LOCAL-DEV.md                  # This file
 ```
 
@@ -486,7 +476,7 @@ auth-module-poc/
 
 ## 9. Database Migrations
 
-Migrations run automatically on server startup. Current migrations:
+Migrations run automatically on server startup. Current migrations (1-26):
 
 | # | Label | What it does |
 |---|-------|--------------|
@@ -499,6 +489,13 @@ Migrations run automatically on server startup. Current migrations:
 | 7 | self-serve onboarding | trial_expires_at, owner_user_id, platform users |
 | 8 | custom roles | tenant-scoped roles, permissions_jsonb, is_system flag |
 | 9 | webhooks | webhooks table, webhook_deliveries table |
+| 10-16 | login redirects → billing | redirect defaults, entitlements, orgs, owner plane, invites, billing |
+| 17-19 | MFA + indexes | MFA lockout + secret encryption, timeline events, query indexes |
+| 20-22 | security hardening | signup invites, platform redirect fix, security config table |
+| 23 | webauthn + fedcm | WebAuthn/FIDO2 credentials, FedCM approved clients |
+| 24 | enterprise security | PAR requests, mTLS certificates, DPoP jti cache |
+| 25 | SSF | Shared Signals Framework streams + outbox + geo columns |
+| 26 | tenant FK constraints | Foreign key constraints on tenant_id columns |
 
 ---
 
@@ -506,9 +503,9 @@ Migrations run automatically on server startup. Current migrations:
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `PORT` | `3099` | Server port |
+| `PORT` | `3001` | Server port |
 | `HOST` | `0.0.0.0` | Bind address |
-| `SERVER_URL` | `http://localhost:3099` | Public URL (used for cookies, OAuth redirects) |
+| `SERVER_URL` | `http://localhost:3001` | Public URL (cookies, OAuth redirects) |
 | `DATABASE_URL` | `postgres://...@localhost:5434/gatewasm` | Postgres connection string |
 | `JWT_ISSUER` | `gatewasm` | JWT `iss` claim |
 | `JWT_AUDIENCE` | `gatewasm-app` | JWT `aud` claim |
@@ -555,7 +552,7 @@ psql "postgres://gatewasm:gatewasm@localhost:5434/gatewasm" -c "
 "
 
 # Or via Management API
-curl -X POST http://localhost:3099/manage/users/<USER_ID>/roles \
+curl -X POST http://localhost:3001/manage/users/<USER_ID>/roles \
   -H "Authorization: Bearer <MGMT_KEY>" \
   -H "Content-Type: application/json" \
   -d '{"role_id": "role_admin"}'
@@ -567,14 +564,14 @@ curl -X POST http://localhost:3099/manage/users/<USER_ID>/roles \
 MGMT_KEY=<your_mgmt_key>
 
 # Create "editor" role with specific permissions
-curl -X POST http://localhost:3099/manage/roles \
+curl -X POST http://localhost:3001/manage/roles \
   -H "Authorization: Bearer $MGMT_KEY" \
   -H "Content-Type: application/json" \
   -d '{"name":"editor","description":"Content editor","permissions":["user:read","user:write"]}'
 # → returns { "id": "role_xxx", ... }
 
 # Assign it to a user
-curl -X POST http://localhost:3099/manage/users/<USER_ID>/roles \
+curl -X POST http://localhost:3001/manage/users/<USER_ID>/roles \
   -H "Authorization: Bearer $MGMT_KEY" \
   -H "Content-Type: application/json" \
   -d '{"role_id":"role_xxx"}'
@@ -583,7 +580,7 @@ curl -X POST http://localhost:3099/manage/users/<USER_ID>/roles \
 ### Set up a webhook
 
 ```bash
-curl -X POST http://localhost:3099/manage/webhooks \
+curl -X POST http://localhost:3001/manage/webhooks \
   -H "Authorization: Bearer $MGMT_KEY" \
   -H "Content-Type: application/json" \
   -d '{

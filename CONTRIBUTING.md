@@ -4,44 +4,47 @@
 
 - Rust (stable toolchain)
 - Node.js 22+
-- PostgreSQL 16 (via Docker)
-- Docker & Docker Compose
+- Docker (for PostgreSQL)
 
 ## Setup
 
 ```bash
-# Clone the repo
 git clone https://github.com/getforma-dev/gatewasm.git
 cd gatewasm
 
-# Start databases
-docker-compose up -d db db-test
-
-# Build frontend assets
-cd admin
+# Install dependencies
 npm install
-npx tsx build.ts --ssr
-cd ..
+cd admin && npm install && cd ..
 
-# Copy env and fill in secrets
+# Copy env template
 cp .env.example .env
 
-# Run the server
-cargo run -p gatewasm-server
+# Start databases + build + run
+npm run db
+npm run build:ssr
+npm run dev
+```
 
-# Run tests
-cargo test -p gatewasm-server
-cd admin && npx playwright test
+Open http://localhost:3001
+
+## Development
+
+```bash
+npm run dev           # Server + frontend watch (one terminal)
+npm run test          # Rust unit tests
+npm run test:e2e      # Playwright E2E (needs running server)
+npm run typecheck     # TypeScript type check
 ```
 
 ## Project Structure
 
 ```
 gatewasm/
-├── crates/server/    Rust server (axum + forma-server + forma-ir)
-├── admin/            TypeScript frontend (FormaJS islands)
+├── crates/server/    Rust server (Axum + forma-server + forma-ir)
+│   └── src/handlers/owner/   Split into submodules (customers, analytics, billing, invites)
+├── admin/            TypeScript frontend (FormaJS islands + @getforma/build)
 ├── bridge/           Client SDK (gate-bridge.js)
 ├── infra/            AWS CDK infrastructure
 ├── scripts/          Build & deployment utilities
-└── specs/            Compliance specifications
+└── specs/            Compliance specifications (HIPAA)
 ```
