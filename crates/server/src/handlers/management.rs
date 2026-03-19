@@ -1737,3 +1737,29 @@ pub async fn update_security_config(
         "plan": plan,
     })))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn valid_css_colors() {
+        assert!(is_valid_css_color("#fff"));
+        assert!(is_valid_css_color("#FFF"));
+        assert!(is_valid_css_color("#abcd"));
+        assert!(is_valid_css_color("#6366f1"));
+        assert!(is_valid_css_color("#6366f1ff"));
+        assert!(is_valid_css_color("  #abc  ")); // trimmed
+    }
+
+    #[test]
+    fn invalid_css_colors() {
+        assert!(!is_valid_css_color("red"));
+        assert!(!is_valid_css_color("rgb(0,0,0)"));
+        assert!(!is_valid_css_color("#"));
+        assert!(!is_valid_css_color("#zz"));
+        assert!(!is_valid_css_color("#12345")); // 5 chars not valid
+        assert!(!is_valid_css_color("red;} body{background:url(evil)}"));
+        assert!(!is_valid_css_color(""));
+    }
+}

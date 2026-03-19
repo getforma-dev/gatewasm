@@ -41,10 +41,13 @@ pub fn is_private_url(raw_url: &str) -> bool {
                 || h.starts_with("192.168.")
                 || h == "169.254.169.254"
                 || h.starts_with("169.254.")
-                // IPv6 private ranges
-                || h.starts_with("fc")   // fc00::/7 unique local
-                || h.starts_with("fd")   // fd00::/8 unique local
-                || h.starts_with("fe80") // fe80::/10 link-local
+                // IPv6 private ranges (URL parser wraps in brackets)
+                || h.starts_with("[fc")   // fc00::/7 unique local
+                || h.starts_with("[fd")   // fd00::/8 unique local
+                || h.starts_with("[fe80") // fe80::/10 link-local
+                || h.starts_with("fc")    // bare fc00::/7
+                || h.starts_with("fd")    // bare fd00::/8
+                || h.starts_with("fe80")  // bare fe80::/10
                 || h.ends_with(".internal")
                 || h.ends_with(".local");
         }
@@ -504,4 +507,61 @@ fn tenant_from_req(req: &axum::extract::Request) -> Result<TenantContext, AppErr
             error: "unauthorized",
             message: "Missing tenant context".into(),
         })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn rejects_localhost() {
+        assert!(is_private_url("https://localhost/hook"));
+        assert!(is_private_url("https://127.0.0.1/hook"));
+        assert!(is_private_url("https://0.0.0.0/hook"));
+    }
+
+    #[test]
+    fn rejects_rfc1918() {
+        assert!(is_private_url("https://10.0.0.1/hook"));
+        assert!(is_private_url("https://172.16.0.1/hook"));
+        assert!(is_private_url("https://172.31.255.255/hook"));
+        assert!(is_private_url("https://192.168.1.1/hook"));
+    }
+
+    #[test]
+    fn rejects_aws_metadata() {
+        assert!(is_private_url("http://169.254.169.254/latest/meta-data/"));
+        assert!(is_private_url("http://169.254.0.1/"));
+    }
+
+    #[test]
+    fn rejects_ipv6_loopback() {
+        assert!(is_private_url("https://[::1]/hook"));
+    }
+
+    #[test]
+    fn rejects_ipv6_private_bracketed() {
+        assert!(is_private_url("https://[fc00::1]/hook"));
+        assert!(is_private_url("https://[fd12:3456::1]/hook"));
+        assert!(is_private_url("https://[fe80::1]/hook"));
+    }
+
+    #[test]
+    fn rejects_internal_domains() {
+        assert!(is_private_url("https://redis.internal/"));
+        assert!(is_private_url("https://db.local/"));
+    }
+
+    #[test]
+    fn allows_public_urls() {
+        assert!(!is_private_url("https://hooks.example.com/webhook"));
+        assert!(!is_private_url("https://api.stripe.com/events"));
+        assert!(!is_private_url("https://1.2.3.4/hook"));
+    }
+
+    #[test]
+    fn allows_empty_or_invalid() {
+        assert!(!is_private_url(""));
+        assert!(!is_private_url("not-a-url"));
+    }
 }

@@ -243,3 +243,102 @@ pub async fn extract_tenant(
     req.extensions_mut().insert(ctx);
     Ok(next.run(req).await)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn make_test_context(slug: &str) -> TenantContext {
+        TenantContext {
+            tenant_id: format!("ten_{slug}"),
+            slug: slug.to_string(),
+            name: slug.to_string(),
+            allowed_providers: vec!["email".into()],
+            google_client_id: None,
+            google_client_secret: None,
+            github_client_id: None,
+            github_client_secret: None,
+            allowed_origins: vec![],
+            status: "active".into(),
+            signup_mode: "open".into(),
+            plan: "trial".into(),
+            trial_ends_at: None,
+            owner_user_id: None,
+            branding_logo_url: None,
+            branding_primary_color: "#6366f1".into(),
+            branding_app_name: None,
+            branding_custom_css: None,
+            login_redirect_url: "/".into(),
+            security_config: TenantSecurityConfig::default(),
+        }
+    }
+
+    #[test]
+    fn cache_get_returns_none_for_missing_key() {
+        let cache = TenantCache::default();
+        assert!(cache.get("nonexistent").is_none());
+    }
+
+    #[test]
+    fn cache_set_then_get() {
+        let cache = TenantCache::default();
+        cache.set("acme".into(), make_test_context("acme"));
+        let ctx = cache.get("acme").unwrap();
+        assert_eq!(ctx.slug, "acme");
+        assert_eq!(ctx.tenant_id, "ten_acme");
+    }
+
+    #[test]
+    fn cache_invalidate_removes_entry() {
+        let cache = TenantCache::default();
+        cache.set("acme".into(), make_test_context("acme"));
+        assert!(cache.get("acme").is_some());
+        cache.invalidate("acme");
+        assert!(cache.get("acme").is_none());
+    }
+
+    #[test]
+    fn cache_invalidate_nonexistent_is_noop() {
+        let cache = TenantCache::default();
+        cache.invalidate("ghost"); // should not panic
+    }
+
+    #[test]
+    fn cache_evict_expired_removes_old_entries() {
+        let cache = TenantCache::default();
+        // Insert an entry with a backdated timestamp
+        {
+            let mut map = cache.inner.write().unwrap();
+            map.insert(
+                "old".into(),
+                (
+                    make_test_context("old"),
+                    std::time::Instant::now() - std::time::Duration::from_secs(600),
+                ),
+            );
+            map.insert(
+                "fresh".into(),
+                (make_test_context("fresh"), std::time::Instant::now()),
+            );
+        }
+
+        assert!(cache.get("old").is_none()); // expired on read
+        assert!(cache.get("fresh").is_some());
+
+        // Both entries still in the map (expired one not removed by get)
+        assert_eq!(cache.inner.read().unwrap().len(), 2);
+
+        cache.evict_expired();
+
+        // Only fresh entry remains
+        assert_eq!(cache.inner.read().unwrap().len(), 1);
+        assert!(cache.get("fresh").is_some());
+    }
+
+    #[test]
+    fn cache_evict_expired_on_empty_cache() {
+        let cache = TenantCache::default();
+        cache.evict_expired(); // should not panic
+        assert_eq!(cache.inner.read().unwrap().len(), 0);
+    }
+}
