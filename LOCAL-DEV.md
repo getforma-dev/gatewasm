@@ -485,26 +485,13 @@ gatewasm/
 
 ## 9. Database Migrations
 
-Migrations run automatically on server startup. Current migrations (1-26):
+A single migration creates the entire schema on server startup. The original 26 incremental migrations were squashed into one since the product hasn't shipped to production yet. Old migrations are archived in `crates/server/src/db/pg_migrations_archived/` for reference.
 
-| # | Label | What it does |
-|---|-------|--------------|
-| 1 | initial schema | users, credentials, roles, user_roles, refresh_tokens, login_attempts |
-| 2 | hmac + email verification | email_verified, verification tokens, HMAC columns |
-| 3 | hardening | rate limiting, account lockout, token family tracking |
-| 4 | multi-tenancy | tenants table, tenant_id on all tables, scoped constraints |
-| 5 | compliance engine | audit_log, compliance_config, session_timeout, mfa columns |
-| 6 | hosted login branding | tenant branding (logo, colors, CSS), login_redirect_url |
-| 7 | self-serve onboarding | trial_expires_at, owner_user_id, platform users |
-| 8 | custom roles | tenant-scoped roles, permissions_jsonb, is_system flag |
-| 9 | webhooks | webhooks table, webhook_deliveries table |
-| 10-16 | login redirects → billing | redirect defaults, entitlements, orgs, owner plane, invites, billing |
-| 17-19 | MFA + indexes | MFA lockout + secret encryption, timeline events, query indexes |
-| 20-22 | security hardening | signup invites, platform redirect fix, security config table |
-| 23 | webauthn + fedcm | WebAuthn/FIDO2 credentials, FedCM approved clients |
-| 24 | enterprise security | PAR requests, mTLS certificates, DPoP jti cache |
-| 25 | SSF | Shared Signals Framework streams + outbox + geo columns |
-| 26 | tenant FK constraints | Foreign key constraints on tenant_id columns |
+| # | Label | What it creates |
+|---|-------|----------------|
+| 1 | initial schema (squashed) | All 32 tables, indexes, constraints, FK relationships, system roles, platform tenant seed data |
+
+After production launch, new migrations start at version 2 and are additive (never squash again once real user data exists).
 
 ---
 

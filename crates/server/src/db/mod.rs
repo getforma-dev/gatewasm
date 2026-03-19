@@ -31,136 +31,14 @@ async fn run_migrations(pool: &PgPool) -> Result<(), sqlx::Error> {
         "CREATE TABLE IF NOT EXISTS schema_migrations (version INT PRIMARY KEY, applied_at TIMESTAMPTZ DEFAULT NOW())"
     ).execute(pool).await?;
 
+    // Squashed migration: all 26 original migrations combined into one.
+    // Old migrations archived in pg_migrations_archived/ for reference.
+    // After production launch, new migrations start at version 2.
     let migrations: &[(i32, &str, &str)] = &[
         (
             1,
-            "initial schema",
+            "initial schema (squashed)",
             include_str!("pg_migrations/001_initial.sql"),
-        ),
-        (
-            2,
-            "hmac + email verification",
-            include_str!("pg_migrations/002_add_hmac_and_verification.sql"),
-        ),
-        (
-            3,
-            "hardening",
-            include_str!("pg_migrations/003_hardening.sql"),
-        ),
-        (
-            4,
-            "multi-tenancy",
-            include_str!("pg_migrations/004_multi_tenancy.sql"),
-        ),
-        (
-            5,
-            "compliance engine",
-            include_str!("pg_migrations/005_compliance.sql"),
-        ),
-        (
-            6,
-            "hosted login branding",
-            include_str!("pg_migrations/006_hosted_login.sql"),
-        ),
-        (
-            7,
-            "self-serve onboarding",
-            include_str!("pg_migrations/007_self_serve.sql"),
-        ),
-        (
-            8,
-            "custom roles",
-            include_str!("pg_migrations/008_custom_roles.sql"),
-        ),
-        (
-            9,
-            "webhooks",
-            include_str!("pg_migrations/009_webhooks.sql"),
-        ),
-        (
-            10,
-            "login redirect defaults",
-            include_str!("pg_migrations/010_login_redirect_defaults.sql"),
-        ),
-        (
-            11,
-            "entitlements + org model",
-            include_str!("pg_migrations/011_entitlements_and_orgs.sql"),
-        ),
-        (
-            12,
-            "owner plane",
-            include_str!("pg_migrations/012_owner_plane.sql"),
-        ),
-        (
-            13,
-            "redirect normalization",
-            include_str!("pg_migrations/013_redirect_normalization.sql"),
-        ),
-        (
-            14,
-            "owner invites",
-            include_str!("pg_migrations/014_owner_invites.sql"),
-        ),
-        (
-            15,
-            "refresh token auth context",
-            include_str!("pg_migrations/015_refresh_token_auth_context.sql"),
-        ),
-        (
-            16,
-            "owner dashboard analytics + billing",
-            include_str!("pg_migrations/016_owner_dashboard_analytics_and_billing.sql"),
-        ),
-        (
-            17,
-            "mfa lockout + secret hardening",
-            include_str!("pg_migrations/017_mfa_lockout_and_secret_hardening.sql"),
-        ),
-        (
-            18,
-            "owner timeline events",
-            include_str!("pg_migrations/018_owner_timeline_events.sql"),
-        ),
-        (
-            19,
-            "owner query performance indexes",
-            include_str!("pg_migrations/019_owner_query_performance_indexes.sql"),
-        ),
-        (
-            20,
-            "tenant signup mode + invites",
-            include_str!("pg_migrations/020_tenant_signup_mode_and_invites.sql"),
-        ),
-        (
-            21,
-            "fix platform login redirect",
-            include_str!("pg_migrations/021_fix_platform_login_redirect.sql"),
-        ),
-        (
-            22,
-            "security hardening",
-            include_str!("pg_migrations/022_security_hardening.sql"),
-        ),
-        (
-            23,
-            "webauthn + fedcm",
-            include_str!("pg_migrations/023_webauthn.sql"),
-        ),
-        (
-            24,
-            "enterprise security (PAR, mTLS certs, DPoP jti)",
-            include_str!("pg_migrations/024_enterprise_security.sql"),
-        ),
-        (
-            25,
-            "SSF streams + outbox + geo columns",
-            include_str!("pg_migrations/025_ssf.sql"),
-        ),
-        (
-            26,
-            "tenant FK constraints",
-            include_str!("pg_migrations/026_tenant_fk_constraints.sql"),
         ),
     ];
 
