@@ -13,7 +13,10 @@
     "test": "cargo test --lib",
     "test:integration": "cargo test -p gatewasm-server --test integration",
     "test:e2e": "cd admin && npx playwright test",
-    "typecheck": "cd admin && npm run typecheck"
+    "typecheck": "cd admin && npm run typecheck",
+    "clean": "rm -rf node_modules admin/node_modules admin/dist target",
+    "clean:npm": "rm -rf node_modules package-lock.json admin/node_modules admin/package-lock.json && npm cache clean --force",
+    "fresh": "npm run clean:npm && npm install && cd admin && npm install && cd .. && npm run build:ssr"
   },
   "devDependencies": {
     "concurrently": "^9.0.0"
