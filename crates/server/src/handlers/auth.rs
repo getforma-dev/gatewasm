@@ -4,7 +4,7 @@ use axum::{
     response::IntoResponse,
     Json,
 };
-use chrono::{Duration, Utc};
+use chrono::{DateTime, Duration, Utc};
 use std::net::SocketAddr;
 
 use crate::compliance::audit::{self, AuditAction, RESULT_FAILURE, RESULT_SUCCESS};
@@ -756,30 +756,14 @@ pub async fn register(
     }
 
     if let Some(slug) = tenant_slug.as_deref() {
-        let (subject, text, html) = email::verification_email_content(
-            &state.config.server_url,
+        dispatch_verification_email(
+            &state,
             slug,
             &tenant_app_name,
             &verification_token,
+            &user_id,
+            &email,
         );
-        if email::email_delivery_configured(&state.config) {
-            if let Err(error) =
-                email::send_email(&state.config, &email, &subject, &text, &html).await
-            {
-                tracing::warn!(
-                    user_id = %user_id,
-                    email = %email,
-                    %error,
-                    "Failed to send verification email"
-                );
-            }
-        } else {
-            tracing::warn!(
-                user_id = %user_id,
-                email = %email,
-                "SMTP is not configured; verification email not delivered"
-            );
-        }
     }
 
     let roles = vec![assigned_role_name];
@@ -858,6 +842,239 @@ pub async fn register(
             }
         })),
     ))
+}
+
+/// Check whether the account is currently locked out due to too many failed login attempts.
+/// Returns `Ok(())` if the account is not locked, or `Err((retry_after, AppError))` if it is.
+fn check_account_lockout(
+    locked_until: Option<DateTime<Utc>>,
+) -> Result<(), (u64, AppError)> {
+    if let Some(locked_dt) = locked_until {
+        let now = Utc::now();
+        if locked_dt > now {
+            let retry_after = (locked_dt - now).num_seconds().max(1) as u64;
+            return Err((
+                retry_after,
+                AppError::AccountLocked {
+                    error: "account_locked",
+                    message: format!(
+                        "Account is locked. Try again in {} seconds.",
+                        retry_after
+                    ),
+                    retry_after,
+                },
+            ));
+        }
+    }
+    Ok(())
+}
+
+/// Fire-and-forget geolocation classification + impossible-travel detection.
+/// Logs warnings and emits SSF/audit events as needed; errors are swallowed.
+async fn check_impossible_travel(
+    state: &AppState,
+    tenant: &TenantContext,
+    user_id: &str,
+    email: &str,
+    refresh_hash: &str,
+    login_ip: &str,
+    login_ip_type: &super::geolocation::IpType,
+    login_lat: Option<f64>,
+    login_lon: Option<f64>,
+    ua: Option<&str>,
+) {
+    if !tenant.security_config.impossible_travel_enabled {
+        return;
+    }
+    let (cur_lat, cur_lon) = match (login_lat, login_lon) {
+        (Some(lat), Some(lon)) => (lat, lon),
+        _ => return,
+    };
+
+    // Query user's most recent previous login location
+    let prev = match sqlx::query_as::<_, (f64, f64, DateTime<Utc>, String)>(
+        "SELECT login_lat, login_lon, created_at, COALESCE(login_ip_type, 'unknown') \
+         FROM refresh_tokens \
+         WHERE user_id = $1 AND tenant_id = $2 \
+           AND login_lat IS NOT NULL AND login_lon IS NOT NULL \
+           AND token_hash != $3 \
+         ORDER BY created_at DESC LIMIT 1",
+    )
+    .bind(user_id)
+    .bind(&tenant.tenant_id)
+    .bind(refresh_hash)
+    .fetch_optional(&state.db)
+    .await
+    {
+        Ok(Some(row)) => row,
+        Ok(None) => return,
+        Err(e) => {
+            tracing::warn!(error = %e, "impossible-travel: failed to query previous login");
+            return;
+        }
+    };
+
+    let (prev_lat, prev_lon, prev_time, prev_ip_type_str) = prev;
+    let prev_ip_type = super::geolocation::IpType::from_str_value(&prev_ip_type_str);
+    let now = Utc::now();
+    let threshold = tenant.security_config.impossible_travel_speed_threshold_kmh;
+    let confidence = super::geolocation::assess_travel_confidence(
+        prev_lat, prev_lon, prev_time, &prev_ip_type,
+        cur_lat, cur_lon, now, login_ip_type,
+        threshold,
+        100.0,
+    );
+
+    match confidence {
+        super::geolocation::TravelConfidence::Critical => {
+            tracing::warn!(
+                user_id = %user_id,
+                distance_km = super::geolocation::haversine_km(prev_lat, prev_lon, cur_lat, cur_lon),
+                "Impossible travel detected: CRITICAL"
+            );
+            if tenant.security_config.caep_enabled {
+                if let Err(e) = super::ssf_engine::emit_ssf_event(
+                    &state.db,
+                    &tenant.tenant_id,
+                    "device-compliance-change",
+                    &serde_json::json!({
+                        "user_id": user_id,
+                        "email": email,
+                        "risk_level": "critical",
+                        "reason": "impossible_travel",
+                        "distance_km": super::geolocation::haversine_km(prev_lat, prev_lon, cur_lat, cur_lon),
+                        "login_ip": login_ip,
+                    }),
+                    &state.keys,
+                )
+                .await
+                {
+                    tracing::error!(error = %e, "Failed to emit SSF device-compliance-change event");
+                }
+            }
+            if state.config.compliance.audit_log_enabled {
+                audit::log_audit(
+                    &state.db,
+                    &tenant.tenant_id,
+                    Some(user_id),
+                    AuditAction::USER_LOGIN,
+                    "/auth/login",
+                    login_ip,
+                    ua,
+                    None,
+                    RESULT_SUCCESS,
+                    Some("impossible_travel:critical"),
+                    &state.config.compliance.mode.to_string(),
+                )
+                .await;
+            }
+        }
+        super::geolocation::TravelConfidence::Elevated => {
+            tracing::warn!(
+                user_id = %user_id,
+                distance_km = super::geolocation::haversine_km(prev_lat, prev_lon, cur_lat, cur_lon),
+                "Impossible travel detected: ELEVATED"
+            );
+            if tenant.security_config.caep_enabled {
+                if let Err(e) = super::ssf_engine::emit_ssf_event(
+                    &state.db,
+                    &tenant.tenant_id,
+                    "impossible-travel",
+                    &serde_json::json!({
+                        "user_id": user_id,
+                        "email": email,
+                        "risk_level": "elevated",
+                        "distance_km": super::geolocation::haversine_km(prev_lat, prev_lon, cur_lat, cur_lon),
+                        "login_ip": login_ip,
+                    }),
+                    &state.keys,
+                )
+                .await
+                {
+                    tracing::error!(error = %e, "Failed to emit SSF impossible-travel event");
+                }
+            }
+            if state.config.compliance.audit_log_enabled {
+                audit::log_audit(
+                    &state.db,
+                    &tenant.tenant_id,
+                    Some(user_id),
+                    AuditAction::USER_LOGIN,
+                    "/auth/login",
+                    login_ip,
+                    ua,
+                    None,
+                    RESULT_SUCCESS,
+                    Some("impossible_travel:elevated"),
+                    &state.config.compliance.mode.to_string(),
+                )
+                .await;
+            }
+        }
+        super::geolocation::TravelConfidence::Low => {
+            if state.config.compliance.audit_log_enabled {
+                audit::log_audit(
+                    &state.db,
+                    &tenant.tenant_id,
+                    Some(user_id),
+                    AuditAction::USER_LOGIN,
+                    "/auth/login",
+                    login_ip,
+                    ua,
+                    None,
+                    RESULT_SUCCESS,
+                    Some("impossible_travel:low"),
+                    &state.config.compliance.mode.to_string(),
+                )
+                .await;
+            }
+        }
+        super::geolocation::TravelConfidence::Skip => {
+            // No action
+        }
+    }
+}
+
+/// Send the verification email for a newly registered user.
+/// Logs a warning if delivery fails or SMTP is not configured; never propagates errors.
+fn dispatch_verification_email(
+    state: &AppState,
+    tenant_slug: &str,
+    tenant_app_name: &str,
+    verification_token: &str,
+    user_id: &str,
+    email: &str,
+) {
+    let server_url = state.config.server_url.clone();
+    let slug = tenant_slug.to_owned();
+    let app_name = tenant_app_name.to_owned();
+    let vt = verification_token.to_owned();
+    let uid = user_id.to_owned();
+    let addr = email.to_owned();
+    let config = state.config.clone();
+
+    tokio::spawn(async move {
+        let (subject, text, html) =
+            email::verification_email_content(&server_url, &slug, &app_name, &vt);
+        if email::email_delivery_configured(&config) {
+            if let Err(error) =
+                email::send_email(&config, &addr, &subject, &text, &html).await
+            {
+                tracing::warn!(
+                    user_id = %uid,
+                    email = %addr,
+                    %error,
+                    "Failed to send verification email"
+                );
+            }
+        } else {
+            tracing::warn!(
+                user_id = %uid,
+                email = %addr,
+                "SMTP is not configured; verification email not delivered"
+            );
+        }
+    });
 }
 
 pub async fn login(
@@ -951,27 +1168,19 @@ pub async fn login(
         .min(i64::MAX as u64) as i64;
 
     // Check account lockout
-    if let Some(locked_dt) = locked_until {
-        let now = Utc::now();
-        if locked_dt > now {
-            let retry_after = (locked_dt - now).num_seconds().max(1) as u64;
-            db::log_login_attempt(
-                &state.db,
-                &email,
-                Some(&user_id),
-                false,
-                ip.as_deref(),
-                ua.as_deref(),
-                Some("account_locked"),
-                tenant_id.as_deref(),
-            )
-            .await;
-            return Err(AppError::AccountLocked {
-                error: "account_locked",
-                message: format!("Account is locked. Try again in {} seconds.", retry_after),
-                retry_after,
-            });
-        }
+    if let Err((_retry_after, lockout_err)) = check_account_lockout(locked_until) {
+        db::log_login_attempt(
+            &state.db,
+            &email,
+            Some(&user_id),
+            false,
+            ip.as_deref(),
+            ua.as_deref(),
+            Some("account_locked"),
+            tenant_id.as_deref(),
+        )
+        .await;
+        return Err(lockout_err);
     }
 
     let hashed_pw = match hashed_pw {
@@ -1164,149 +1373,19 @@ pub async fn login(
 
     // ── Impossible travel check (only when tenant has it enabled) ──────
     if let Some(ref t) = tenant {
-        if t.security_config.impossible_travel_enabled {
-            if let (Some(cur_lat), Some(cur_lon)) = (login_lat, login_lon) {
-                // Query user's most recent previous login location
-                let prev = sqlx::query_as::<_, (f64, f64, chrono::DateTime<Utc>, String)>(
-                    "SELECT login_lat, login_lon, created_at, COALESCE(login_ip_type, 'unknown') \
-                     FROM refresh_tokens \
-                     WHERE user_id = $1 AND tenant_id = $2 \
-                       AND login_lat IS NOT NULL AND login_lon IS NOT NULL \
-                       AND token_hash != $3 \
-                     ORDER BY created_at DESC LIMIT 1",
-                )
-                .bind(&user_id)
-                .bind(&t.tenant_id)
-                .bind(&refresh_hash)
-                .fetch_optional(&state.db)
-                .await
-                .ok()
-                .flatten();
-
-                if let Some((prev_lat, prev_lon, prev_time, prev_ip_type_str)) = prev {
-                    let prev_ip_type = super::geolocation::IpType::from_str_value(&prev_ip_type_str);
-                    let now = Utc::now();
-                    let threshold = t.security_config.impossible_travel_speed_threshold_kmh;
-                    let confidence = super::geolocation::assess_travel_confidence(
-                        prev_lat, prev_lon, prev_time, &prev_ip_type,
-                        cur_lat, cur_lon, now, &login_ip_type,
-                        threshold,
-                        100.0,
-                    );
-
-                    match confidence {
-                        super::geolocation::TravelConfidence::Critical => {
-                            tracing::warn!(
-                                user_id = %user_id,
-                                distance_km = super::geolocation::haversine_km(prev_lat, prev_lon, cur_lat, cur_lon),
-                                "Impossible travel detected: CRITICAL"
-                            );
-                            if t.security_config.caep_enabled {
-                                if let Err(e) = super::ssf_engine::emit_ssf_event(
-                                    &state.db,
-                                    &t.tenant_id,
-                                    "device-compliance-change",
-                                    &serde_json::json!({
-                                        "user_id": user_id,
-                                        "email": db_email,
-                                        "risk_level": "critical",
-                                        "reason": "impossible_travel",
-                                        "distance_km": super::geolocation::haversine_km(prev_lat, prev_lon, cur_lat, cur_lon),
-                                        "login_ip": login_ip_str,
-                                    }),
-                                    &state.keys,
-                                )
-                                .await
-                                {
-                                    tracing::error!(error = %e, "Failed to emit SSF device-compliance-change event");
-                                }
-                            }
-                            // Audit log for critical impossible travel
-                            if state.config.compliance.audit_log_enabled {
-                                audit::log_audit(
-                                    &state.db,
-                                    &t.tenant_id,
-                                    Some(&user_id),
-                                    AuditAction::USER_LOGIN,
-                                    "/auth/login",
-                                    &login_ip_str,
-                                    ua.as_deref(),
-                                    None,
-                                    RESULT_SUCCESS,
-                                    Some("impossible_travel:critical"),
-                                    &state.config.compliance.mode.to_string(),
-                                )
-                                .await;
-                            }
-                        }
-                        super::geolocation::TravelConfidence::Elevated => {
-                            tracing::warn!(
-                                user_id = %user_id,
-                                distance_km = super::geolocation::haversine_km(prev_lat, prev_lon, cur_lat, cur_lon),
-                                "Impossible travel detected: ELEVATED"
-                            );
-                            if t.security_config.caep_enabled {
-                                if let Err(e) = super::ssf_engine::emit_ssf_event(
-                                    &state.db,
-                                    &t.tenant_id,
-                                    "impossible-travel",
-                                    &serde_json::json!({
-                                        "user_id": user_id,
-                                        "email": db_email,
-                                        "risk_level": "elevated",
-                                        "distance_km": super::geolocation::haversine_km(prev_lat, prev_lon, cur_lat, cur_lon),
-                                        "login_ip": login_ip_str,
-                                    }),
-                                    &state.keys,
-                                )
-                                .await
-                                {
-                                    tracing::error!(error = %e, "Failed to emit SSF impossible-travel event");
-                                }
-                            }
-                            if state.config.compliance.audit_log_enabled {
-                                audit::log_audit(
-                                    &state.db,
-                                    &t.tenant_id,
-                                    Some(&user_id),
-                                    AuditAction::USER_LOGIN,
-                                    "/auth/login",
-                                    &login_ip_str,
-                                    ua.as_deref(),
-                                    None,
-                                    RESULT_SUCCESS,
-                                    Some("impossible_travel:elevated"),
-                                    &state.config.compliance.mode.to_string(),
-                                )
-                                .await;
-                            }
-                        }
-                        super::geolocation::TravelConfidence::Low => {
-                            // Audit log only — no SSF event
-                            if state.config.compliance.audit_log_enabled {
-                                audit::log_audit(
-                                    &state.db,
-                                    &t.tenant_id,
-                                    Some(&user_id),
-                                    AuditAction::USER_LOGIN,
-                                    "/auth/login",
-                                    &login_ip_str,
-                                    ua.as_deref(),
-                                    None,
-                                    RESULT_SUCCESS,
-                                    Some("impossible_travel:low"),
-                                    &state.config.compliance.mode.to_string(),
-                                )
-                                .await;
-                            }
-                        }
-                        super::geolocation::TravelConfidence::Skip => {
-                            // No action
-                        }
-                    }
-                }
-            }
-        }
+        check_impossible_travel(
+            &state,
+            t,
+            &user_id,
+            &db_email,
+            &refresh_hash,
+            login_ip_str,
+            &login_ip_type,
+            login_lat,
+            login_lon,
+            ua.as_deref(),
+        )
+        .await;
     }
 
     db::enforce_refresh_token_limit(&state.db, &user_id, db::MAX_REFRESH_TOKENS_PER_USER).await;

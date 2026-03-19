@@ -4,7 +4,7 @@ use axum::{
     Json,
 };
 use chrono::{DateTime, Utc};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use crate::error::AppError;
 use crate::AppState;
@@ -13,6 +13,88 @@ use super::{
     clamp_limit, normalize_optional_field, owner_claims, parse_rfc3339_opt, record_owner_event,
     request_id_from_req, OwnerEvent,
 };
+
+// ── Lifecycle enums ─────────────────────────────────────────────────────
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CustomerStatus {
+    Active,
+    Suspended,
+    Rejected,
+}
+
+impl std::fmt::Display for CustomerStatus {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Active => write!(f, "active"),
+            Self::Suspended => write!(f, "suspended"),
+            Self::Rejected => write!(f, "rejected"),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CustomerCategory {
+    Standard,
+    Education,
+    Agency,
+    Enterprise,
+}
+
+impl std::fmt::Display for CustomerCategory {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Standard => write!(f, "standard"),
+            Self::Education => write!(f, "education"),
+            Self::Agency => write!(f, "agency"),
+            Self::Enterprise => write!(f, "enterprise"),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RiskLevel {
+    Low,
+    Normal,
+    High,
+}
+
+impl std::fmt::Display for RiskLevel {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Low => write!(f, "low"),
+            Self::Normal => write!(f, "normal"),
+            Self::High => write!(f, "high"),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum LifecycleStage {
+    Lead,
+    Onboarding,
+    Active,
+    AtRisk,
+    Churned,
+}
+
+impl std::fmt::Display for LifecycleStage {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Lead => write!(f, "lead"),
+            Self::Onboarding => write!(f, "onboarding"),
+            Self::Active => write!(f, "active"),
+            Self::AtRisk => write!(f, "at_risk"),
+            Self::Churned => write!(f, "churned"),
+        }
+    }
+}
+
+// ── Query / request structs ─────────────────────────────────────────────
 
 #[derive(Debug, Deserialize)]
 pub struct ListCustomersQuery {
@@ -39,13 +121,13 @@ pub struct ListTenantsQuery {
 
 #[derive(Debug, Deserialize)]
 pub struct UpdateCustomerLifecycleRequest {
-    pub status: Option<String>,
-    pub category: Option<String>,
+    pub status: Option<CustomerStatus>,
+    pub category: Option<CustomerCategory>,
     pub company_name: Option<String>,
     pub billing_ref: Option<String>,
     pub notes: Option<String>,
-    pub risk_level: Option<String>,
-    pub lifecycle_stage: Option<String>,
+    pub risk_level: Option<RiskLevel>,
+    pub lifecycle_stage: Option<LifecycleStage>,
     pub blocked_reason: Option<String>,
     pub apply_to_tenants: Option<bool>,
 }
@@ -1131,51 +1213,22 @@ pub async fn update_customer_lifecycle(
             })?
             .0;
 
-    let status = normalize_optional_field(&body.status).map(|s| s.to_lowercase());
-    let category = normalize_optional_field(&body.category).map(|s| s.to_lowercase());
+    let status = body.status;
+    let category = body.category;
     let company_name = normalize_optional_field(&body.company_name);
     let billing_ref = normalize_optional_field(&body.billing_ref);
     let notes = normalize_optional_field(&body.notes);
-    let risk_level = normalize_optional_field(&body.risk_level).map(|s| s.to_lowercase());
-    let lifecycle_stage = normalize_optional_field(&body.lifecycle_stage).map(|s| s.to_lowercase());
+    let risk_level = body.risk_level;
+    let lifecycle_stage = body.lifecycle_stage;
     let blocked_reason = normalize_optional_field(&body.blocked_reason);
     let clear_blocked_reason = body.blocked_reason.is_some() && blocked_reason.is_none();
     let apply_to_tenants = body.apply_to_tenants.unwrap_or(true);
 
-    if let Some(ref next_status) = status {
-        if !["active", "suspended", "rejected"].contains(&next_status.as_str()) {
-            return Err(AppError::BadRequest {
-                error: "invalid_status",
-                message: "Status must be one of: active, suspended, rejected".into(),
-            });
-        }
-    }
-    if let Some(ref next_category) = category {
-        if !["standard", "education", "agency", "enterprise"].contains(&next_category.as_str()) {
-            return Err(AppError::BadRequest {
-                error: "invalid_category",
-                message: "Category must be one of: standard, education, agency, enterprise".into(),
-            });
-        }
-    }
-    if let Some(ref level) = risk_level {
-        if !["low", "normal", "high"].contains(&level.as_str()) {
-            return Err(AppError::BadRequest {
-                error: "invalid_risk_level",
-                message: "Risk level must be one of: low, normal, high".into(),
-            });
-        }
-    }
-    if let Some(ref stage) = lifecycle_stage {
-        if !["lead", "onboarding", "active", "at_risk", "churned"].contains(&stage.as_str()) {
-            return Err(AppError::BadRequest {
-                error: "invalid_lifecycle_stage",
-                message:
-                    "Lifecycle stage must be one of: lead, onboarding, active, at_risk, churned"
-                        .into(),
-            });
-        }
-    }
+    // String representations for SQL binding.
+    let status_str = status.as_ref().map(|v| v.to_string());
+    let category_str = category.as_ref().map(|v| v.to_string());
+    let risk_level_str = risk_level.as_ref().map(|v| v.to_string());
+    let lifecycle_stage_str = lifecycle_stage.as_ref().map(|v| v.to_string());
 
     let exists: Option<String> =
         sqlx::query_scalar("SELECT user_id FROM platform_accounts WHERE user_id = $1")
@@ -1204,13 +1257,13 @@ pub async fn update_customer_lifecycle(
              updated_at = NOW()
          WHERE user_id = $10",
     )
-    .bind(status.as_deref())
-    .bind(category.as_deref())
+    .bind(status_str.as_deref())
+    .bind(category_str.as_deref())
     .bind(company_name.as_deref())
     .bind(billing_ref.as_deref())
     .bind(notes.as_deref())
-    .bind(risk_level.as_deref())
-    .bind(lifecycle_stage.as_deref())
+    .bind(risk_level_str.as_deref())
+    .bind(lifecycle_stage_str.as_deref())
     .bind(clear_blocked_reason)
     .bind(blocked_reason.as_deref())
     .bind(&customer_id)
@@ -1235,7 +1288,7 @@ pub async fn update_customer_lifecycle(
     };
 
     if apply_to_tenants {
-        if matches!(status.as_deref(), Some("suspended" | "rejected")) {
+        if matches!(&status, Some(CustomerStatus::Suspended | CustomerStatus::Rejected)) {
             affected_tenants = sqlx::query(
                 "UPDATE tenants
                  SET status = 'suspended', updated_at = NOW()
@@ -1247,7 +1300,7 @@ pub async fn update_customer_lifecycle(
             .execute(&mut *tx)
             .await?
             .rows_affected();
-        } else if matches!(status.as_deref(), Some("active")) {
+        } else if matches!(&status, Some(CustomerStatus::Active)) {
             affected_tenants = sqlx::query(
                 "UPDATE tenants
                  SET status = 'active', updated_at = NOW()
