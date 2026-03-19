@@ -1,5 +1,13 @@
 -- Add missing FK constraints on tenant_id columns.
 -- The migration runner suppresses "already exists" errors, making this idempotent.
+-- Orphan cleanup runs first to prevent FK violation on existing data.
+
+UPDATE refresh_tokens SET tenant_id = NULL WHERE tenant_id IS NOT NULL AND tenant_id NOT IN (SELECT id FROM tenants);
+UPDATE oauth_clients SET tenant_id = NULL WHERE tenant_id IS NOT NULL AND tenant_id NOT IN (SELECT id FROM tenants);
+UPDATE oauth_states SET tenant_id = NULL WHERE tenant_id IS NOT NULL AND tenant_id NOT IN (SELECT id FROM tenants);
+UPDATE auth_codes SET tenant_id = NULL WHERE tenant_id IS NOT NULL AND tenant_id NOT IN (SELECT id FROM tenants);
+UPDATE login_attempts SET tenant_id = NULL WHERE tenant_id IS NOT NULL AND tenant_id NOT IN (SELECT id FROM tenants);
+UPDATE user_roles SET tenant_id = NULL WHERE tenant_id IS NOT NULL AND tenant_id NOT IN (SELECT id FROM tenants);
 
 ALTER TABLE refresh_tokens
   ADD CONSTRAINT fk_refresh_tokens_tenant

@@ -41,6 +41,10 @@ pub fn is_private_url(raw_url: &str) -> bool {
                 || h.starts_with("192.168.")
                 || h == "169.254.169.254"
                 || h.starts_with("169.254.")
+                // IPv6 private ranges
+                || h.starts_with("fc")   // fc00::/7 unique local
+                || h.starts_with("fd")   // fd00::/8 unique local
+                || h.starts_with("fe80") // fe80::/10 link-local
                 || h.ends_with(".internal")
                 || h.ends_with(".local");
         }

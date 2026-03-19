@@ -13,6 +13,7 @@ use serde::Deserialize;
 use sqlx::Row;
 
 use crate::compliance::audit::{self, AuditAction, RESULT_SUCCESS};
+use crate::middleware::fingerprint::extract_client_ip;
 use crate::handlers::webhooks::is_private_url;
 use crate::error::AppError;
 use crate::middleware::tenant::TenantContext;
@@ -103,6 +104,7 @@ pub async fn create_stream(
 ) -> Result<impl IntoResponse, AppError> {
     let tenant = tenant_from_req(&req)?;
     require_caep(&tenant)?;
+    let client_ip = extract_client_ip(req.headers(), None);
 
     let body: CreateStreamRequest =
         axum::Json::<CreateStreamRequest>::from_request(req, &state)
@@ -192,7 +194,7 @@ pub async fn create_stream(
             None,
             AuditAction::SSF_STREAM_CREATED,
             &format!("ssf/stream/{}", stream_id),
-            "0.0.0.0",
+            &client_ip,
             None,
             None,
             RESULT_SUCCESS,
@@ -327,6 +329,7 @@ pub async fn update_stream(
 ) -> Result<impl IntoResponse, AppError> {
     let tenant = tenant_from_req(&req)?;
     require_caep(&tenant)?;
+    let client_ip = extract_client_ip(req.headers(), None);
 
     let stream_uuid = uuid::Uuid::parse_str(&stream_id).map_err(|_| AppError::BadRequest {
         error: "invalid_id",
@@ -423,7 +426,7 @@ pub async fn update_stream(
                 None,
                 AuditAction::SSF_STREAM_RESUMED,
                 &format!("ssf/stream/{}", stream_id),
-                "0.0.0.0",
+                &client_ip,
                 None,
                 None,
                 RESULT_SUCCESS,
@@ -609,6 +612,7 @@ pub async fn poll_stream(
 ) -> Result<impl IntoResponse, AppError> {
     let tenant = tenant_from_req(&req)?;
     require_caep(&tenant)?;
+    let client_ip = extract_client_ip(req.headers(), None);
 
     let stream_uuid = uuid::Uuid::parse_str(&stream_id).map_err(|_| AppError::BadRequest {
         error: "invalid_id",
@@ -669,7 +673,7 @@ pub async fn poll_stream(
                 None,
                 AuditAction::SSF_POLL_ACK,
                 &format!("ssf/stream/{}", stream_id),
-                "0.0.0.0",
+                &client_ip,
                 None,
                 None,
                 RESULT_SUCCESS,
