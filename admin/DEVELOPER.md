@@ -2,34 +2,7 @@
 
 How to iterate on the UI: change colors, add components, add pages, modify layouts.
 
-## Quick Start (Dev Loop)
-
-```bash
-# Terminal 1: Start the Rust server
-cd auth-module-poc
-PORT=3101 SERVER_URL=http://127.0.0.1:3101 \
-  DATABASE_URL=postgres://gatewasm:gatewasm@localhost:5433/gatewasm_test \
-  JWT_SECRET=test-secret-key-for-development \
-  MANAGEMENT_API_KEY=mgmt_test_key \
-  PLATFORM_API_KEY=plat_local_dev_key \
-  COOKIE_DOMAIN=localhost \
-  CORS_ORIGIN=http://127.0.0.1:3101 \
-  GOOGLE_CLIENT_ID=dummy GOOGLE_CLIENT_SECRET=dummy \
-  GITHUB_CLIENT_ID=dummy GITHUB_CLIENT_SECRET=dummy \
-  cargo run -p gatewasm-server
-
-# Terminal 2: Watch mode (auto-rebuild JS + CSS on save)
-cd auth-module-poc/admin
-npm run dev
-
-# Terminal 3: Run tests
-cd auth-module-poc/admin
-npx playwright test
-```
-
-**Watch mode** rebuilds JS bundles and CSS on every file save. But it does NOT:
-- Rebuild the Rust server (needed if you change `dist/` hashes or Rust handlers)
-- Rebuild FormaJS itself (needed if you change `npm-modules/formajs/src/`)
+For project setup and running the server, see the root [README.md](../README.md) and [LOCAL-DEV.md](../LOCAL-DEV.md).
 
 ## Directory Map
 

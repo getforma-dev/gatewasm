@@ -28,7 +28,7 @@ aws ecr get-login-password --region us-east-1 | \
   docker login --username AWS --password-stdin 877573132739.dkr.ecr.us-east-1.amazonaws.com
 
 # --- Build & Deploy Code ---
-cd /path/to/forma-code/auth-module-poc
+cd /path/to/gatewasm
 TAG=$(./scripts/image_tag.sh)
 ./scripts/build_and_push_image.sh "$TAG"
 ./scripts/deploy_service_stack.sh staging "$TAG"
@@ -36,7 +36,7 @@ BASE_URL=https://auth-staging.getforma.dev ./scripts/smoke_auth_flow.sh
 ./scripts/deploy_service_stack.sh prod "$TAG"
 
 # --- Deploy Infrastructure Changes ---
-cd auth-module-poc/infra
+cd infra
 cdk diff --all -c gatewasm:imageTag=$TAG   # Preview what will change
 cdk deploy --all -c gatewasm:imageTag=$TAG # Apply changes
 
@@ -117,7 +117,7 @@ aws sts get-caller-identity
 ### Repository
 
 ```bash
-cd /path/to/forma-code/auth-module-poc/infra
+cd /path/to/gatewasm/infra
 npm install
 ```
 
@@ -130,7 +130,7 @@ npm install
 CDK bootstrap creates an S3 bucket and IAM roles that CDK uses for deployments. Run once per account/region.
 
 ```bash
-cd auth-module-poc/infra
+cd infra
 cdk bootstrap aws://877573132739/us-east-1
 ```
 
@@ -157,7 +157,7 @@ Keep this file until Step 5 (secrets population). Delete after.
 ### 3a. Preview Changes
 
 ```bash
-cd auth-module-poc/infra
+cd infra
 cdk diff --all -c gatewasm:imageTag=$(../scripts/image_tag.sh)
 ```
 
@@ -208,7 +208,7 @@ Set the following in `infra/cdk.json` (or override via `cdk -c ...`) before firs
 Then deploy:
 
 ```bash
-cd auth-module-poc
+cd gatewasm
 TAG=$(./scripts/image_tag.sh)
 ./scripts/deploy_service_stack.sh staging "$TAG"
 ```
@@ -227,10 +227,10 @@ aws ecr get-login-password --region us-east-1 | \
 
 ### 4b. Build & Push
 
-Build from the **monorepo root** (the Dockerfile references files outside `auth-module-poc/`):
+Build from the **project root**:
 
 ```bash
-cd /path/to/forma-code/auth-module-poc
+cd /path/to/gatewasm
 TAG=$(./scripts/image_tag.sh)
 ./scripts/build_and_push_image.sh "$TAG"
 ```
@@ -471,7 +471,7 @@ curl -b cookies.txt -X POST https://auth.getforma.dev/auth/token \
 ### Recommended Promotion Flow (Immutable Tags)
 
 ```bash
-cd /path/to/forma-code/auth-module-poc
+cd /path/to/gatewasm
 
 # 1. Build immutable image
 TAG=$(./scripts/image_tag.sh)
@@ -488,7 +488,7 @@ BASE_URL=https://auth-staging.getforma.dev ./scripts/smoke_auth_flow.sh
 ### Infrastructure-Only Changes
 
 ```bash
-cd auth-module-poc/infra
+cd infra
 TAG=$(../scripts/image_tag.sh)
 cdk diff --all -c gatewasm:imageTag=$TAG
 cdk deploy --all -c gatewasm:imageTag=$TAG
@@ -702,14 +702,14 @@ aws ecr describe-images \
   --output table
 
 # Deploy a previous immutable tag directly
-cd /path/to/forma-code/auth-module-poc
+cd /path/to/gatewasm
 ./scripts/rollback_to_tag.sh prod release-20260307-131200-abcd1234
 ```
 
 ### Roll Back Infrastructure
 
 ```bash
-cd auth-module-poc/infra
+cd infra
 
 # Check git history for previous CDK state
 git log --oneline lib/
@@ -919,7 +919,7 @@ aws rds restore-db-instance-from-db-snapshot \
 Run a live restore drill and capture timings:
 
 ```bash
-cd /path/to/forma-code/auth-module-poc
+cd /path/to/gatewasm
 ./scripts/db_restore_drill.sh --source-instance gatewasmstack-databaseinstanceaa8a5fde-vv99npqcxrxz
 ```
 
@@ -950,7 +950,7 @@ Track each run in your incident log (date, snapshot time, restore time, total RT
 To completely remove all infrastructure:
 
 ```bash
-cd auth-module-poc/infra
+cd infra
 
 # 1. Disable deletion protection on RDS first
 aws rds modify-db-instance \
@@ -985,14 +985,14 @@ aws secretsmanager delete-secret --secret-id gatewasm/rds-credentials --force-de
 
 | Task | Command |
 |------|---------|
-| Build immutable tag | `cd auth-module-poc && TAG=$(./scripts/image_tag.sh) && ./scripts/build_and_push_image.sh "$TAG"` |
-| Deploy staging | `cd auth-module-poc && ./scripts/deploy_service_stack.sh staging "$TAG"` |
-| Run staging smoke | `cd auth-module-poc && BASE_URL=https://auth-staging.getforma.dev ./scripts/smoke_auth_flow.sh` |
-| Promote prod | `cd auth-module-poc && ./scripts/deploy_service_stack.sh prod "$TAG"` |
-| Rollback | `cd auth-module-poc && ./scripts/rollback_to_tag.sh prod <immutable-tag>` |
+| Build immutable tag | `cd gatewasm && TAG=$(./scripts/image_tag.sh) && ./scripts/build_and_push_image.sh "$TAG"` |
+| Deploy staging | `cd gatewasm && ./scripts/deploy_service_stack.sh staging "$TAG"` |
+| Run staging smoke | `cd gatewasm && BASE_URL=https://auth-staging.getforma.dev ./scripts/smoke_auth_flow.sh` |
+| Promote prod | `cd gatewasm && ./scripts/deploy_service_stack.sh prod "$TAG"` |
+| Rollback | `cd gatewasm && ./scripts/rollback_to_tag.sh prod <immutable-tag>` |
 | ECR login | `aws ecr get-login-password --region us-east-1 \| docker login --username AWS --password-stdin 877573132739.dkr.ecr.us-east-1.amazonaws.com` |
 | Health check | `curl https://auth.getforma.dev/health` |
 | View logs | `aws logs tail /aws/apprunner/gatewasm-server/service --follow` |
 | Force restart | `aws apprunner start-deployment --service-arn arn:aws:apprunner:us-east-1:877573132739:service/gatewasm-server/7cf6cfb205964690b4672686d06c5379` |
-| Preview changes | `cd auth-module-poc/infra && cdk diff --all -c gatewasm:imageTag=$TAG` |
+| Preview changes | `cd infra && cdk diff --all -c gatewasm:imageTag=$TAG` |
 | Check cost | `aws ce get-cost-and-usage --time-period Start=$(date +%Y-%m-01),End=$(date +%Y-%m-%d) --granularity MONTHLY --metrics BlendedCost` |

@@ -9,6 +9,7 @@
     "db:reset": "docker compose exec db psql -U gatewasm -d gatewasm -c 'DROP SCHEMA public CASCADE; CREATE SCHEMA public;' && echo 'Dev DB wiped — restart server to re-run migrations'",
     "db:reset:test": "docker compose exec db-test psql -U gatewasm -d gatewasm_test -c 'DROP SCHEMA public CASCADE; CREATE SCHEMA public;' && echo 'Test DB wiped'",
     "db:clear": "docker compose exec db psql -U gatewasm -d gatewasm -c \"TRUNCATE users, credentials, refresh_tokens, login_attempts, sessions, user_roles, audit_log, oauth_states, auth_codes, webauthn_credentials, webauthn_challenges, fedcm_approved_clients, dpop_jti_cache, par_requests, organization_members, organizations, webhook_deliveries, webhooks, ssf_outbox, ssf_streams, tenant_user_invites, owner_invites, owner_timeline_events, provider_billing_events, platform_accounts CASCADE;\" && echo 'All user data cleared — tenants and roles preserved'",
+    "db:seed": "./scripts/seed.sh",
     "build": "cd admin && npm run build",
     "build:ssr": "cd admin && npm run build:ssr",
     "dev:frontend": "cd admin && npm run dev",

@@ -176,38 +176,27 @@ curl -s http://localhost:3001/health | jq
 
 ---
 
-## 4. Create a Local Tenant
+## 4. Seed Test Data
 
-The server is multi-tenant. You need at least one tenant for `/t/{slug}/...` routes to work.
-
-```bash
-BASE=http://localhost:3001
-
-# Create the "forma" tenant
-curl -s -X POST $BASE/platform/tenants \
-  -H "Authorization: Bearer plat_local_dev_key" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "name": "Forma Local",
-    "slug": "forma",
-    "owner_email": "admin@local.dev",
-    "allowed_providers": ["email", "google", "github"]
-  }' | jq
-```
-
-Save the returned `api_key` (starts with `mgmt_...`) — you need it for management endpoints.
-
-### Configure the tenant
+The server is multi-tenant. Run the seed script to create test tenants and users:
 
 ```bash
-curl -s -X PATCH $BASE/manage/config \
-  -H "Authorization: Bearer <PASTE_MGMT_KEY_HERE>" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "login_redirect_url": "http://localhost:3001/t/forma/dashboard",
-    "allowed_providers": ["email"]
-  }' | jq
+npm run db:seed
 ```
+
+This creates:
+
+| What | Details |
+|------|---------|
+| **forma** tenant | Platform dogfood tenant, email provider |
+| **acme** tenant | Test customer tenant, email provider |
+| **admin@local.dev** | Forma tenant, admin role, password: `Test1234!` |
+| **user@local.dev** | Forma tenant, regular user, password: `Test1234!` |
+| **john@acme.test** | Acme tenant, regular user, password: `Test1234!` |
+
+The seed script is idempotent — safe to run multiple times. Management API keys are printed on first run only (save them if you need them).
+
+To create tenants manually instead, see the [API Quick Reference](#7-api-quick-reference) section below.
 
 ---
 
@@ -215,7 +204,7 @@ curl -s -X PATCH $BASE/manage/config \
 
 Open: **http://localhost:3001/t/forma/login**
 
-1. Register with any email/password
+1. Log in with `admin@local.dev` / `Test1234!`
 2. You land on the dashboard at `/t/forma/dashboard`
 3. Test profile, login history, sign out
 
@@ -477,8 +466,9 @@ gatewasm/
 ├── infra/                        # AWS CDK infrastructure
 ├── docker-compose.yml            # Local Postgres + pgweb
 ├── .env                          # Local config (gitignored)
-├── RUNBOOK.md                    # Deployment procedures
-└── LOCAL-DEV.md                  # This file
+├── README.md                     # Project overview and script reference
+├── LOCAL-DEV.md                  # This file
+└── RUNBOOK.md                    # Deployment procedures
 ```
 
 ---
@@ -606,7 +596,6 @@ The server recompiles on `cargo run`. For faster iteration:
 cargo install cargo-watch
 
 # Auto-restart on file changes
-cd auth-module-poc
 cargo watch -x 'run -p gatewasm-server' \
   -i 'tests/*' -i 'bridge/*' -i 'infra/*'
 ```
@@ -614,8 +603,6 @@ cargo watch -x 'run -p gatewasm-server' \
 ### Deploy to AWS
 
 ```bash
-cd auth-module-poc
-
 # 1. Build image for linux/amd64
 docker build --platform linux/amd64 -t gatewasm-server -f crates/gatewasm-server/Dockerfile ..
 
