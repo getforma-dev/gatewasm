@@ -7,6 +7,8 @@ use axum::{
 use chrono::{Duration, Utc};
 use serde::Deserialize;
 
+use sqlx::Row;
+
 use crate::error::AppError;
 use crate::handlers::management::is_valid_css_color;
 use crate::html_template::{render_page, PageConfig, PageOutput};
@@ -239,6 +241,9 @@ pub struct UpdateTenantRequest {
     pub branding_app_name: Option<String>,
     pub login_redirect_url: Option<String>,
     pub allowed_origins: Option<Vec<String>>,
+    pub onboarding_completed: Option<bool>,
+    pub onboarding_step: Option<i16>,
+    pub preferred_tab: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -483,31 +488,12 @@ pub async fn get_my_tenant(
             message: "Not authenticated".into(),
         })?;
 
-    let row = sqlx::query_as::<
-        _,
-        (
-            String,
-            String,
-            String,
-            String,
-            String,
-            serde_json::Value,
-            serde_json::Value,
-            i32,
-            String,
-            Option<chrono::DateTime<Utc>>,
-            Option<String>,
-            Option<String>,
-            Option<String>,
-            Option<String>,
-            chrono::DateTime<Utc>,
-            chrono::DateTime<Utc>,
-        ),
-    >(
+    let row = sqlx::query(
         "SELECT id, name, slug, owner_email, status, allowed_providers, allowed_origins, \
-         max_users, COALESCE(plan, 'trial'), trial_ends_at, \
+         max_users, COALESCE(plan, 'trial') AS plan, trial_ends_at, \
          branding_logo_url, branding_primary_color, branding_app_name, \
          login_redirect_url, \
+         onboarding_completed, onboarding_step, preferred_tab, \
          created_at, updated_at \
          FROM tenants WHERE id = $1 AND owner_user_id = $2 AND status != 'deleted'",
     )
@@ -520,24 +506,9 @@ pub async fn get_my_tenant(
         message: "Tenant not found or you don't have access".into(),
     })?;
 
-    let (
-        id,
-        name,
-        slug,
-        owner_email,
-        status,
-        providers,
-        origins,
-        max_users,
-        plan,
-        trial_ends,
-        logo,
-        primary_color,
-        app_name,
-        redirect_url,
-        created,
-        updated,
-    ) = row;
+    let id: String = row.get("id");
+    let slug: String = row.get("slug");
+    let redirect_url: Option<String> = row.get("login_redirect_url");
     let resolved_login_redirect =
         resolve_login_redirect(&state.config.server_url, &slug, redirect_url.as_deref());
 
@@ -549,24 +520,27 @@ pub async fn get_my_tenant(
 
     Ok(Json(serde_json::json!({
         "id": id,
-        "name": name,
+        "name": row.get::<String, _>("name"),
         "slug": slug,
-        "owner_email": owner_email,
-        "status": status,
-        "allowed_providers": providers,
-        "allowed_origins": origins,
-        "max_users": max_users,
+        "owner_email": row.get::<String, _>("owner_email"),
+        "status": row.get::<String, _>("status"),
+        "allowed_providers": row.get::<serde_json::Value, _>("allowed_providers"),
+        "allowed_origins": row.get::<serde_json::Value, _>("allowed_origins"),
+        "max_users": row.get::<i32, _>("max_users"),
         "user_count": user_count,
-        "plan": plan,
-        "trial_ends_at": trial_ends.map(|t| t.to_rfc3339()),
+        "plan": row.get::<String, _>("plan"),
+        "trial_ends_at": row.get::<Option<chrono::DateTime<Utc>>, _>("trial_ends_at").map(|t| t.to_rfc3339()),
         "branding": {
-            "logo_url": logo,
-            "primary_color": primary_color,
-            "app_name": app_name,
+            "logo_url": row.get::<Option<String>, _>("branding_logo_url"),
+            "primary_color": row.get::<Option<String>, _>("branding_primary_color"),
+            "app_name": row.get::<Option<String>, _>("branding_app_name"),
             "login_redirect_url": resolved_login_redirect,
         },
-        "created_at": created.to_rfc3339(),
-        "updated_at": updated.to_rfc3339(),
+        "onboarding_completed": row.get::<bool, _>("onboarding_completed"),
+        "onboarding_step": row.get::<i16, _>("onboarding_step"),
+        "preferred_tab": row.get::<Option<String>, _>("preferred_tab"),
+        "created_at": row.get::<chrono::DateTime<Utc>, _>("created_at").to_rfc3339(),
+        "updated_at": row.get::<chrono::DateTime<Utc>, _>("updated_at").to_rfc3339(),
     })))
 }
 
@@ -665,6 +639,33 @@ pub async fn update_my_tenant(
             .bind(&tenant_id)
             .execute(&state.db)
             .await?;
+    }
+    if let Some(v) = body.onboarding_completed {
+        sqlx::query(
+            "UPDATE tenants SET onboarding_completed = $1, updated_at = NOW() WHERE id = $2",
+        )
+        .bind(v)
+        .bind(&tenant_id)
+        .execute(&state.db)
+        .await?;
+    }
+    if let Some(v) = body.onboarding_step {
+        sqlx::query(
+            "UPDATE tenants SET onboarding_step = $1, updated_at = NOW() WHERE id = $2",
+        )
+        .bind(v)
+        .bind(&tenant_id)
+        .execute(&state.db)
+        .await?;
+    }
+    if let Some(ref v) = body.preferred_tab {
+        sqlx::query(
+            "UPDATE tenants SET preferred_tab = $1, updated_at = NOW() WHERE id = $2",
+        )
+        .bind(v)
+        .bind(&tenant_id)
+        .execute(&state.db)
+        .await?;
     }
 
     state.tenant_cache.invalidate(&slug);
