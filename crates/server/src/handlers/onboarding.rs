@@ -888,6 +888,26 @@ pub async fn tenant_stats(
         providers.insert(provider, serde_json::json!(count));
     }
 
+    // Latest user (for wizard success state)
+    let latest_user = if total_users > 0 {
+        sqlx::query_as::<_, (String, String, chrono::DateTime<chrono::Utc>)>(
+            "SELECT email, \
+             COALESCE((SELECT lp.provider FROM login_attempts lp WHERE lp.user_id = u.id AND lp.success = TRUE ORDER BY lp.created_at DESC LIMIT 1), 'email') as provider, \
+             u.created_at \
+             FROM users u WHERE u.tenant_id = $1 ORDER BY u.created_at DESC LIMIT 1"
+        )
+        .bind(&tenant_id)
+        .fetch_optional(&state.db)
+        .await?
+        .map(|(email, provider, created_at)| serde_json::json!({
+            "email": email,
+            "provider": provider,
+            "created_at": created_at,
+        }))
+    } else {
+        None
+    };
+
     Ok(Json(serde_json::json!({
         "tenant_id": tenant_id,
         "total_users": total_users,
@@ -897,6 +917,7 @@ pub async fn tenant_stats(
         "logins_24h": logins_24h,
         "failed_logins_24h": failed_logins_24h,
         "providers": providers,
+        "latest_user": latest_user,
     })))
 }
 
