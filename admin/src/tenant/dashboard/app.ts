@@ -27,10 +27,22 @@ async function boot() {
     try {
       if (sessionStorage.getItem(loopKey)) {
         sessionStorage.removeItem(loopKey);
-        document.getElementById('app')!.innerHTML =
-          '<div style="display:flex;align-items:center;justify-content:center;min-height:100vh;color:#e8e6e3;font-size:0.85rem;flex-direction:column;gap:1rem;">' +
-          '<p>Unable to load dashboard. Please sign in again.</p>' +
-          '<a href="/t/' + slug + '/login" style="color:#6366f1;">Go to login</a></div>';
+        const app = document.getElementById('app')!;
+        app.textContent = '';
+        const wrapper = document.createElement('div');
+        wrapper.className = 'tl-page';
+        const card = document.createElement('div');
+        card.className = 'tl-card';
+        const msg = document.createElement('p');
+        msg.textContent = 'Unable to load dashboard. Please sign in again.';
+        const link = document.createElement('a');
+        link.href = '/t/' + slug + '/login';
+        link.textContent = 'Go to login';
+        link.className = 'tl-link';
+        card.appendChild(msg);
+        card.appendChild(link);
+        wrapper.appendChild(card);
+        app.appendChild(wrapper);
         return;
       }
       sessionStorage.setItem(loopKey, '1');

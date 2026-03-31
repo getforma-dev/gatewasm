@@ -19,6 +19,7 @@
     "test:integration": "cargo test -p gatewasm-server --test integration",
     "test:e2e": "cd admin && npx playwright test",
     "typecheck": "cd admin && npm run typecheck",
+    "dev:clean": "npm run db:reset && npm run dev",
     "cache:clear": "open http://localhost:${PORT:-3001}/dev/clear-cache",
     "clean": "rm -rf node_modules admin/node_modules",
     "clean:build": "rm -rf admin/dist target",
