@@ -58,7 +58,9 @@ export const [name, setName] = createSignal('');
 export const [error, setError] = createSignal<string | null>(null);
 export const [success, setSuccess] = createSignal<string | null>(null);
 export const [loading, setLoading] = createSignal(false);
-export const [mode, setMode] = createSignal<LoginMode>(resetToken ? 'reset' : 'login');
+const modeParam = urlParams.get('mode');
+const initialMode: LoginMode = resetToken ? 'reset' : (modeParam === 'register' ? 'register' : 'login');
+export const [mode, setMode] = createSignal<LoginMode>(initialMode);
 export const [showPassword, setShowPassword] = createSignal(false);
 export const [rememberEmail, setRememberEmail] = createSignal(false);
 

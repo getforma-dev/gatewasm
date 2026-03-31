@@ -4,7 +4,7 @@ import { LoadingBar } from '../../core/components/LoadingBar';
 import { ToastView } from '../../core/components/Toast';
 import { WizardFlow } from './wizard/WizardFlow';
 import {
-  view, loading, toast, backToTenants, loadTenants, signout,
+  view, loading, toast, backToTenants, loadTenants, signout, selectedTenant,
 } from './store';
 
 // SVG icons — Lucide, stroke-width 1.5
@@ -38,7 +38,12 @@ export function ConsoleApp() {
       onNavigate: (id: string) => {
         if (id === 'refresh') { loadTenants(); return; }
         if (id === 'signout') { signout(); return; }
-        if (id === 'tenants') { backToTenants(); return; }
+        if (id === 'tenants') {
+          const t = selectedTenant();
+          if (t && !t.onboarding_completed) return; // stay on wizard
+          backToTenants();
+          return;
+        }
       },
     }),
     h('main', { class: 'main' },

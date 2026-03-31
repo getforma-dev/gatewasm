@@ -9,8 +9,9 @@ interface TestAuthStepProps {
 
 export function TestAuthStep({ tenant, onNext }: TestAuthStepProps) {
   const serverUrl: string = (window as any).__FORMA_SERVER_URL__ || window.location.origin;
-  const loginUrl = serverUrl + '/t/' + tenant.slug + '/login';
-  const sandboxUrl = serverUrl + '/t/' + tenant.slug + '/sandbox';
+  const sandboxPath = '/t/' + tenant.slug + '/sandbox';
+  const loginUrl = serverUrl + '/t/' + tenant.slug + '/login?redirect=' + encodeURIComponent(sandboxPath) + '&mode=register';
+  const sandboxUrl = serverUrl + sandboxPath;
   const [success, setSuccess] = createSignal(false);
   const [latestUser, setLatestUser] = createSignal<TenantStats['latest_user']>(null);
 
@@ -48,7 +49,7 @@ export function TestAuthStep({ tenant, onNext }: TestAuthStepProps) {
       createShow(
         () => !success(),
         () => h('p', { class: 'wizard-step-subtitle' },
-          'Open your login page in a new tab, register as a test user, and watch the magic.',
+          'Register a new test account on your app\'s login page. This is separate from your GateWASM account \u2014 it\'s what your customers will use.',
         ),
       ),
     ),

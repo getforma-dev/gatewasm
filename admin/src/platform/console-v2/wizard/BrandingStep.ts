@@ -8,6 +8,9 @@ interface BrandingStepProps {
 }
 
 export function BrandingStep({ tenant, onNext }: BrandingStepProps) {
+  const serverUrl: string = (window as any).__FORMA_SERVER_URL__ || window.location.origin;
+  const loginUrl = serverUrl + '/t/' + tenant.slug + '/login';
+
   const [appName, setAppName] = createSignal(tenant.name || '');
   const [color, setColor] = createSignal(tenant.primary_color || '#6366f1');
   const [saving, setSaving] = createSignal(false);
@@ -41,6 +44,13 @@ export function BrandingStep({ tenant, onNext }: BrandingStepProps) {
         placeholder: 'My SaaS App',
         required: true,
       }),
+      // Login URL preview (read-only slug display)
+      h('div', { class: 'field', style: 'margin-bottom:1rem;' },
+        h('label', { style: 'font-size:0.8rem;color:var(--text-2);' }, 'Login URL'),
+        h('code', {
+          style: 'display:block;padding:0.5rem 0.75rem;background:var(--surface-2);border-radius:6px;font-size:0.85rem;color:var(--text-1);word-break:break-all;',
+        }, loginUrl),
+      ),
       // Color field — custom layout for color picker + text input
       h('div', { class: 'field' },
         h('label', null, 'Primary Color'),
