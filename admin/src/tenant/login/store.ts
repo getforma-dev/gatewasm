@@ -40,6 +40,12 @@ if (inviteToken) {
 }
 
 const resetToken = urlParams.get('reset_token') || '';
+
+// ── Redirect query param (for post-auth navigation) ────────────────────
+const redirectParam = urlParams.get('redirect') || '';
+// Security: only allow same-tenant redirects (starts with /t/{slug}/)
+const safeRedirect = redirectParam.startsWith('/t/' + slug + '/') ? redirectParam : '';
+
 export const inviteOnly = signupMode === 'invite_only';
 export const allowPublicSignup = !inviteOnly || !!inviteToken;
 
@@ -145,7 +151,7 @@ function handleOAuthCallback() {
   })
     .then((res) => {
       if (res.ok) {
-        window.location.href = loginRedirectUrl;
+        window.location.href = safeRedirect || loginRedirectUrl;
       } else {
         window.history.replaceState(null, '', window.location.pathname);
         setLoading(false);
@@ -220,7 +226,7 @@ export function submitForm(e: Event) {
       if (inviteToken) {
         try { sessionStorage.removeItem(inviteStorageKey); } catch { /* noop */ }
       }
-      window.location.href = loginRedirectUrl;
+      window.location.href = safeRedirect || loginRedirectUrl;
     })
     .catch((err: any) => {
       setLoading(false);
@@ -265,7 +271,7 @@ function setupBfcacheListener() {
         credentials: 'include',
         body: JSON.stringify({ grant_type: 'refresh_token' }),
       })
-        .then((r) => { if (r.ok) window.location.href = loginRedirectUrl; })
+        .then((r) => { if (r.ok) window.location.href = safeRedirect || loginRedirectUrl; })
         .catch(() => { /* noop */ });
     }
   });
