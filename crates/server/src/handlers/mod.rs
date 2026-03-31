@@ -527,6 +527,10 @@ fn create_router_inner(state: AppState, rate_limit_enabled: bool) -> Router {
             "/platform/console",
             get(platform_dashboard::dashboard_page),
         )
+        .route(
+            "/platform/console-v2",
+            get(platform_dashboard::dashboard_page_v2),
+        )
         .route("/platform/admin/dashboard", get(owner::dashboard_page))
         .route("/sw.js", get(crate::assets::serve_sw))
         .route("/_assets/{filename}", get(crate::assets::serve_asset))
