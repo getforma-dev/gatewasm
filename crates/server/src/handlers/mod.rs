@@ -9,6 +9,7 @@ pub mod docs;
 pub mod fedcm;
 pub mod geolocation;
 pub mod hosted_login;
+pub mod introspect;
 pub mod introspection;
 pub mod jwks;
 pub mod management;
@@ -64,6 +65,7 @@ fn create_router_inner(state: AppState, rate_limit_enabled: bool) -> Router {
     // ── Protected auth routes (require JWT + compliance enforcement) ──
     let protected = Router::new()
         .route("/auth/me", get(auth::me))
+        .route("/auth/introspect", get(introspect::introspect))
         .route("/auth/account", delete(auth::delete_account))
         .route("/auth/login-history", get(auth::login_history))
         .layer(middleware::from_fn_with_state(
