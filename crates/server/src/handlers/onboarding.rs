@@ -892,8 +892,8 @@ pub async fn tenant_stats(
     // Latest user (for wizard success state)
     let latest_user = if total_users > 0 {
         sqlx::query_as::<_, (String, String, chrono::DateTime<chrono::Utc>)>(
-            "SELECT email, \
-             COALESCE((SELECT lp.provider FROM login_attempts lp WHERE lp.user_id = u.id AND lp.success = TRUE ORDER BY lp.created_at DESC LIMIT 1), 'email') as provider, \
+            "SELECT u.email, \
+             COALESCE((SELECT c.provider FROM credentials c WHERE c.user_id = u.id AND c.tenant_id = u.tenant_id ORDER BY c.created_at DESC LIMIT 1), 'email') as provider, \
              u.created_at \
              FROM users u WHERE u.tenant_id = $1 ORDER BY u.created_at DESC LIMIT 1"
         )
