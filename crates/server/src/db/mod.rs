@@ -40,6 +40,11 @@ async fn run_migrations(pool: &PgPool) -> Result<(), sqlx::Error> {
             "initial schema (squashed)",
             include_str!("pg_migrations/001_initial.sql"),
         ),
+        (
+            2,
+            "onboarding fields",
+            include_str!("pg_migrations/002_onboarding_fields.sql"),
+        ),
     ];
 
     for &(version, label, sql) in migrations {
