@@ -17,7 +17,7 @@ export function TestAuthStep({ tenant, onNext }: TestAuthStepProps) {
 
   // Auto-open login page (detect popup blocker)
   const popup = window.open(loginUrl, '_blank');
-  const [popupBlocked, setPopupBlocked] = createSignal(!popup);
+  const [popupBlocked] = createSignal(!popup);
 
   // Poll for first auth event
   const poller = createPoller({
