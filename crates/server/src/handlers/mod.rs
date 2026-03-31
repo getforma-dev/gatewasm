@@ -513,6 +513,7 @@ fn create_router_inner(state: AppState, rate_limit_enabled: bool) -> Router {
         .route("/auth/jwks", get(jwks::jwks))
         .route("/auth/callback/{provider}", get(oauth::callback))
         .route("/health", get(health))
+        .route("/dev/clear-cache", get(dev_clear_cache))
         .route("/bridge.js", get(serve_bridge_js))
         .route("/bridge/integrity", get(bridge_integrity::bridge_integrity))
         .route(
@@ -599,6 +600,40 @@ async fn favicon() -> impl IntoResponse {
     (
         [(header::CACHE_CONTROL, "public, max-age=86400")],
         StatusCode::NO_CONTENT,
+    )
+}
+
+/// GET /dev/clear-cache — Dev-only page that nukes service workers, caches, and storage.
+/// Runs on the same origin so it has access to everything.
+async fn dev_clear_cache() -> impl IntoResponse {
+    (
+        [(axum::http::header::CONTENT_TYPE, "text/html; charset=utf-8")],
+        r#"<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>Clearing caches...</title>
+<style>
+  body{background:#0a0a0c;color:#e8e6e3;font-family:monospace;display:flex;align-items:center;
+  justify-content:center;min-height:100vh;flex-direction:column;gap:0.5rem;font-size:0.85rem}
+  .ok{color:#34d399} .item{color:#6366f1} a{color:#6366f1}
+</style></head><body><div id="log">Clearing...</div>
+<script>
+(async()=>{
+  const log=document.getElementById('log'),L=[];
+  const add=m=>{L.push(m);log.innerHTML=L.join('<br>')};
+  if('serviceWorker' in navigator){
+    const rs=await navigator.serviceWorker.getRegistrations();
+    for(const r of rs){await r.unregister();add('<span class="item">✓ Unregistered SW: '+r.scope+'</span>')}
+    if(!rs.length)add('No service workers registered')
+  }
+  if('caches' in window){
+    const ks=await caches.keys();
+    for(const k of ks){await caches.delete(k);add('<span class="item">✓ Deleted cache: '+k+'</span>')}
+    if(!ks.length)add('No cache storage entries')
+  }
+  const lc=localStorage.length;localStorage.clear();add('✓ localStorage cleared ('+lc+' items)');
+  const sc=sessionStorage.length;sessionStorage.clear();add('✓ sessionStorage cleared ('+sc+' items)');
+  add('<br><span class="ok">Done. <a href="javascript:history.back()">Go back</a> or <a href="/platform/console-v2">Console v2</a></span>');
+})();
+</script></body></html>"#,
     )
 }
 
