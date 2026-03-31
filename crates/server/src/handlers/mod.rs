@@ -605,26 +605,29 @@ async fn favicon() -> impl IntoResponse {
 
 /// GET /dev/clear-cache — Dev-only page that nukes service workers, caches, storage, and cookies.
 /// Runs on the same origin so it has access to everything.
-/// Also sets `Set-Cookie` headers to expire known HttpOnly auth cookies that JS cannot reach.
-async fn dev_clear_cache() -> impl IntoResponse {
-    // Expire known HttpOnly refresh-token cookies via Set-Cookie headers.
-    // Cookie names follow the pattern `gw_rt_{slug}` at path `/t/{slug}` (or `/` for platform),
-    // plus legacy `refresh_token` at `/`.  In HTTPS mode, `__Host-` prefixed variants exist too.
-    let clear_cookies: &[&str] = &[
-        "gw_rt_platform=; HttpOnly; Path=/; Max-Age=0",
-        "gw_rt_forma=; HttpOnly; Path=/; Max-Age=0",
-        "gw_rt_forma=; HttpOnly; Path=/t/forma; Max-Age=0",
-        "refresh_token=; HttpOnly; Path=/; Max-Age=0",
-        "__Host-gw_rt_platform=; HttpOnly; Secure; SameSite=None; Path=/; Max-Age=0",
-        "__Host-gw_rt_forma=; HttpOnly; Secure; SameSite=None; Path=/; Max-Age=0",
-        "__Host-refresh_token=; HttpOnly; Secure; SameSite=None; Path=/; Max-Age=0",
-    ];
+/// Queries ALL tenant slugs from the DB to clear every possible HttpOnly auth cookie.
+async fn dev_clear_cache(State(state): State<AppState>) -> impl IntoResponse {
+    // Query all tenant slugs so we can expire every possible auth cookie
+    let slugs: Vec<String> = sqlx::query_scalar("SELECT slug FROM tenants")
+        .fetch_all(&state.db)
+        .await
+        .unwrap_or_default();
 
     let mut hm = axum::http::HeaderMap::new();
     hm.insert(header::CONTENT_TYPE, "text/html; charset=utf-8".parse().unwrap());
-    for cookie in clear_cookies {
-        hm.append(header::SET_COOKIE, cookie.parse().unwrap());
+
+    // Clear cookies for every tenant slug
+    for slug in &slugs {
+        // Scoped cookie at /t/{slug}
+        let c = format!("gw_rt_{}=; HttpOnly; Path=/t/{}; Max-Age=0", slug, slug);
+        hm.append(header::SET_COOKIE, c.parse().unwrap());
+        // Platform-style cookie at /
+        let c2 = format!("gw_rt_{}=; HttpOnly; Path=/; Max-Age=0", slug);
+        hm.append(header::SET_COOKIE, c2.parse().unwrap());
     }
+    // Legacy cookies
+    hm.append(header::SET_COOKIE, "refresh_token=; HttpOnly; Path=/; Max-Age=0".parse().unwrap());
+    hm.append(header::SET_COOKIE, "__Host-refresh_token=; HttpOnly; Secure; SameSite=None; Path=/; Max-Age=0".parse().unwrap());
 
     (hm, r#"<!DOCTYPE html>
 <html><head><meta charset="utf-8"><title>Clearing caches...</title>
@@ -637,19 +640,21 @@ async fn dev_clear_cache() -> impl IntoResponse {
 (async()=>{
   const log=document.getElementById('log'),L=[];
   const add=m=>{L.push(m);log.innerHTML=L.join('<br>')};
-  // Clear JS-accessible cookies
+  // Clear JS-accessible cookies across all paths
   const cookies=document.cookie.split(';');
   let cc=0;
   for(const c of cookies){
     const name=c.split('=')[0].trim();
     if(!name)continue;
+    // Clear at root and every /t/* subpath
     document.cookie=name+'=; Max-Age=0; Path=/';
-    document.cookie=name+'=; Max-Age=0; Path=/t/forma';
-    document.cookie=name+'=; Max-Age=0; Path=/t/platform';
+    // Also try common subpaths
+    const paths=window.location.pathname.match(/\/t\/[^/]+/g)||[];
+    for(const p of paths) document.cookie=name+'=; Max-Age=0; Path='+p;
     cc++;
   }
   add('\u2713 Expired '+cc+' JS-accessible cookie(s)');
-  add('<span class="item">\u2713 HttpOnly auth cookies expired via response headers</span>');
+  add('<span class="item">\u2713 HttpOnly auth cookies expired via response headers (all '+document.title+' tenants)</span>');
   if('serviceWorker' in navigator){
     const rs=await navigator.serviceWorker.getRegistrations();
     for(const r of rs){await r.unregister();add('<span class="item">\u2713 Unregistered SW: '+r.scope+'</span>')}
