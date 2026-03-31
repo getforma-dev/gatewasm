@@ -2,6 +2,11 @@ import { mount } from 'formajs';
 import { ConsoleApp } from './ConsoleApp';
 import { init } from './store';
 
+// Dev mode: clear stale service workers
+if (location.hostname === 'localhost') {
+  navigator.serviceWorker?.getRegistrations().then(rs => rs.forEach(r => r.unregister()));
+}
+
 // Auth-gated page: no SSR content, CSR mount after auth.
 // Store is a singleton module — ConsoleApp imports deps directly.
 // init() rejects on auth failure (redirects to login).

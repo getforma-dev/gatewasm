@@ -15,8 +15,9 @@ export function TestAuthStep({ tenant, onNext }: TestAuthStepProps) {
   const [success, setSuccess] = createSignal(false);
   const [latestUser, setLatestUser] = createSignal<TenantStats['latest_user']>(null);
 
-  // Auto-open login page
-  window.open(loginUrl, '_blank');
+  // Auto-open login page (detect popup blocker)
+  const popup = window.open(loginUrl, '_blank');
+  const [popupBlocked, setPopupBlocked] = createSignal(!popup);
 
   // Poll for first auth event
   const poller = createPoller({
@@ -58,6 +59,12 @@ export function TestAuthStep({ tenant, onNext }: TestAuthStepProps) {
       createShow(
         () => !success(),
         () => h('div', { class: 'wizard-waiting' },
+          createShow(
+            () => popupBlocked(),
+            () => h('div', { class: 'alert info show' },
+              'Popup was blocked. Click the button below to open your login page.',
+            ),
+          ),
           h('div', { class: 'wizard-url-bar' },
             h('code', null, loginUrl),
             h('button', {
