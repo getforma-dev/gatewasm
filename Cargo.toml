@@ -19,7 +19,7 @@ codegen-units = 1
 strip = true
 panic = "abort"
 
-# Uncomment for local framework development:
-# [patch.crates-io]
-# forma-ir = { path = "../forma-repo/crates/forma-ir" }
-# forma-server = { path = "../forma-repo/crates/forma-server" }
+# Local framework patches (CSP style-src fix pending publish):
+[patch.crates-io]
+forma-ir = { path = "../FormaStack/forma/crates/forma-ir" }
+forma-server = { path = "../FormaStack/forma/crates/forma-server" }
