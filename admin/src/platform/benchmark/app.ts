@@ -1,19 +1,15 @@
-import { activateIslands } from 'formajs';
+import { activateIslands, mount } from 'formajs';
 import { BenchmarkPage } from './BenchmarkPage';
 import { FilterBar } from './FilterBar';
 import { BenchmarkDataTable } from './DataTable';
 import { PerfPanel, PerfStat } from './PerfPanel';
 import { detectWasm } from './store';
 
-// BenchmarkPage import: SSR compiler traces this for IR generation.
-// At runtime, esbuild tree-shakes it — only activateIslands() runs.
-void BenchmarkPage;
-
 detectWasm();
 
-activateIslands({
-  FilterBar,
-  BenchmarkDataTable,
-  PerfPanel,
-  PerfStat,
-});
+// Phase 2 SSR: hydrate island markers. Phase 1 (dev mode): full CSR mount.
+if (document.querySelector('[data-forma-island]')) {
+  activateIslands({ FilterBar, BenchmarkDataTable, PerfPanel, PerfStat });
+} else {
+  mount(() => BenchmarkPage(), '#app');
+}
