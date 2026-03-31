@@ -18,6 +18,9 @@ pub async fn login_page(
     Extension(tenant): Extension<TenantContext>,
     req: axum::extract::Request,
 ) -> Response {
+    // Extract ?redirect= query param and validate it's a same-tenant path
+    let safe_redirect = extract_safe_redirect(req.uri().query(), &tenant.slug);
+
     // Server-side redirect: if user has a valid refresh cookie, skip the login page
     if let Some(rt) = extract_refresh_cookie(req.headers(), Some(&tenant.slug)) {
         let hash = signing::hash_token(&rt);
@@ -32,7 +35,8 @@ pub async fn login_page(
         .unwrap_or(false);
 
         if valid {
-            return Redirect::temporary(&tenant.login_redirect_url).into_response();
+            let target = safe_redirect.as_deref().unwrap_or(&tenant.login_redirect_url);
+            return Redirect::temporary(target).into_response();
         }
     }
 
@@ -135,4 +139,22 @@ pub(crate) fn html_escape(s: &str) -> String {
 /// Prevents </script> breakout by escaping </ sequences.
 pub(crate) fn json_for_script(json: &serde_json::Value) -> String {
     json.to_string().replace("</", "<\\/")
+}
+
+/// Extract a safe `?redirect=` param from the query string.
+///
+/// Only allows paths that start with `/t/{slug}/` (same-tenant relative paths).
+/// Returns `None` for empty, absolute-URL, or cross-tenant values.
+fn extract_safe_redirect(query: Option<&str>, slug: &str) -> Option<String> {
+    let q = query?;
+    let prefix = format!("/t/{}/", slug);
+    for pair in q.split('&') {
+        if let Some(value) = pair.strip_prefix("redirect=") {
+            let decoded = urlencoding::decode(value).ok()?;
+            if decoded.starts_with(&prefix) {
+                return Some(decoded.into_owned());
+            }
+        }
+    }
+    None
 }
