@@ -1,0 +1,118 @@
+<h2>Phase 1 Design: Onboarding Wizard Flow</h2>
+<p class="subtitle">Three steps inside the console app shell. Current console stays live — wizard is a new view mode for tenants with onboarding_completed = false.</p>
+
+<div class="section">
+  <h3>Wizard Trigger</h3>
+  <p>The tenant record gets a new boolean field: <code>onboarding_completed</code> (default: false). When the console loads a tenant where this is false, it renders the wizard instead of the detail view. The wizard writes <code>onboarding_completed = true</code> + <code>preferred_tab</code> to the tenant config on completion.</p>
+</div>
+
+<div class="section">
+  <div class="mockup">
+    <div class="mockup-header">Step 1: "Make it yours"</div>
+    <div class="mockup-body" style="padding: 2rem; text-align: center;">
+      <div style="margin-bottom: 1.5rem;">
+        <div style="font-size: 0.6rem; text-transform: uppercase; letter-spacing: 0.12em; opacity: 0.5; margin-bottom: 0.5rem;">Step 1 of 3</div>
+        <div style="font-size: 1.4rem; font-weight: 300; margin-bottom: 0.5rem;">Make it yours</div>
+        <div style="font-size: 0.8rem; opacity: 0.6;">Give your login page a name and color. Takes five seconds.</div>
+      </div>
+      <div style="max-width: 400px; margin: 0 auto; text-align: left;">
+        <div style="margin-bottom: 1rem;">
+          <div style="font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.08em; opacity: 0.5; margin-bottom: 0.35rem;">App Name</div>
+          <div class="mock-input" style="padding: 0.6rem 0.8rem;">Victorvillacis99 App</div>
+        </div>
+        <div style="margin-bottom: 1.5rem;">
+          <div style="font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.08em; opacity: 0.5; margin-bottom: 0.35rem;">Primary Color</div>
+          <div style="display: flex; align-items: center; gap: 0.75rem;">
+            <div style="width: 36px; height: 36px; border-radius: 4px; background: #6366f1; border: 1px solid rgba(255,255,255,0.1);"></div>
+            <div class="mock-input" style="padding: 0.6rem 0.8rem; flex: 1;">#6366f1</div>
+          </div>
+        </div>
+        <div style="display: flex; justify-content: flex-end;">
+          <button class="mock-button" style="padding: 0.6rem 2rem;">Next →</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <div class="mockup">
+    <div class="mockup-header">Step 2: "See it work" — Waiting State</div>
+    <div class="mockup-body" style="padding: 2rem; text-align: center;">
+      <div style="margin-bottom: 1.5rem;">
+        <div style="font-size: 0.6rem; text-transform: uppercase; letter-spacing: 0.12em; opacity: 0.5; margin-bottom: 0.5rem;">Step 2 of 3</div>
+        <div style="font-size: 1.4rem; font-weight: 300; margin-bottom: 0.5rem;">See it work</div>
+        <div style="font-size: 0.8rem; opacity: 0.6;">Open your login page in a new tab, register as a test user, and watch the magic.</div>
+      </div>
+      <div style="max-width: 480px; margin: 0 auto;">
+        <div style="background: rgba(99, 102, 241, 0.08); border: 1px solid rgba(99, 102, 241, 0.2); padding: 1rem 1.25rem; margin-bottom: 1.5rem; display: flex; align-items: center; justify-content: space-between;">
+          <code style="font-size: 0.78rem; opacity: 0.8;">http://localhost:3001/t/victorvillacis99-kw85/login</code>
+          <div style="display: flex; gap: 0.5rem;">
+            <button class="mock-button" style="padding: 0.4rem 0.8rem; font-size: 0.72rem;">Copy</button>
+            <button class="mock-button" style="padding: 0.4rem 0.8rem; font-size: 0.72rem; background: rgba(99, 102, 241, 0.15); border-color: rgba(99, 102, 241, 0.3);">Open login page ↗</button>
+          </div>
+        </div>
+        <div style="padding: 2rem 0;">
+          <div style="width: 8px; height: 8px; border-radius: 50%; background: #6366f1; margin: 0 auto; animation: pulse 2s infinite;"></div>
+          <div style="font-size: 0.82rem; opacity: 0.5; margin-top: 1rem;">Waiting for your first login...</div>
+          <div style="font-size: 0.7rem; opacity: 0.35; margin-top: 0.35rem;">Register on your login page. This console will advance automatically.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <div class="mockup">
+    <div class="mockup-header">Step 2: "See it work" — Success State</div>
+    <div class="mockup-body" style="padding: 2rem; text-align: center;">
+      <div style="margin-bottom: 1.5rem;">
+        <div style="font-size: 0.6rem; text-transform: uppercase; letter-spacing: 0.12em; opacity: 0.5; margin-bottom: 0.5rem;">Step 2 of 3</div>
+        <div style="font-size: 1.4rem; font-weight: 300; margin-bottom: 0.5rem;">It works ✓</div>
+      </div>
+      <div style="max-width: 400px; margin: 0 auto;">
+        <div style="background: rgba(52, 211, 153, 0.08); border: 1px solid rgba(52, 211, 153, 0.2); padding: 1rem 1.25rem; text-align: left; margin-bottom: 1.5rem;">
+          <div style="font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.08em; color: #34d399; margin-bottom: 0.5rem;">First user authenticated</div>
+          <div style="font-size: 0.85rem; margin-bottom: 0.25rem;">victor@test.com</div>
+          <div style="font-size: 0.7rem; opacity: 0.5;">3/31/2026, 8:45:12 AM — email provider</div>
+        </div>
+        <div style="display: flex; justify-content: flex-end;">
+          <button class="mock-button" style="padding: 0.6rem 2rem;">Next →</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <div class="mockup">
+    <div class="mockup-header">Step 3: "What do you want to do next?"</div>
+    <div class="mockup-body" style="padding: 2rem; text-align: center;">
+      <div style="margin-bottom: 1.5rem;">
+        <div style="font-size: 0.6rem; text-transform: uppercase; letter-spacing: 0.12em; opacity: 0.5; margin-bottom: 0.5rem;">Step 3 of 3</div>
+        <div style="font-size: 1.4rem; font-weight: 300; margin-bottom: 0.5rem;">What do you want to do next?</div>
+        <div style="font-size: 0.8rem; opacity: 0.6;">Both options are always available in your console. Pick where to start.</div>
+      </div>
+      <div style="max-width: 560px; margin: 0 auto; display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+        <div style="border: 1px solid rgba(255,255,255,0.1); padding: 1.5rem 1.25rem; text-align: left; cursor: pointer; transition: border-color 0.2s;" onmouseover="this.style.borderColor='rgba(99,102,241,0.4)'" onmouseout="this.style.borderColor='rgba(255,255,255,0.1)'">
+          <div style="font-size: 0.95rem; margin-bottom: 0.5rem;">Host it here</div>
+          <div style="font-size: 0.75rem; opacity: 0.5; line-height: 1.6;">Don't have an app yet? We'll host an auth-gated page for you. Free forever.</div>
+        </div>
+        <div style="border: 1px solid rgba(255,255,255,0.1); padding: 1.5rem 1.25rem; text-align: left; cursor: pointer; transition: border-color 0.2s;" onmouseover="this.style.borderColor='rgba(99,102,241,0.4)'" onmouseout="this.style.borderColor='rgba(255,255,255,0.1)'">
+          <div style="font-size: 0.95rem; margin-bottom: 0.5rem;">Add it to your app</div>
+          <div style="font-size: 0.75rem; opacity: 0.5; line-height: 1.6;">Already have an app? Integrate auth in three steps with bridge.js.</div>
+        </div>
+      </div>
+      <div style="margin-top: 1.5rem;">
+        <button class="mock-button" style="padding: 0.6rem 2rem;">Go to Console →</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<style>
+  @keyframes pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.4; transform: scale(1.5); }
+  }
+</style>

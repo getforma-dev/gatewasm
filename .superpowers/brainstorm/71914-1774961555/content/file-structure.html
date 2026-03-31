@@ -1,0 +1,129 @@
+<h2>File Structure & Data Flow</h2>
+<p class="subtitle">Separation of concerns across all three phases. Each piece is its own vertical slice.</p>
+
+<div class="section">
+  <h3>Current Structure (what exists)</h3>
+  <pre style="font-size: 0.75rem; line-height: 1.7; opacity: 0.8; background: rgba(0,0,0,0.3); padding: 1rem 1.25rem; border: 1px solid rgba(255,255,255,0.06);">admin/src/
+├── platform/
+│   ├── console/                 ← EXISTING (stays live until swap)
+│   │   ├── app.ts               entry point
+│   │   ├── store.ts             monolith store (198 lines)
+│   │   ├── ConsoleApp.ts        app shell
+│   │   └── views/
+│   │       ├── TenantsView.ts
+│   │       ├── TenantDetail.ts  (370 lines — large)
+│   │       ├── CreateTenant.ts
+│   │       └── Quickstart.ts    (dismissible — goes away)
+│   ├── login/                   ← EXISTING (no changes)
+│   └── onboarding/              ← EXISTING (no changes)
+├── tenant/
+│   ├── login/                   ← EXISTING (no changes)
+│   ├── dashboard/               ← EXISTING (no changes)
+│   └── admin/                   ← EXISTING (no changes)
+└── core/
+    ├── components/              ← SHARED (Sidebar, StatCard, Field, etc.)
+    ├── hooks/                   ← SHARED (createAuth, createApi, createToast)
+    └── theme/                   ← SHARED (tokens.css, base.css, components.css)</pre>
+</div>
+
+<div class="section">
+  <h3>New Structure (what we're building)</h3>
+  <pre style="font-size: 0.75rem; line-height: 1.7; opacity: 0.8; background: rgba(0,0,0,0.3); padding: 1rem 1.25rem; border: 1px solid rgba(255,255,255,0.06);">admin/src/
+├── platform/
+│   ├── console/                 ← EXISTING (untouched until Phase 2 swap)
+│   │
+│   ├── console-v2/              ← NEW: Phase 2 — rebuilt console
+│   │   ├── app.ts               entry point (same pattern: init → mount)
+│   │   ├── store.ts             clean store (split concerns)
+│   │   ├── ConsoleApp.ts        app shell (sidebar + view router)
+│   │   ├── wizard/              Phase 1 — onboarding wizard
+│   │   │   ├── WizardFlow.ts    orchestrator (step 1→2→3, state machine)
+│   │   │   ├── BrandingStep.ts  step 1: app name + color + live preview
+│   │   │   ├── TestAuthStep.ts  step 2: waiting state, polling, success
+│   │   │   └── ChoosePathStep.ts step 3: two cards, tab preference
+│   │   └── views/               Phase 2 — console tabs
+│   │       ├── OverviewView.ts  stats + recent activity (new)
+│   │       ├── UsersView.ts     user search/filter/manage (new)
+│   │       ├── HostedPageView.ts page editor — Phase 3
+│   │       ├── IntegrateView.ts  bridge.js guide + API key mgmt
+│   │       └── SettingsView.ts   branding, auth config, danger zone
+│   │
+│   ├── login/                   ← EXISTING (no changes)
+│   └── onboarding/              ← EXISTING (no changes)
+│
+├── tenant/
+│   ├── sandbox/                 ← NEW: Phase 1 — sandbox debug page
+│   │   ├── app.ts               entry point
+│   │   ├── store.ts             auth data fetching + token decode
+│   │   └── SandboxPage.ts       two-column layout, JWT viewer
+│   │
+│   ├── login/                   ← EXISTING (no changes)
+│   ├── dashboard/               ← EXISTING (no changes)
+│   └── admin/                   ← EXISTING (no changes)
+│
+└── core/
+    ├── components/              ← SHARED (may add: JwtViewer, CodeBlock tabs)
+    ├── hooks/                   ← SHARED (may add: createPoller)
+    └── theme/                   ← SHARED (no changes)</pre>
+</div>
+
+<div class="section">
+  <h3>Why console-v2/ instead of modifying console/</h3>
+  <ul style="font-size: 0.82rem; line-height: 1.8; opacity: 0.8;">
+    <li><strong>Zero risk to live product.</strong> Current console keeps working. No merge conflicts, no broken states.</li>
+    <li><strong>Clean separation.</strong> Wizard code, new views, new store — all in one place. No stitching into the old monolith.</li>
+    <li><strong>Atomic swap.</strong> When Phase 3 is complete, update the build config to point <code>/platform/console</code> at <code>console-v2/app.ts</code> and delete the old folder.</li>
+    <li><strong>Independent development.</strong> New entry point in build.ts during dev (<code>/platform/console-v2</code>), old one stays at <code>/platform/console</code>.</li>
+  </ul>
+</div>
+
+<div class="section">
+  <h3>Build Config Change</h3>
+  <pre style="font-size: 0.75rem; line-height: 1.7; opacity: 0.8; background: rgba(0,0,0,0.3); padding: 1rem 1.25rem; border: 1px solid rgba(255,255,255,0.06);">// build.ts — during development, both exist
+{ entry: 'src/platform/console/app.ts',    outfile: 'platform-console.js' },     // live
+{ entry: 'src/platform/console-v2/app.ts', outfile: 'platform-console-v2.js' },  // dev
+
+// After swap — v2 replaces original
+{ entry: 'src/platform/console-v2/app.ts', outfile: 'platform-console.js' },
+
+// Rust server — add dev route during development
+.route("/platform/console-v2", get(platform_dashboard::dashboard_page_v2))</pre>
+</div>
+
+<div class="section">
+  <h3>Server-Side Changes (Rust)</h3>
+  <pre style="font-size: 0.75rem; line-height: 1.7; opacity: 0.8; background: rgba(0,0,0,0.3); padding: 1rem 1.25rem; border: 1px solid rgba(255,255,255,0.06);">Phase 1:
+  New route:  GET /t/{slug}/sandbox     → sandbox page (tenant-scoped, admin-gated)
+  New API:    GET /t/{slug}/auth/introspect → returns decoded JWT + session for current user
+  DB change:  tenants table + onboarding_completed (bool), preferred_tab (text nullable)
+  Branding:   PATCH /platform/self-serve/tenants/{id} already supports name + primary_color
+
+Phase 2:
+  New route:  GET /platform/console-v2  → serves console-v2 page (dev only, swaps later)
+  New APIs:   GET /manage/users (already exists), search/filter params (may need additions)
+
+Phase 3:
+  New API:    GET/PUT /manage/hosted-page → read/write hosted page JSON blob
+  New route:  GET /t/{slug}/site → auth-gated hosted page (S3/CF or server-rendered)
+  DB change:  tenant_hosted_pages table (tenant_id, content_json, updated_at)</pre>
+</div>
+
+<div class="section">
+  <h3>Data Flow: Wizard Polling (Phase 1)</h3>
+  <pre style="font-size: 0.75rem; line-height: 1.7; opacity: 0.8; background: rgba(0,0,0,0.3); padding: 1rem 1.25rem; border: 1px solid rgba(255,255,255,0.06);">Console (Plane 2)                     Login Page (Plane 3)
+─────────────────                     ──────────────────
+
+Step 2: "See it work"                 Auto-opened in new tab
+  │                                     │
+  ├─ Poll: GET /platform/self-serve/    Customer registers
+  │   tenants/{id}/stats                  │
+  │   every 3s                            └─ POST /t/{slug}/auth/register
+  │                                           │
+  │                                           └─ Server creates user
+  │                                               │
+  ├─ Response: { total_users: 1 } ← ─ ─ ─ ─ ─ ─ ┘
+  │   (was 0, now 1)
+  │
+  └─ Wizard advances to success state
+     Shows: email, timestamp, "See what your app receives →"</pre>
+</div>

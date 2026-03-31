@@ -1,0 +1,66 @@
+<h2>Phase 1 Architecture: Onboarding Wizard + Sandbox</h2>
+<p class="subtitle">Two approaches for where the wizard lives and how it communicates with the sandbox page</p>
+
+<div class="options">
+  <div class="option" data-choice="a" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>Wizard Inside Console (Recommended)</h3>
+      <p>The wizard is a new view mode within the existing <code>/platform/console</code> app. When a tenant has zero auth events, the console renders the wizard instead of the normal tenant detail view. Once complete, the wizard flag is saved to the tenant config and the normal console tabs appear.</p>
+      <br>
+      <div class="pros-cons">
+        <div class="pros">
+          <h4>Pros</h4>
+          <ul>
+            <li>Single app shell — sidebar, auth, state all reused</li>
+            <li>No new routes or server handlers needed for the wizard itself</li>
+            <li>Wizard state persists in the tenant record (server-side), not localStorage</li>
+            <li>Polling for first auth event uses existing API infrastructure</li>
+            <li>Easy to swap: wizard view → console tabs, same mount point</li>
+          </ul>
+        </div>
+        <div class="cons">
+          <h4>Cons</h4>
+          <ul>
+            <li>Console store grows — wizard state added to existing store</li>
+            <li>Wizard steps need their own sub-views within the console app</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="b" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>Wizard as Separate Page</h3>
+      <p>The wizard gets its own route <code>/platform/onboarding/wizard</code> with its own app shell, separate from the console. After tenant creation, the user is redirected there. On completion, they're redirected to <code>/platform/console</code>.</p>
+      <br>
+      <div class="pros-cons">
+        <div class="pros">
+          <h4>Pros</h4>
+          <ul>
+            <li>Complete isolation — wizard code doesn't touch console code</li>
+            <li>Can be designed as a focused, distraction-free experience</li>
+            <li>Separate bundle — doesn't increase console JS size</li>
+          </ul>
+        </div>
+        <div class="cons">
+          <h4>Cons</h4>
+          <ul>
+            <li>New route, new server handler, new entry point, new build config</li>
+            <li>Full page navigation between wizard → console (flash)</li>
+            <li>Auth state must be re-established on the console page</li>
+            <li>Wizard state needs its own persistence mechanism</li>
+            <li>More infrastructure for a flow the user sees exactly once</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="section" style="margin-top: 2rem;">
+  <h3>Sandbox Page (Same in Both Approaches)</h3>
+  <p>The sandbox is always a new standalone page at <code>/t/{slug}/sandbox</code> — a new entry point in <code>admin/src/tenant/sandbox/</code> with its own app.ts, store, and component. It's tenant-scoped (Plane 3), auth-gated, and admin-restricted. This is the same regardless of which wizard approach we pick.</p>
+</div>

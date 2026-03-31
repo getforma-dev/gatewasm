@@ -1,0 +1,140 @@
+<h2>Sandbox Page Design: /t/{slug}/sandbox</h2>
+<p class="subtitle">Developer debug tool — shows what auth actually returns. Tenant-admin-only, always available.</p>
+
+<div class="section">
+  <h3>Access Control</h3>
+  <p>Authenticated end-user on the tenant <strong>AND</strong> platform member of this tenant (Plane 2 check). Regular end-users get redirected to <code>/t/{slug}/site</code>. Unauthenticated visitors get redirected to <code>/t/{slug}/login</code>.</p>
+</div>
+
+<div class="section">
+  <div class="mockup">
+    <div class="mockup-header">/t/{slug}/sandbox — Authenticated Admin View</div>
+    <div class="mockup-body" style="padding: 0;">
+
+      <!-- Banner -->
+      <div style="background: rgba(99, 102, 241, 0.08); border-bottom: 1px solid rgba(99, 102, 241, 0.15); padding: 0.6rem 1.5rem; display: flex; justify-content: space-between; align-items: center;">
+        <div style="font-size: 0.72rem; opacity: 0.7;">You're viewing this as an end user of <strong>Victorvillacis99 App</strong> — this is what your customers' auth data looks like.</div>
+        <div style="display: flex; gap: 0.5rem;">
+          <button class="mock-button" style="padding: 0.3rem 0.6rem; font-size: 0.65rem;">Back to Console ↗</button>
+        </div>
+      </div>
+
+      <div style="padding: 1.5rem; display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+
+        <!-- Left Column -->
+        <div>
+          <!-- User Profile -->
+          <div style="border: 1px solid rgba(255,255,255,0.08); padding: 1rem 1.25rem; margin-bottom: 1rem;">
+            <div style="font-size: 0.6rem; text-transform: uppercase; letter-spacing: 0.1em; opacity: 0.4; margin-bottom: 0.75rem;">User Profile</div>
+            <div style="display: grid; grid-template-columns: auto 1fr; gap: 0.3rem 1rem; font-size: 0.78rem;">
+              <span style="opacity: 0.5;">Email</span><span>victor@test.com</span>
+              <span style="opacity: 0.5;">User ID</span><span style="font-family: monospace; font-size: 0.72rem;">usr_a1b2c3d4-e5f6-7890</span>
+              <span style="opacity: 0.5;">Name</span><span>Victor Test</span>
+              <span style="opacity: 0.5;">Role</span><span>user</span>
+              <span style="opacity: 0.5;">Created</span><span>3/31/2026, 8:45:12 AM</span>
+            </div>
+          </div>
+
+          <!-- Session -->
+          <div style="border: 1px solid rgba(255,255,255,0.08); padding: 1rem 1.25rem; margin-bottom: 1rem;">
+            <div style="font-size: 0.6rem; text-transform: uppercase; letter-spacing: 0.1em; opacity: 0.4; margin-bottom: 0.75rem;">Session</div>
+            <div style="display: grid; grid-template-columns: auto 1fr; gap: 0.3rem 1rem; font-size: 0.78rem;">
+              <span style="opacity: 0.5;">Session ID</span><span style="font-family: monospace; font-size: 0.72rem;">ses_f8e7d6c5-b4a3</span>
+              <span style="opacity: 0.5;">Created</span><span>8:45:12 AM</span>
+              <span style="opacity: 0.5;">Expires</span><span>4/30/2026, 8:45:12 AM</span>
+              <span style="opacity: 0.5;">Provider</span><span>email</span>
+            </div>
+          </div>
+
+          <!-- bridge.js callback -->
+          <div style="border: 1px solid rgba(255,255,255,0.08); padding: 1rem 1.25rem;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem;">
+              <div style="font-size: 0.6rem; text-transform: uppercase; letter-spacing: 0.1em; opacity: 0.4;">Your app receives this</div>
+              <button class="mock-button" style="padding: 0.25rem 0.5rem; font-size: 0.6rem;">Copy</button>
+            </div>
+            <pre style="font-size: 0.7rem; line-height: 1.6; opacity: 0.8; margin: 0; overflow-x: auto; background: rgba(0,0,0,0.3); padding: 0.75rem; border: 1px solid rgba(255,255,255,0.05);">bridge.onStateChange(({ state, user }) => {
+  // state: "authenticated"
+  // user:
+  {
+    id: "usr_a1b2c3d4-e5f6-7890",
+    email: "victor@test.com",
+    name: "Victor Test",
+    role: "user",
+    tenant: "victorvillacis99-kw85"
+  }
+});</pre>
+          </div>
+        </div>
+
+        <!-- Right Column -->
+        <div>
+          <!-- JWT -->
+          <div style="border: 1px solid rgba(255,255,255,0.08); padding: 1rem 1.25rem;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem;">
+              <div style="font-size: 0.6rem; text-transform: uppercase; letter-spacing: 0.1em; opacity: 0.4;">Access Token (JWT)</div>
+              <div style="display: flex; gap: 0.4rem;">
+                <button class="mock-button" style="padding: 0.25rem 0.5rem; font-size: 0.6rem;">Copy</button>
+                <button class="mock-button" style="padding: 0.25rem 0.5rem; font-size: 0.6rem;">Show raw ▾</button>
+              </div>
+            </div>
+
+            <!-- Header -->
+            <div style="margin-bottom: 0.75rem;">
+              <div style="font-size: 0.6rem; text-transform: uppercase; letter-spacing: 0.08em; color: #f59e0b; margin-bottom: 0.35rem;">Header</div>
+              <pre style="font-size: 0.68rem; line-height: 1.5; margin: 0; background: rgba(245, 158, 11, 0.05); border: 1px solid rgba(245, 158, 11, 0.1); padding: 0.5rem 0.65rem;">{
+  "alg": "EdDSA",
+  "typ": "JWT",
+  "kid": "key_01"
+}</pre>
+            </div>
+
+            <!-- Payload -->
+            <div style="margin-bottom: 0.75rem;">
+              <div style="font-size: 0.6rem; text-transform: uppercase; letter-spacing: 0.08em; color: #6366f1; margin-bottom: 0.35rem;">Payload</div>
+              <pre style="font-size: 0.68rem; line-height: 1.5; margin: 0; background: rgba(99, 102, 241, 0.05); border: 1px solid rgba(99, 102, 241, 0.1); padding: 0.5rem 0.65rem;">{
+  "sub": "usr_a1b2c3d4-e5f6-7890",
+  "email": "victor@test.com",
+  "name": "Victor Test",
+  "tenant_id": "ten_abc123",
+  "tenant_slug": "victorvillacis99-kw85",
+  "role": "user",
+  "permissions": ["user:read"],
+  "iss": "gatewasm",
+  "aud": "gatewasm-app",
+  "iat": 1743404712,
+  "exp": 1743405612
+}</pre>
+            </div>
+
+            <!-- Signature -->
+            <div>
+              <div style="font-size: 0.6rem; text-transform: uppercase; letter-spacing: 0.08em; color: #34d399; margin-bottom: 0.35rem;">Signature</div>
+              <div style="font-size: 0.68rem; opacity: 0.4; font-family: monospace; background: rgba(52, 211, 153, 0.05); border: 1px solid rgba(52, 211, 153, 0.1); padding: 0.5rem 0.65rem; word-break: break-all;">Ed25519 — verified ✓</div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Footer -->
+      <div style="border-top: 1px solid rgba(255,255,255,0.06); padding: 0.75rem 1.5rem; display: flex; justify-content: space-between; align-items: center;">
+        <div style="font-size: 0.7rem; opacity: 0.4;">Sandbox — developer debug view. Your end users never see this page.</div>
+        <button class="mock-button" style="padding: 0.4rem 1rem; font-size: 0.72rem;">Log out and try again</button>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<div class="section" style="margin-top: 1.5rem;">
+  <h3>Key Design Decisions</h3>
+  <ul style="font-size: 0.85rem; line-height: 1.8; opacity: 0.8;">
+    <li><strong>Two-column layout:</strong> Left = human-readable (profile, session, callback preview). Right = raw auth data (JWT decoded with color-coded sections).</li>
+    <li><strong>Banner at top:</strong> Plane separation — "You're viewing this as an end user of [App Name]." Always visible.</li>
+    <li><strong>"Your app receives this"</strong> block shows the exact bridge.onStateChange payload with real data. This is the "aha" moment — the customer sees what their code will get.</li>
+    <li><strong>"Show raw" toggle</strong> on the JWT reveals the base64-encoded token for copying into jwt.io or API testing tools.</li>
+    <li><strong>"Log out and try again"</strong> in the footer — lets them test the full login → sandbox → logout cycle.</li>
+    <li><strong>"Back to Console"</strong> returns to the Platform Console (Plane 2).</li>
+    <li><strong>No sidebar, no navigation.</strong> This is a focused single-page debug tool, not a dashboard.</li>
+  </ul>
+</div>
