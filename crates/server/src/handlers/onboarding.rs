@@ -1094,13 +1094,20 @@ pub async fn unblock_tenant_user(
         message: "Tenant not found".into(),
     })?;
 
-    sqlx::query(
+    let result = sqlx::query(
         "UPDATE users SET locked_until = NULL, updated_at = NOW() WHERE id = $1 AND tenant_id = $2",
     )
     .bind(&user_id)
     .bind(&tenant_id)
     .execute(&state.db)
     .await?;
+
+    if result.rows_affected() == 0 {
+        return Err(AppError::NotFound {
+            error: "user_not_found",
+            message: "User not found".into(),
+        });
+    }
 
     Ok(Json(serde_json::json!({ "status": "unblocked" })))
 }
