@@ -34,13 +34,26 @@ export interface TenantStats {
   latest_user: { email: string; provider: string; created_at: string } | null;
 }
 
+export interface TenantUser {
+  id: string;
+  email: string;
+  name: string | null;
+  email_verified: boolean;
+  is_locked: boolean;
+  provider: string | null;
+  roles: string[];
+  created_at: string;
+}
+
 // ── State ───────────────────────────────────────────────────────────────
 
 export const [tenants, setTenants] = createSignal<Tenant[]>([]);
 export const [selectedTenant, setSelectedTenant] = createSignal<Tenant | null>(null);
 export const [selectedTenantStats, setSelectedTenantStats] = createSignal<TenantStats | null>(null);
 export const [loading, setLoading] = createSignal(false);
-export const [view, setView] = createSignal<'tenants' | 'wizard' | 'detail'>('tenants');
+export const [view, setView] = createSignal<'tenants' | 'wizard' | 'overview' | 'users' | 'integrate' | 'settings'>('tenants');
+export const [users, setUsers] = createSignal<TenantUser[]>([]);
+export const [usersLoading, setUsersLoading] = createSignal(false);
 
 // ── API Functions ───────────────────────────────────────────────────────
 
@@ -104,6 +117,50 @@ export async function pollTenantStats(id: string): Promise<TenantStats> {
   );
 }
 
+export async function loadUsers(tenantId: string): Promise<void> {
+  setUsersLoading(true);
+  try {
+    const data = await api.get<{ users: TenantUser[] }>(
+      '/platform/self-serve/tenants/' + encodeURIComponent(tenantId) + '/users',
+    );
+    setUsers(data.users || []);
+  } catch (e) {
+    toast.show(e instanceof Error ? e.message : 'Failed to load users', 'error');
+  } finally {
+    setUsersLoading(false);
+  }
+}
+
+export async function blockUser(tenantId: string, userId: string): Promise<void> {
+  try {
+    await api.post('/platform/self-serve/tenants/' + encodeURIComponent(tenantId) + '/users/' + encodeURIComponent(userId) + '/block', {});
+    toast.show('User blocked', 'success');
+    await loadUsers(tenantId);
+  } catch (e) {
+    toast.show(e instanceof Error ? e.message : 'Failed to block user', 'error');
+  }
+}
+
+export async function unblockUser(tenantId: string, userId: string): Promise<void> {
+  try {
+    await api.post('/platform/self-serve/tenants/' + encodeURIComponent(tenantId) + '/users/' + encodeURIComponent(userId) + '/unblock', {});
+    toast.show('User unblocked', 'success');
+    await loadUsers(tenantId);
+  } catch (e) {
+    toast.show(e instanceof Error ? e.message : 'Failed to unblock user', 'error');
+  }
+}
+
+export async function revokeUserSessions(tenantId: string, userId: string): Promise<void> {
+  try {
+    await api.post('/platform/self-serve/tenants/' + encodeURIComponent(tenantId) + '/users/' + encodeURIComponent(userId) + '/revoke-sessions', {});
+    toast.show('Sessions revoked', 'success');
+    await loadUsers(tenantId);
+  } catch (e) {
+    toast.show(e instanceof Error ? e.message : 'Failed to revoke sessions', 'error');
+  }
+}
+
 // ── Navigation ──────────────────────────────────────────────────────────
 
 export function selectTenant(tenant: Tenant): void {
@@ -111,7 +168,9 @@ export function selectTenant(tenant: Tenant): void {
     setSelectedTenant(tenant);
     setSelectedTenantStats(null);
     if (tenant.onboarding_completed) {
-      setView('detail');
+      const tab = tenant.preferred_tab;
+      if (tab === 'integrate') setView('integrate');
+      else setView('overview');
     } else {
       setView('wizard');
     }
