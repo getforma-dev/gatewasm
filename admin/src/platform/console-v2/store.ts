@@ -45,15 +45,25 @@ export interface TenantUser {
   created_at: string;
 }
 
+export interface HostedPageData {
+  headline: string;
+  body: string;
+  cta_text: string;
+  cta_link: string;
+  custom_html: string | null;
+  updated_at: string | null;
+}
+
 // ── State ───────────────────────────────────────────────────────────────
 
 export const [tenants, setTenants] = createSignal<Tenant[]>([]);
 export const [selectedTenant, setSelectedTenant] = createSignal<Tenant | null>(null);
 export const [selectedTenantStats, setSelectedTenantStats] = createSignal<TenantStats | null>(null);
 export const [loading, setLoading] = createSignal(false);
-export const [view, setView] = createSignal<'tenants' | 'wizard' | 'overview' | 'users' | 'integrate' | 'settings'>('tenants');
+export const [view, setView] = createSignal<'tenants' | 'wizard' | 'overview' | 'users' | 'hosted-page' | 'integrate' | 'settings'>('tenants');
 export const [users, setUsers] = createSignal<TenantUser[]>([]);
 export const [usersLoading, setUsersLoading] = createSignal(false);
+export const [hostedPage, setHostedPage] = createSignal<HostedPageData | null>(null);
 
 // ── API Functions ───────────────────────────────────────────────────────
 
@@ -161,6 +171,30 @@ export async function revokeUserSessions(tenantId: string, userId: string): Prom
   }
 }
 
+export async function loadHostedPage(tenantId: string): Promise<void> {
+  try {
+    const data = await api.get<HostedPageData>(
+      '/platform/self-serve/tenants/' + encodeURIComponent(tenantId) + '/hosted-page',
+    );
+    setHostedPage(data);
+  } catch (e) {
+    toast.show(e instanceof Error ? e.message : 'Failed to load hosted page', 'error');
+  }
+}
+
+export async function saveHostedPage(tenantId: string, data: Partial<HostedPageData>): Promise<void> {
+  try {
+    await api.put(
+      '/platform/self-serve/tenants/' + encodeURIComponent(tenantId) + '/hosted-page',
+      data,
+    );
+    toast.show('Page saved', 'success');
+    await loadHostedPage(tenantId);
+  } catch (e) {
+    toast.show(e instanceof Error ? e.message : 'Failed to save page', 'error');
+  }
+}
+
 // ── Navigation ──────────────────────────────────────────────────────────
 
 export function selectTenant(tenant: Tenant): void {
@@ -169,7 +203,8 @@ export function selectTenant(tenant: Tenant): void {
     setSelectedTenantStats(null);
     if (tenant.onboarding_completed) {
       const tab = tenant.preferred_tab;
-      if (tab === 'integrate') setView('integrate');
+      if (tab === 'hosted-page') setView('hosted-page');
+      else if (tab === 'integrate') setView('integrate');
       else setView('overview');
     } else {
       setView('wizard');

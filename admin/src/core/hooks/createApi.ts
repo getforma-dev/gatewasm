@@ -72,11 +72,15 @@ export function createApi(auth: Auth) {
     return request<T>(path, { method: 'PATCH', body });
   }
 
+  function put<T = Record<string, unknown>>(path: string, body?: unknown): Promise<T> {
+    return request<T>(path, { method: 'PUT', body });
+  }
+
   function del<T = Record<string, unknown>>(path: string): Promise<T> {
     return request<T>(path, { method: 'DELETE' });
   }
 
-  return { request, get, post, patch, del };
+  return { request, get, post, patch, put, del };
 }
 
 export function queryFromObject(obj: Record<string, unknown>): string {
