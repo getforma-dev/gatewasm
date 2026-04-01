@@ -83,8 +83,8 @@ pub async fn sandbox_page(
 
     if !is_owner {
         // Authenticated end-user but not the platform owner → dashboard.
-        let dashboard_url = format!("/t/{}/dashboard", slug);
-        return Redirect::temporary(&dashboard_url).into_response();
+        let site_url = format!("/t/{}/site", slug);
+        return Redirect::temporary(&site_url).into_response();
     }
 
     // ── Both planes pass — render the sandbox page ─────────────────────

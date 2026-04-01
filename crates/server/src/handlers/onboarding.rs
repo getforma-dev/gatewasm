@@ -405,7 +405,7 @@ pub async fn create_tenant(
                 "login_redirect_url": default_login_redirect,
             },
             "api_key": api_key,
-            "dashboard_url": format!("/t/{}/dashboard", slug),
+            "dashboard_url": format!("/t/{}/site", slug),
             "admin_url": format!("/t/{}/admin", slug),
             "note": "Save this API key in backend secrets only — it will not be shown again. You are already admin on this tenant — use the admin URL for tenant management."
         })),
