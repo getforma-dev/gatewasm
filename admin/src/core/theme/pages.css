@@ -1454,3 +1454,24 @@
   color: var(--danger);
   background: rgba(239, 68, 68, 0.08);
 }
+
+
+/* Settings — Danger Zone */
+.danger-zone {
+  border-color: var(--danger);
+}
+
+.btn-danger {
+  background: var(--danger);
+  color: white;
+  border: none;
+  padding: 0.4rem 0.85rem;
+  font-size: 0.78rem;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.btn-danger:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
