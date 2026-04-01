@@ -10,7 +10,7 @@ fn normalize_server_url(server_url: &str) -> String {
 }
 
 pub fn default_login_redirect(server_url: &str, slug: &str) -> String {
-    format!("{}/t/{}/dashboard", normalize_server_url(server_url), slug)
+    format!("{}/t/{}/site", normalize_server_url(server_url), slug)
 }
 
 /// Resolve persisted tenant redirect URL into a safe absolute URL.
@@ -90,7 +90,7 @@ mod tests {
             "acme",
             Some("http://localhost:3000/callback"),
         );
-        assert_eq!(resolved, "https://auth.getforma.dev/t/acme/dashboard");
+        assert_eq!(resolved, "https://auth.getforma.dev/t/acme/site");
     }
 
     #[test]

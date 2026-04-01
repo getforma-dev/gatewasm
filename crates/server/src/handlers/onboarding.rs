@@ -1150,6 +1150,132 @@ pub async fn revoke_tenant_user_sessions(
     Ok(Json(serde_json::json!({ "revoked": revoked.rows_affected() })))
 }
 
+// ── Hosted Page Management ─────────────────────────────────────────────
+
+/// GET /platform/self-serve/tenants/{id}/hosted-page
+pub async fn get_hosted_page(
+    State(state): State<AppState>,
+    Path(tenant_id): Path<String>,
+    req: axum::extract::Request,
+) -> Result<impl IntoResponse, AppError> {
+    let user = req
+        .extensions()
+        .get::<PlatformUser>()
+        .cloned()
+        .ok_or(AppError::Unauthorized {
+            error: "unauthorized",
+            message: "Not authenticated".into(),
+        })?;
+
+    // Verify ownership
+    sqlx::query_scalar::<_, String>(
+        "SELECT id FROM tenants WHERE id = $1 AND owner_user_id = $2 AND status != 'deleted'",
+    )
+    .bind(&tenant_id)
+    .bind(&user.user_id)
+    .fetch_optional(&state.db)
+    .await?
+    .ok_or(AppError::NotFound {
+        error: "tenant_not_found",
+        message: "Tenant not found".into(),
+    })?;
+
+    let row = sqlx::query(
+        "SELECT headline, body, cta_text, cta_link, custom_html, updated_at \
+         FROM tenant_hosted_pages WHERE tenant_id = $1",
+    )
+    .bind(&tenant_id)
+    .fetch_optional(&state.db)
+    .await?;
+
+    match row {
+        Some(r) => Ok(Json(serde_json::json!({
+            "headline": r.get::<String, _>("headline"),
+            "body": r.get::<String, _>("body"),
+            "cta_text": r.get::<String, _>("cta_text"),
+            "cta_link": r.get::<String, _>("cta_link"),
+            "custom_html": r.get::<Option<String>, _>("custom_html"),
+            "updated_at": r.get::<chrono::DateTime<Utc>, _>("updated_at").to_rfc3339(),
+        }))),
+        None => Ok(Json(serde_json::json!({
+            "headline": "Welcome",
+            "body": "",
+            "cta_text": "",
+            "cta_link": "",
+            "custom_html": null,
+            "updated_at": null,
+        }))),
+    }
+}
+
+#[derive(Debug, Deserialize)]
+pub struct UpdateHostedPageRequest {
+    pub headline: Option<String>,
+    pub body: Option<String>,
+    pub cta_text: Option<String>,
+    pub cta_link: Option<String>,
+    pub custom_html: Option<String>,
+}
+
+/// PUT /platform/self-serve/tenants/{id}/hosted-page
+pub async fn update_hosted_page(
+    State(state): State<AppState>,
+    Path(tenant_id): Path<String>,
+    req: axum::extract::Request,
+) -> Result<impl IntoResponse, AppError> {
+    let user = req
+        .extensions()
+        .get::<PlatformUser>()
+        .cloned()
+        .ok_or(AppError::Unauthorized {
+            error: "unauthorized",
+            message: "Not authenticated".into(),
+        })?;
+
+    sqlx::query_scalar::<_, String>(
+        "SELECT id FROM tenants WHERE id = $1 AND owner_user_id = $2 AND status != 'deleted'",
+    )
+    .bind(&tenant_id)
+    .bind(&user.user_id)
+    .fetch_optional(&state.db)
+    .await?
+    .ok_or(AppError::NotFound {
+        error: "tenant_not_found",
+        message: "Tenant not found".into(),
+    })?;
+
+    let body: UpdateHostedPageRequest =
+        axum::Json::<UpdateHostedPageRequest>::from_request(req, &state)
+            .await
+            .map_err(|_| AppError::BadRequest {
+                error: "invalid_request",
+                message: "Invalid request body".into(),
+            })?
+            .0;
+
+    sqlx::query(
+        "INSERT INTO tenant_hosted_pages (tenant_id, headline, body, cta_text, cta_link, custom_html) \
+         VALUES ($1, $2, $3, $4, $5, $6) \
+         ON CONFLICT (tenant_id) DO UPDATE SET \
+           headline = COALESCE($2, tenant_hosted_pages.headline), \
+           body = COALESCE($3, tenant_hosted_pages.body), \
+           cta_text = COALESCE($4, tenant_hosted_pages.cta_text), \
+           cta_link = COALESCE($5, tenant_hosted_pages.cta_link), \
+           custom_html = COALESCE($6, tenant_hosted_pages.custom_html), \
+           updated_at = NOW()",
+    )
+    .bind(&tenant_id)
+    .bind(&body.headline.unwrap_or_else(|| "Welcome".to_string()))
+    .bind(&body.body.unwrap_or_default())
+    .bind(&body.cta_text.unwrap_or_default())
+    .bind(&body.cta_link.unwrap_or_default())
+    .bind(&body.custom_html)
+    .execute(&state.db)
+    .await?;
+
+    Ok(Json(serde_json::json!({ "status": "saved" })))
+}
+
 // ── Get Started Page ────────────────────────────────────────────────────
 
 /// GET /get-started — Self-serve onboarding page.

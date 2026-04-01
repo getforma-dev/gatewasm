@@ -9,6 +9,7 @@ pub mod docs;
 pub mod fedcm;
 pub mod geolocation;
 pub mod hosted_login;
+pub mod hosted_page;
 pub mod introspect;
 pub mod introspection;
 pub mod jwks;
@@ -163,6 +164,7 @@ fn create_router_inner(state: AppState, rate_limit_enabled: bool) -> Router {
         .route("/dashboard", get(dashboard::dashboard_page))
         .route("/admin", get(dashboard::admin_console_page))
         .route("/sandbox", get(sandbox::sandbox_page))
+        .route("/site", get(hosted_page::site_page))
         .merge(mfa_routes)
         .merge(webauthn_authed_routes)
         .merge(webauthn_login_routes)
@@ -391,6 +393,10 @@ fn create_router_inner(state: AppState, rate_limit_enabled: bool) -> Router {
         .route(
             "/platform/self-serve/tenants/{id}/users/{user_id}/revoke-sessions",
             post(onboarding::revoke_tenant_user_sessions),
+        )
+        .route(
+            "/platform/self-serve/tenants/{id}/hosted-page",
+            get(onboarding::get_hosted_page).put(onboarding::update_hosted_page),
         )
         .layer(middleware::from_fn_with_state(
             state.clone(),
