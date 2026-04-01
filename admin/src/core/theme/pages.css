@@ -1371,3 +1371,86 @@
 .btn-link:hover {
   text-decoration: underline;
 }
+
+
+/* Users View */
+
+.search-input {
+  width: 100%;
+  padding: 0.5rem 0.75rem;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-size: 0.82rem;
+  font-family: inherit;
+}
+
+.search-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.user-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.user-row {
+  border: 1px solid var(--border);
+  background: var(--surface);
+  margin-bottom: -1px;
+}
+
+.user-row-summary {
+  padding: 0.75rem 1rem;
+  cursor: pointer;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.user-row-summary:hover {
+  background: var(--surface-hover);
+}
+
+.user-email {
+  font-size: 0.82rem;
+  color: var(--text);
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.user-meta {
+  font-size: 0.72rem;
+}
+
+.user-detail {
+  padding: 0.75rem 1rem;
+  border-top: 1px solid var(--border);
+  background: var(--bg);
+}
+
+.detail-grid {
+  margin-bottom: 0.75rem;
+}
+
+.user-actions {
+  display: flex;
+  gap: 0.5rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--border);
+}
+
+.badge {
+  font-size: 0.6rem;
+  padding: 0.1rem 0.4rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.badge-danger {
+  border: 1px solid var(--danger);
+  color: var(--danger);
+  background: rgba(239, 68, 68, 0.08);
+}
