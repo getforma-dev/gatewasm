@@ -18,7 +18,6 @@ use crate::middleware::platform_user::PlatformUser;
 use crate::redirects::{
     default_login_redirect, resolve_login_redirect, validate_login_redirect_input,
 };
-use crate::responses::MessageResponse;
 use crate::{AppState, RenderMode};
 
 /// Slugs reserved for system routes — cannot be used as tenant slugs.
@@ -244,6 +243,8 @@ pub struct UpdateTenantRequest {
     pub onboarding_completed: Option<bool>,
     pub onboarding_step: Option<i16>,
     pub preferred_tab: Option<String>,
+    /// Alias: frontend sends `primary_color`, maps to `branding_primary_color`
+    pub primary_color: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -425,22 +426,11 @@ pub async fn list_my_tenants(
             message: "Not authenticated".into(),
         })?;
 
-    let tenants = sqlx::query_as::<
-        _,
-        (
-            String,
-            String,
-            String,
-            String,
-            serde_json::Value,
-            i32,
-            String,
-            Option<chrono::DateTime<Utc>>,
-            chrono::DateTime<Utc>,
-        ),
-    >(
+    let rows = sqlx::query(
         "SELECT id, name, slug, status, allowed_providers, max_users, \
-         COALESCE(plan, 'trial'), trial_ends_at, created_at \
+         COALESCE(plan, 'trial') AS plan, trial_ends_at, created_at, \
+         onboarding_completed, onboarding_step, preferred_tab, \
+         branding_primary_color, login_redirect_url \
          FROM tenants WHERE owner_user_id = $1 AND status != 'deleted' \
          ORDER BY created_at DESC",
     )
@@ -448,24 +438,30 @@ pub async fn list_my_tenants(
     .fetch_all(&state.db)
     .await?;
 
-    let items: Vec<serde_json::Value> = tenants
+    let items: Vec<serde_json::Value> = rows
         .into_iter()
-        .map(
-            |(id, name, slug, status, providers, max_users, plan, trial_ends, created)| {
-                // Count users inline (avoid N+1 in listing — acceptable for small tenant counts)
-                serde_json::json!({
-                    "id": id,
-                    "name": name,
-                    "slug": slug,
-                    "status": status,
-                    "allowed_providers": providers,
-                    "max_users": max_users,
-                    "plan": plan,
-                    "trial_ends_at": trial_ends.map(|t| t.to_rfc3339()),
-                    "created_at": created.to_rfc3339(),
-                })
-            },
-        )
+        .map(|row| {
+            let slug: String = row.get("slug");
+            let redirect_url: Option<String> = row.get("login_redirect_url");
+            let resolved_redirect =
+                resolve_login_redirect(&state.config.server_url, &slug, redirect_url.as_deref());
+            serde_json::json!({
+                "id": row.get::<String, _>("id"),
+                "name": row.get::<String, _>("name"),
+                "slug": slug,
+                "status": row.get::<String, _>("status"),
+                "allowed_providers": row.get::<serde_json::Value, _>("allowed_providers"),
+                "max_users": row.get::<i32, _>("max_users"),
+                "plan": row.get::<String, _>("plan"),
+                "trial_ends_at": row.get::<Option<chrono::DateTime<Utc>>, _>("trial_ends_at").map(|t| t.to_rfc3339()),
+                "created_at": row.get::<chrono::DateTime<Utc>, _>("created_at").to_rfc3339(),
+                "onboarding_completed": row.get::<bool, _>("onboarding_completed"),
+                "onboarding_step": row.get::<i16, _>("onboarding_step"),
+                "preferred_tab": row.get::<Option<String>, _>("preferred_tab"),
+                "primary_color": row.get::<Option<String>, _>("branding_primary_color"),
+                "login_redirect_url": resolved_redirect,
+            })
+        })
         .collect();
 
     Ok(Json(serde_json::json!({
@@ -530,11 +526,12 @@ pub async fn get_my_tenant(
         "user_count": user_count,
         "plan": row.get::<String, _>("plan"),
         "trial_ends_at": row.get::<Option<chrono::DateTime<Utc>>, _>("trial_ends_at").map(|t| t.to_rfc3339()),
+        "primary_color": row.get::<Option<String>, _>("branding_primary_color"),
+        "login_redirect_url": resolved_login_redirect,
         "branding": {
             "logo_url": row.get::<Option<String>, _>("branding_logo_url"),
             "primary_color": row.get::<Option<String>, _>("branding_primary_color"),
             "app_name": row.get::<Option<String>, _>("branding_app_name"),
-            "login_redirect_url": resolved_login_redirect,
         },
         "onboarding_completed": row.get::<bool, _>("onboarding_completed"),
         "onboarding_step": row.get::<i16, _>("onboarding_step"),
@@ -610,11 +607,13 @@ pub async fn update_my_tenant(
             .execute(&state.db)
             .await?;
     }
-    if let Some(ref v) = body.branding_primary_color {
+    // Accept both `branding_primary_color` and `primary_color` (frontend alias)
+    let effective_color = body.branding_primary_color.as_ref().or(body.primary_color.as_ref());
+    if let Some(v) = effective_color {
         if !is_valid_css_color(v) {
             return Err(AppError::BadRequest {
                 error: "invalid_color",
-                message: "branding_primary_color must be a valid CSS hex color (e.g. #abc, #aabbcc)".into(),
+                message: "primary_color must be a valid CSS hex color (e.g. #abc, #aabbcc)".into(),
             });
         }
         sqlx::query(
@@ -671,7 +670,44 @@ pub async fn update_my_tenant(
     state.tenant_cache.invalidate(&slug);
     tracing::info!(tenant_id = %tenant_id, "Self-serve tenant config updated");
 
-    Ok(Json(MessageResponse { message: "Configuration updated successfully" }))
+    // Return the full updated tenant so the frontend can refresh state
+    let row = sqlx::query(
+        "SELECT id, name, slug, owner_email, status, allowed_providers, allowed_origins, \
+         max_users, COALESCE(plan, 'trial') AS plan, trial_ends_at, \
+         branding_logo_url, branding_primary_color, branding_app_name, \
+         login_redirect_url, \
+         onboarding_completed, onboarding_step, preferred_tab, \
+         created_at, updated_at \
+         FROM tenants WHERE id = $1",
+    )
+    .bind(&tenant_id)
+    .fetch_one(&state.db)
+    .await?;
+
+    let updated_slug: String = row.get("slug");
+    let redirect_url: Option<String> = row.get("login_redirect_url");
+    let resolved_redirect =
+        resolve_login_redirect(&state.config.server_url, &updated_slug, redirect_url.as_deref());
+
+    Ok(Json(serde_json::json!({
+        "id": row.get::<String, _>("id"),
+        "name": row.get::<String, _>("name"),
+        "slug": updated_slug,
+        "owner_email": row.get::<String, _>("owner_email"),
+        "status": row.get::<String, _>("status"),
+        "allowed_providers": row.get::<serde_json::Value, _>("allowed_providers"),
+        "allowed_origins": row.get::<serde_json::Value, _>("allowed_origins"),
+        "max_users": row.get::<i32, _>("max_users"),
+        "plan": row.get::<String, _>("plan"),
+        "trial_ends_at": row.get::<Option<chrono::DateTime<Utc>>, _>("trial_ends_at").map(|t| t.to_rfc3339()),
+        "primary_color": row.get::<Option<String>, _>("branding_primary_color"),
+        "login_redirect_url": resolved_redirect,
+        "onboarding_completed": row.get::<bool, _>("onboarding_completed"),
+        "onboarding_step": row.get::<i16, _>("onboarding_step"),
+        "preferred_tab": row.get::<Option<String>, _>("preferred_tab"),
+        "created_at": row.get::<chrono::DateTime<Utc>, _>("created_at").to_rfc3339(),
+        "updated_at": row.get::<chrono::DateTime<Utc>, _>("updated_at").to_rfc3339(),
+    })))
 }
 
 /// DELETE /platform/self-serve/tenants/{id} — Soft-delete a tenant owned by the authenticated user.
@@ -920,6 +956,191 @@ pub async fn tenant_stats(
         "providers": providers,
         "latest_user": latest_user,
     })))
+}
+
+// ── Self-Serve User Management ──────────────────────────────────────────
+
+/// GET /platform/self-serve/tenants/{id}/users — List users for a tenant owned by the authenticated user.
+pub async fn list_tenant_users(
+    State(state): State<AppState>,
+    Path(tenant_id): Path<String>,
+    req: axum::extract::Request,
+) -> Result<impl IntoResponse, AppError> {
+    let user = req
+        .extensions()
+        .get::<PlatformUser>()
+        .cloned()
+        .ok_or(AppError::Unauthorized {
+            error: "unauthorized",
+            message: "Not authenticated".into(),
+        })?;
+
+    // Verify ownership
+    sqlx::query_scalar::<_, String>(
+        "SELECT id FROM tenants WHERE id = $1 AND owner_user_id = $2 AND status != 'deleted'",
+    )
+    .bind(&tenant_id)
+    .bind(&user.user_id)
+    .fetch_optional(&state.db)
+    .await?
+    .ok_or(AppError::NotFound {
+        error: "tenant_not_found",
+        message: "Tenant not found or you don't have access".into(),
+    })?;
+
+    let rows = sqlx::query(
+        "SELECT u.id, u.email, u.name, u.email_verified, u.created_at, u.updated_at, \
+         COALESCE(u.locked_until > NOW(), FALSE) AS is_locked, \
+         (SELECT array_agg(r.name) FROM user_roles ur JOIN roles r ON r.id = ur.role_id WHERE ur.user_id = u.id AND ur.tenant_id = $1) AS roles, \
+         (SELECT c.provider FROM credentials c WHERE c.user_id = u.id AND c.tenant_id = $1 LIMIT 1) AS provider \
+         FROM users u WHERE u.tenant_id = $1 \
+         ORDER BY u.created_at DESC LIMIT 100",
+    )
+    .bind(&tenant_id)
+    .fetch_all(&state.db)
+    .await?;
+
+    let users: Vec<serde_json::Value> = rows
+        .iter()
+        .map(|r| {
+            let roles: Option<Vec<String>> = r.get("roles");
+            serde_json::json!({
+                "id": r.get::<String, _>("id"),
+                "email": r.get::<String, _>("email"),
+                "name": r.get::<Option<String>, _>("name"),
+                "email_verified": r.get::<bool, _>("email_verified"),
+                "is_locked": r.get::<bool, _>("is_locked"),
+                "provider": r.get::<Option<String>, _>("provider"),
+                "roles": roles.unwrap_or_default(),
+                "created_at": r.get::<chrono::DateTime<Utc>, _>("created_at").to_rfc3339(),
+            })
+        })
+        .collect();
+
+    Ok(Json(
+        serde_json::json!({ "users": users, "total": users.len() }),
+    ))
+}
+
+/// POST /platform/self-serve/tenants/{id}/users/{user_id}/block
+pub async fn block_tenant_user(
+    State(state): State<AppState>,
+    Path((tenant_id, user_id)): Path<(String, String)>,
+    req: axum::extract::Request,
+) -> Result<impl IntoResponse, AppError> {
+    let platform_user = req
+        .extensions()
+        .get::<PlatformUser>()
+        .cloned()
+        .ok_or(AppError::Unauthorized {
+            error: "unauthorized",
+            message: "Not authenticated".into(),
+        })?;
+
+    sqlx::query_scalar::<_, String>(
+        "SELECT id FROM tenants WHERE id = $1 AND owner_user_id = $2 AND status != 'deleted'",
+    )
+    .bind(&tenant_id)
+    .bind(&platform_user.user_id)
+    .fetch_optional(&state.db)
+    .await?
+    .ok_or(AppError::NotFound {
+        error: "tenant_not_found",
+        message: "Tenant not found".into(),
+    })?;
+
+    let result = sqlx::query(
+        "UPDATE users SET locked_until = '2099-12-31T23:59:59Z', updated_at = NOW() WHERE id = $1 AND tenant_id = $2",
+    )
+    .bind(&user_id)
+    .bind(&tenant_id)
+    .execute(&state.db)
+    .await?;
+
+    if result.rows_affected() == 0 {
+        return Err(AppError::NotFound {
+            error: "user_not_found",
+            message: "User not found".into(),
+        });
+    }
+
+    Ok(Json(serde_json::json!({ "status": "blocked" })))
+}
+
+/// POST /platform/self-serve/tenants/{id}/users/{user_id}/unblock
+pub async fn unblock_tenant_user(
+    State(state): State<AppState>,
+    Path((tenant_id, user_id)): Path<(String, String)>,
+    req: axum::extract::Request,
+) -> Result<impl IntoResponse, AppError> {
+    let platform_user = req
+        .extensions()
+        .get::<PlatformUser>()
+        .cloned()
+        .ok_or(AppError::Unauthorized {
+            error: "unauthorized",
+            message: "Not authenticated".into(),
+        })?;
+
+    sqlx::query_scalar::<_, String>(
+        "SELECT id FROM tenants WHERE id = $1 AND owner_user_id = $2 AND status != 'deleted'",
+    )
+    .bind(&tenant_id)
+    .bind(&platform_user.user_id)
+    .fetch_optional(&state.db)
+    .await?
+    .ok_or(AppError::NotFound {
+        error: "tenant_not_found",
+        message: "Tenant not found".into(),
+    })?;
+
+    sqlx::query(
+        "UPDATE users SET locked_until = NULL, updated_at = NOW() WHERE id = $1 AND tenant_id = $2",
+    )
+    .bind(&user_id)
+    .bind(&tenant_id)
+    .execute(&state.db)
+    .await?;
+
+    Ok(Json(serde_json::json!({ "status": "unblocked" })))
+}
+
+/// POST /platform/self-serve/tenants/{id}/users/{user_id}/revoke-sessions
+pub async fn revoke_tenant_user_sessions(
+    State(state): State<AppState>,
+    Path((tenant_id, user_id)): Path<(String, String)>,
+    req: axum::extract::Request,
+) -> Result<impl IntoResponse, AppError> {
+    let platform_user = req
+        .extensions()
+        .get::<PlatformUser>()
+        .cloned()
+        .ok_or(AppError::Unauthorized {
+            error: "unauthorized",
+            message: "Not authenticated".into(),
+        })?;
+
+    sqlx::query_scalar::<_, String>(
+        "SELECT id FROM tenants WHERE id = $1 AND owner_user_id = $2 AND status != 'deleted'",
+    )
+    .bind(&tenant_id)
+    .bind(&platform_user.user_id)
+    .fetch_optional(&state.db)
+    .await?
+    .ok_or(AppError::NotFound {
+        error: "tenant_not_found",
+        message: "Tenant not found".into(),
+    })?;
+
+    let revoked = sqlx::query(
+        "UPDATE refresh_tokens SET revoked = TRUE WHERE user_id = $1 AND tenant_id = $2 AND revoked = FALSE",
+    )
+    .bind(&user_id)
+    .bind(&tenant_id)
+    .execute(&state.db)
+    .await?;
+
+    Ok(Json(serde_json::json!({ "revoked": revoked.rows_affected() })))
 }
 
 // ── Get Started Page ────────────────────────────────────────────────────

@@ -376,6 +376,22 @@ fn create_router_inner(state: AppState, rate_limit_enabled: bool) -> Router {
             "/platform/self-serve/tenants/{id}/stats",
             get(onboarding::tenant_stats),
         )
+        .route(
+            "/platform/self-serve/tenants/{id}/users",
+            get(onboarding::list_tenant_users),
+        )
+        .route(
+            "/platform/self-serve/tenants/{id}/users/{user_id}/block",
+            post(onboarding::block_tenant_user),
+        )
+        .route(
+            "/platform/self-serve/tenants/{id}/users/{user_id}/unblock",
+            post(onboarding::unblock_tenant_user),
+        )
+        .route(
+            "/platform/self-serve/tenants/{id}/users/{user_id}/revoke-sessions",
+            post(onboarding::revoke_tenant_user_sessions),
+        )
         .layer(middleware::from_fn_with_state(
             state.clone(),
             require_platform_user,
@@ -528,10 +544,6 @@ fn create_router_inner(state: AppState, rate_limit_enabled: bool) -> Router {
             "/platform/console",
             get(platform_dashboard::dashboard_page),
         )
-        .route(
-            "/platform/console-v2",
-            get(platform_dashboard::dashboard_page_v2),
-        )
         .route("/platform/admin/dashboard", get(owner::dashboard_page))
         .route("/sw.js", get(crate::assets::serve_sw))
         .route("/_assets/{filename}", get(crate::assets::serve_asset))
@@ -667,7 +679,7 @@ async fn dev_clear_cache(State(state): State<AppState>) -> impl IntoResponse {
   }
   const lc=localStorage.length;localStorage.clear();add('\u2713 localStorage cleared ('+lc+' items)');
   const sc=sessionStorage.length;sessionStorage.clear();add('\u2713 sessionStorage cleared ('+sc+' items)');
-  add('<br><span class="ok">Done. <a href="javascript:history.back()">Go back</a> or <a href="/platform/console-v2">Console v2</a></span>');
+  add('<br><span class="ok">Done. <a href="javascript:history.back()">Go back</a> or <a href="/platform/console">Console</a></span>');
 })();
 </script></body></html>"#)
 }
