@@ -33,7 +33,10 @@ export function Sidebar(props: SidebarProps): HTMLElement {
     ),
     // Main nav
     h('nav', { class: 'nav' },
-      ...props.items.map((item) => NavItem(item)),
+      () => {
+        const items = typeof props.items === 'function' ? props.items() : props.items;
+        return items.map((item) => NavItem(item));
+      },
     ),
     // Spacer
     h('div', { class: 'sidebar-spacer' }),

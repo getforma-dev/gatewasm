@@ -200,7 +200,7 @@ export type TenantAdminView = 'stats' | 'users' | 'roles' | 'webhooks' | 'audit'
 
 export interface SidebarProps {
   brand: { name: string; mark: string; subtitle: string };
-  items: NavItem[];
+  items: NavItem[] | (() => NavItem[]);
   footer: NavItem[];
   activeView: () => string;
   onNavigate: (view: string) => void;
