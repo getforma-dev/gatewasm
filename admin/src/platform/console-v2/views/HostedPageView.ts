@@ -51,7 +51,7 @@ export function HostedPageView() {
     h('div', { class: 'console-card' },
       h('div', { class: 'card-label' }, 'Page URL'),
       h('div', { style: { display: 'flex', alignItems: 'center', gap: '0.5rem' } },
-        h('code', { style: { flex: '1', fontSize: '0.82rem', color: 'var(--text)' } }, siteUrl),
+        h('code', { class: 'card-value', style: { flex: '1' } }, siteUrl),
         h('a', { href: siteUrl, target: '_blank', class: 'btn btn-sm btn-ghost' }, 'Preview'),
         h('button', {
           class: 'btn btn-sm btn-ghost',
@@ -85,7 +85,7 @@ export function HostedPageView() {
     ),
 
     // Upsell
-    h('p', { class: 'text-muted', style: { fontSize: '0.72rem', marginTop: '1rem', textAlign: 'center' } },
+    h('p', { class: 'text-muted', style: { fontSize: '0.72rem', marginTop: 'var(--space-md)', textAlign: 'center' } },
       'Need more pages or a full app? ',
       h('a', { href: 'https://getforma.dev', target: '_blank', class: 'btn-link' }, 'Check out Forma'),
     ),
