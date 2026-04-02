@@ -1479,3 +1479,240 @@
   opacity: 0.4;
   cursor: not-allowed;
 }
+
+/* ==========================================================================
+   Console — Layout, Zones, Cards
+   ========================================================================== */
+
+.console-view {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: var(--space-xl) var(--space-lg);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-lg);
+}
+
+.view-header {
+  margin-bottom: var(--space-sm);
+}
+
+.view-title {
+  font-size: 1.25rem;
+  font-weight: 500;
+  color: var(--text);
+  margin: 0;
+}
+
+.view-subtitle {
+  font-size: 0.78rem;
+  color: var(--text-dim);
+  margin: var(--space-xs) 0 0;
+}
+
+/* ── Zones ──────────────────────────────────────────────────────────── */
+
+.zone {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+
+.zone + .zone {
+  margin-top: var(--space-lg);
+  padding-top: var(--space-lg);
+  border-top: 1px solid var(--border-accent);
+}
+
+.zone-label {
+  font-size: 0.65rem;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+}
+
+/* ── Stat Cards ─────────────────────────────────────────────────────── */
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--space-md);
+}
+
+.stat-card {
+  border: 1px solid var(--border-accent);
+  background: var(--surface-raised);
+  padding: var(--space-lg);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  border-radius: var(--radius-sm);
+}
+
+.stat-value {
+  font-size: 1.5rem;
+  font-weight: 500;
+  color: var(--text);
+}
+
+.stat-label {
+  font-size: 0.65rem;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text-muted);
+}
+
+/* ── Console Cards ──────────────────────────────────────────────────── */
+
+.console-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  padding: var(--space-lg);
+  border-radius: var(--radius-sm);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+.card-label {
+  font-size: 0.65rem;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+  margin-bottom: var(--space-xs);
+}
+
+.card-value {
+  font-size: 0.82rem;
+  color: var(--text);
+}
+
+.card-meta {
+  font-size: 0.72rem;
+}
+
+/* ── Quick Links ────────────────────────────────────────────────────── */
+
+.quick-links {
+  display: flex;
+  gap: var(--space-lg);
+}
+
+/* ── Auth Prompt ────────────────────────────────────────────────────── */
+
+.auth-prompt {
+  background: var(--surface-raised);
+  border: 1px dashed var(--border-accent);
+  border-radius: var(--radius-sm);
+  padding: var(--space-xl);
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-lg);
+}
+
+.auth-prompt-text {
+  font-size: 0.82rem;
+  color: var(--text-dim);
+  line-height: 1.6;
+  max-width: 480px;
+}
+
+/* ── Integration Reference Content ──────────────────────────────────── */
+
+.integration-ref-content {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-lg);
+}
+
+/* ── Code Block (generic) ───────────────────────────────────────────── */
+
+.code-block {
+  font-family: 'DM Mono', 'JetBrains Mono', 'Fira Code', monospace;
+  font-size: 0.78rem;
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  padding: var(--space-md);
+  border-radius: var(--radius-sm);
+  overflow-x: auto;
+  white-space: pre;
+  color: var(--text-dim);
+}
+
+/* ── User List ──────────────────────────────────────────────────────── */
+
+.user-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.user-row {
+  border-bottom: 1px solid var(--border);
+  transition: background var(--duration) ease;
+}
+
+.user-row:last-child {
+  border-bottom: none;
+}
+
+.user-row-summary {
+  padding: var(--space-md) var(--space-lg);
+  cursor: pointer;
+  transition: background var(--duration) ease;
+}
+
+.user-row-summary:hover {
+  background: var(--surface-raised);
+}
+
+.user-email {
+  font-size: 0.82rem;
+  color: var(--text);
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.user-meta {
+  font-size: 0.72rem;
+  margin-top: var(--space-xs);
+}
+
+.user-detail {
+  padding: var(--space-sm) var(--space-lg) var(--space-lg);
+}
+
+.user-actions {
+  display: flex;
+  gap: var(--space-sm);
+  margin-top: var(--space-md);
+}
+
+.detail-grid {
+  display: flex;
+  flex-direction: column;
+}
+
+/* ── Truncation Indicator ───────────────────────────────────────────── */
+
+.list-truncated {
+  font-size: 0.65rem;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+  text-align: center;
+  padding: var(--space-md);
+}
+
+/* ── Search Input ───────────────────────────────────────────────────── */
+
+.search-input {
+  width: 100%;
+  font-size: 0.82rem;
+}
