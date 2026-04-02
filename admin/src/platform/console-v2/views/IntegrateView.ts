@@ -31,7 +31,7 @@ export function IntegrateView() {
     // Step 1: Script tag
     h('div', { class: 'console-card' },
       h('div', { class: 'card-label' }, 'Step 1 — Add the script tag'),
-      h('pre', { class: 'sandbox-code' }, bridgeSnippet),
+      h('pre', { class: 'code-block' }, bridgeSnippet),
       h('button', {
         class: 'btn btn-sm btn-ghost',
         style: { marginTop: '0.5rem' },
@@ -42,7 +42,7 @@ export function IntegrateView() {
     // Step 2: Login URL
     h('div', { class: 'console-card' },
       h('div', { class: 'card-label' }, 'Step 2 — Your login page URL'),
-      h('code', { class: 'sandbox-code', style: { display: 'block' } },
+      h('code', { class: 'code-block', style: { display: 'block' } },
         () => serverUrl + '/t/' + (selectedTenant()?.slug || '') + '/login',
       ),
       h('p', { class: 'text-muted', style: { fontSize: '0.75rem', marginTop: '0.5rem' } },
@@ -58,7 +58,7 @@ export function IntegrateView() {
         () => h('div', null,
           createShow(
             () => showKey(),
-            () => h('code', { class: 'sandbox-code', style: { display: 'block', wordBreak: 'break-all' } },
+            () => h('code', { class: 'code-block', style: { display: 'block', wordBreak: 'break-all' } },
               () => selectedTenant()?.management_api_key || '',
             ),
           ),
