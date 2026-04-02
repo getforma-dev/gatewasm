@@ -2,6 +2,7 @@ import { createSignal, batch } from 'formajs';
 import { createAuth } from '../../core/hooks/createAuth';
 import { createApi } from '../../core/hooks/createApi';
 import { createToast } from '../../core/hooks/createToast';
+import type { IntrospectData } from '../../core/types';
 
 // ── Module-level singletons (shared across ConsoleApp island) ───────────
 
@@ -64,6 +65,9 @@ export const [view, setView] = createSignal<'tenants' | 'wizard' | 'overview' | 
 export const [users, setUsers] = createSignal<TenantUser[]>([]);
 export const [usersLoading, setUsersLoading] = createSignal(false);
 export const [hostedPage, setHostedPage] = createSignal<HostedPageData | null>(null);
+export const [introspectData, setIntrospectData] = createSignal<IntrospectData | null>(null);
+export const [introspectToken, setIntrospectToken] = createSignal<string | null>(null);
+export const [introspectUnavailable, setIntrospectUnavailable] = createSignal(false);
 
 // ── API Functions ───────────────────────────────────────────────────────
 
@@ -207,6 +211,56 @@ export async function deleteTenant(tenantId: string, confirmSlug: string): Promi
     toast.show(e instanceof Error ? e.message : 'Failed to delete tenant', 'error');
     return false;
   }
+}
+
+export async function loadIntrospect(slug: string): Promise<void> {
+  try {
+    // Plane 3 introspect: uses tenant's refresh cookie (same-origin, sent automatically)
+    const res = await fetch('/t/' + encodeURIComponent(slug) + '/auth/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ grant_type: 'refresh_token' }),
+    });
+    if (!res.ok) {
+      setIntrospectUnavailable(true);
+      return;
+    }
+    const tokenData = await res.json();
+    const accessToken = tokenData.access_token;
+    if (!accessToken) {
+      setIntrospectUnavailable(true);
+      return;
+    }
+
+    const introspectRes = await fetch('/t/' + encodeURIComponent(slug) + '/auth/introspect', {
+      headers: { 'Authorization': 'Bearer ' + accessToken },
+      credentials: 'include',
+    });
+    if (!introspectRes.ok) {
+      setIntrospectUnavailable(true);
+      return;
+    }
+
+    const data = await introspectRes.json();
+    batch(() => {
+      setIntrospectData(data);
+      setIntrospectToken(accessToken);
+      setIntrospectUnavailable(false);
+    });
+  } catch {
+    setIntrospectUnavailable(true);
+  }
+}
+
+export function startVisibilityRefresh(slug: string): () => void {
+  const handler = () => {
+    if (document.visibilityState === 'visible') {
+      loadIntrospect(slug);
+    }
+  };
+  document.addEventListener('visibilitychange', handler);
+  return () => document.removeEventListener('visibilitychange', handler);
 }
 
 // ── Navigation ──────────────────────────────────────────────────────────
