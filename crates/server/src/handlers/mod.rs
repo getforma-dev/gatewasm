@@ -615,10 +615,21 @@ async fn serve_bridge_js() -> impl IntoResponse {
 }
 
 async fn favicon() -> impl IntoResponse {
-    (
-        [(header::CACHE_CONTROL, "public, max-age=86400")],
-        StatusCode::NO_CONTENT,
-    )
+    match crate::assets::asset_bytes("formajs-favicon.svg") {
+        Some(bytes) => (
+            [
+                (header::CACHE_CONTROL, "public, max-age=86400".to_string()),
+                (header::CONTENT_TYPE, "image/svg+xml".to_string()),
+            ],
+            bytes,
+        )
+            .into_response(),
+        None => (
+            [(header::CACHE_CONTROL, "public, max-age=86400".to_string())],
+            StatusCode::NO_CONTENT,
+        )
+            .into_response(),
+    }
 }
 
 /// GET /dev/clear-cache — Dev-only page that nukes service workers, caches, storage, and cookies.

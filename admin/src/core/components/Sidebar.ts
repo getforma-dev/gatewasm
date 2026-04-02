@@ -25,7 +25,7 @@ export function Sidebar(props: SidebarProps): HTMLElement {
   },
     // Brand
     h('div', { class: 'brand', onClick: () => setCollapsed((c: boolean) => !c) },
-      h('span', { class: 'brand-mark' }, props.brand.mark),
+      h('span', { class: 'brand-mark', innerHTML: props.brand.mark }),
       h('div', { class: 'brand-text' },
         h('span', { class: 'brand-name' }, props.brand.name),
         h('span', { class: 'brand-subtitle' }, props.brand.subtitle),

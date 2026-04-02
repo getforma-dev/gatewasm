@@ -1,0 +1,19 @@
+<svg width="600" height="120" viewBox="0 0 600 120" xmlns="http://www.w3.org/2000/svg">
+  <g transform="translate(24, 10)">
+    <rect x="8" y="4" width="10" height="80" rx="2" fill="#ffffff"/>
+    <rect x="8" y="4" width="60" height="18" rx="2" fill="#ffffff" opacity="0.85"/>
+    <rect x="8" y="32" width="46" height="16" rx="2" fill="#ffffff" opacity="0.7"/>
+    <line x1="68" y1="5" x2="68" y2="21" stroke="#ffffff" stroke-width="2" stroke-linecap="round" opacity="0.3"/>
+    <line x1="54" y1="33" x2="54" y2="47" stroke="#ffffff" stroke-width="2" stroke-linecap="round" opacity="0.3"/>
+    <line x1="18" y1="84" x2="8" y2="84" stroke="#ffffff" stroke-width="2" stroke-linecap="round" opacity="0.3"/>
+    <line x1="8" y1="24" x2="68" y2="24" stroke="#ffffff" stroke-width="0.8" stroke-dasharray="4 3" opacity="0.2"/>
+    <line x1="8" y1="50" x2="54" y2="50" stroke="#ffffff" stroke-width="0.8" stroke-dasharray="4 3" opacity="0.15"/>
+    <rect x="72" y="6" width="7" height="7" rx="1.5" fill="#ffffff" opacity="0.6"/>
+    <rect x="58" y="34" width="6" height="6" rx="1.5" fill="#ffffff" opacity="0.45"/>
+    <rect x="10" y="88" width="5" height="5" rx="1.5" fill="#ffffff" opacity="0.35"/>
+    <circle cx="42" cy="13" r="2" fill="#ffffff" opacity="0.4"/>
+    <circle cx="32" cy="40" r="1.5" fill="#ffffff" opacity="0.3"/>
+  </g>
+  <text x="146" y="62" font-family="system-ui, -apple-system, sans-serif" font-size="42" font-weight="500" letter-spacing="2" fill="#ffffff">FormaJS</text>
+  <text x="148" y="84" font-family="system-ui, -apple-system, sans-serif" font-size="12" font-weight="400" letter-spacing="1.5" fill="#ffffff" opacity="0.6">REACTIVE RUNTIME FOR AI-GENERATED UI</text>
+</svg>

@@ -1,5 +1,6 @@
 // GateWASM build script — config-driven via @getforma/build
 import { build } from '@getforma/build';
+import { cpSync, readdirSync } from 'node:fs';
 
 const result = await build({
   entryPoints: [
@@ -35,6 +36,12 @@ const result = await build({
   watch: process.argv.includes('--watch'),
   serverInlined: ['forma-platform.css', 'tenant-login.js', 'sw.js'],
 });
+
+// Copy brand assets to dist/ so rust_embed can serve them at /_assets/
+const assetDir = 'src/core/assets';
+for (const f of readdirSync(assetDir)) {
+  cpSync(`${assetDir}/${f}`, `dist/${f}`);
+}
 
 if (result.warnings.length > 0) {
   for (const w of result.warnings) console.warn(`\u26a0\ufe0f  ${w}`);

@@ -13,6 +13,8 @@ import {
   selectedTenant, tenants, selectTenant,
 } from './store';
 
+const FORMAJS_MARK = '<svg width="64" height="64" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg"><rect width="64" height="64" rx="12" fill="#282828"/><g transform="translate(12, 10)"><rect x="8" y="4" width="7" height="36" rx="1.5" fill="#ebdbb2"/><rect x="8" y="4" width="26" height="8" rx="1.5" fill="#83a598"/><rect x="8" y="18" width="20" height="7" rx="1.5" fill="#8ec07c"/><line x1="34" y1="5" x2="34" y2="11" stroke="#39FF14" stroke-width="1.5" stroke-linecap="round" opacity="0.5"/><line x1="28" y1="19" x2="28" y2="24" stroke="#39FF14" stroke-width="1.5" stroke-linecap="round" opacity="0.4"/><rect x="36" y="5" width="3" height="3" rx="1" fill="#39FF14" opacity="0.8"/><rect x="30" y="19" width="2.5" height="2.5" rx="0.8" fill="#39FF14" opacity="0.6"/></g></svg>';
+
 // SVG icons — Lucide, stroke-width 1.5
 const ICONS = {
   tenants: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>',
@@ -75,7 +77,7 @@ export function ConsoleApp() {
 
   return h('div', { class: 'shell' },
     Sidebar({
-      brand: { name: 'Forma Auth', mark: '\u25C7', subtitle: 'SELF-SERVE CONSOLE' },
+      brand: { name: 'FormaJS', mark: FORMAJS_MARK, subtitle: 'GATEWASM CONSOLE' },
       items: sidebarItems,
       footer: [
         { id: 'refresh', label: 'Refresh', icon: ICONS.refresh },
