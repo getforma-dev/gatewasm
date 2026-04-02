@@ -268,6 +268,15 @@ export interface TenantConfig {
   client_id?: string;
 }
 
+// ── Introspect (Plane 3 auth data) ────────────────────────────────────────
+
+export interface IntrospectData {
+  user: { id: string; email: string; name: string | null; roles: string[]; created_at: string };
+  session: { id: string; created_at: string; expires_at: string } | null;
+  tenant: { id: string; slug: string };
+  token: { issuer: string; audience: string; issued_at: number; expires_at: number; algorithm: string };
+}
+
 // ── Utility ─────────────────────────────────────────────────────────────────
 
 export interface CsvColumn {
