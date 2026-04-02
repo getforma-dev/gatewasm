@@ -1253,6 +1253,47 @@ pub async fn update_hosted_page(
             })?
             .0;
 
+    // Validate field lengths
+    if body.headline.as_deref().map_or(false, |s| s.len() > 200) {
+        return Err(AppError::BadRequest {
+            error: "headline_too_long",
+            message: "Headline must be 200 characters or fewer".into(),
+        });
+    }
+    if body.body.as_deref().map_or(false, |s| s.len() > 5000) {
+        return Err(AppError::BadRequest {
+            error: "body_too_long",
+            message: "Body must be 5000 characters or fewer".into(),
+        });
+    }
+    if body.cta_text.as_deref().map_or(false, |s| s.len() > 500) {
+        return Err(AppError::BadRequest {
+            error: "cta_text_too_long",
+            message: "CTA text must be 500 characters or fewer".into(),
+        });
+    }
+    if body.custom_html.as_deref().map_or(false, |s| s.len() > 50_000) {
+        return Err(AppError::BadRequest {
+            error: "custom_html_too_long",
+            message: "Custom HTML must be 50000 characters or fewer".into(),
+        });
+    }
+
+    // Validate cta_link URL scheme to prevent javascript: XSS
+    if let Some(ref link) = body.cta_link {
+        let trimmed = link.trim();
+        if !trimmed.is_empty()
+            && !trimmed.starts_with("http://")
+            && !trimmed.starts_with("https://")
+            && !trimmed.starts_with('/')
+        {
+            return Err(AppError::BadRequest {
+                error: "invalid_cta_link",
+                message: "CTA link must be an http(s) URL or absolute path".into(),
+            });
+        }
+    }
+
     sqlx::query(
         "INSERT INTO tenant_hosted_pages (tenant_id, headline, body, cta_text, cta_link, custom_html) \
          VALUES ($1, $2, $3, $4, $5, $6) \

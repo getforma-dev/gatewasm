@@ -5,13 +5,12 @@ const result = await build({
   entryPoints: [
     { entry: 'src/platform/login/app.ts', outfile: 'platform-login.js' },
     { entry: 'src/platform/onboarding/app.ts', outfile: 'platform-onboarding.js' },
-    { entry: 'src/platform/console/app.ts', outfile: 'platform-console.js' },
+    { entry: 'src/platform/console-v2/app.ts', outfile: 'platform-console.js' },
     { entry: 'src/platform/benchmark/app.ts', outfile: 'platform-benchmark.js' },
     { entry: 'src/admin/dashboard/app.ts', outfile: 'admin-dashboard.js' },
     { entry: 'src/tenant/login/app.ts', outfile: 'tenant-login.js' },
     { entry: 'src/tenant/dashboard/app.ts', outfile: 'tenant-dashboard.js' },
     { entry: 'src/tenant/admin/app.ts', outfile: 'tenant-admin.js' },
-    { entry: 'src/platform/console-v2/app.ts', outfile: 'platform-console-v2.js' },
     { entry: 'src/tenant/sandbox/app.ts', outfile: 'tenant-sandbox.js' },
   ],
   routes: {
@@ -23,7 +22,6 @@ const result = await build({
     '/t/:slug/login':            { js: ['tenant-login'],        css: ['forma-platform'] },
     '/t/:slug/dashboard':        { js: ['tenant-dashboard'],    css: ['forma-platform'] },
     '/t/:slug/admin':            { js: ['tenant-admin'],        css: ['forma-platform'] },
-    '/platform/console-v2':      { js: ['platform-console-v2'], css: ['forma-platform'] },
     '/t/:slug/sandbox':          { js: ['tenant-sandbox'],      css: ['forma-platform'] },
   },
   cssEntries: [

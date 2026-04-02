@@ -7,7 +7,7 @@ import { createTenantDashboardStore } from './store';
 
 const config = (window as any).__TENANT__;
 
-const auth = createAuth({ serverUrl: config?.server_url || window.location.origin, tenant: config?.slug || 'default' });
+const auth = createAuth({ serverUrl: '', tenant: config?.slug || 'default' });
 const api = createApi(auth);
 const toast = createToast();
 const store = createTenantDashboardStore(api, toast);

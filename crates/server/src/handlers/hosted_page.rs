@@ -8,6 +8,7 @@ use sqlx::Row;
 use crate::handlers::auth::extract_refresh_cookie;
 use crate::handlers::hosted_login::html_escape;
 use crate::jwt::signing;
+use crate::middleware::csp::generate_csp_nonce;
 use crate::middleware::tenant::TenantContext;
 use crate::AppState;
 
@@ -69,6 +70,8 @@ pub async fn site_page(
         ),
     };
 
+    let nonce = generate_csp_nonce();
+
     let html = format!(
         r#"<!DOCTYPE html>
 <html lang="en">
@@ -76,7 +79,7 @@ pub async fn site_page(
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>{title}</title>
-<style>
+<style nonce="{nonce}">
 *{{margin:0;padding:0;box-sizing:border-box}}
 body{{font-family:system-ui,-apple-system,sans-serif;background:#0a0a0c;color:#e8e6e3;min-height:100vh;display:flex;align-items:center;justify-content:center}}
 .page{{max-width:640px;width:100%;padding:2rem;text-align:center}}
@@ -98,6 +101,7 @@ h1{{font-size:2rem;font-weight:500;margin-bottom:1rem;color:{color}}}
 </div>
 </body>
 </html>"#,
+        nonce = nonce,
         title = html_escape(app_name),
         color = html_escape(primary_color),
         headline = html_escape(&headline),
@@ -120,8 +124,16 @@ h1{{font-size:2rem;font-weight:500;margin-bottom:1rem;color:{color}}}
         },
     );
 
+    let csp = format!(
+        "default-src 'none'; style-src 'nonce-{}'; img-src https:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+        nonce
+    );
+
     (
-        [(axum::http::header::CACHE_CONTROL, "no-store".to_string())],
+        [
+            (axum::http::header::CACHE_CONTROL, "no-store".to_string()),
+            (axum::http::header::HeaderName::from_static("content-security-policy"), csp),
+        ],
         Html(html),
     )
         .into_response()

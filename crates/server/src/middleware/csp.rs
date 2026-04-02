@@ -30,7 +30,7 @@ mod tests {
         let header = build_csp_header("test-nonce");
         assert!(header.contains("default-src 'none'"));
         assert!(header.contains("script-src 'nonce-test-nonce' 'self'"));
-        // style-src: nonce + self (for personality CSS inline styles)
+        // style-src: nonce + self (FormaJS v1.0.9+ uses CSSOM, no unsafe-inline needed)
         assert!(header.contains("style-src 'nonce-test-nonce' 'self'"));
         assert!(!header.contains("unsafe-inline"), "CSP must NOT allow unsafe-inline");
         assert!(header.contains("frame-ancestors 'none'"));

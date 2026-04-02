@@ -1,6 +1,6 @@
-import { h, createSignal, createShow } from 'formajs';
+import { h, createSignal } from 'formajs';
 import { Field } from '../../../core/components/Field';
-import { selectedTenant, updateTenant, toast, backToTenants, type Tenant } from '../store';
+import { selectedTenant, updateTenant, deleteTenant, toast, backToTenants, loadTenants, type Tenant } from '../store';
 
 export function SettingsView() {
   const tenant = selectedTenant()!;
@@ -77,9 +77,11 @@ export function SettingsView() {
         class: 'btn btn-sm btn-danger',
         disabled: () => confirmDelete() !== tenant.slug,
         onClick: async () => {
-          // TODO: call delete endpoint
-          toast.show('Tenant deleted', 'success');
-          backToTenants();
+          const ok = await deleteTenant(tenant.id, confirmDelete());
+          if (ok) {
+            await loadTenants();
+            backToTenants();
+          }
         },
       }, 'Delete Tenant'),
     ),
@@ -87,8 +89,8 @@ export function SettingsView() {
 }
 
 function InfoRow(label: string, value: string) {
-  return h('div', { class: 'sandbox-detail-row' },
-    h('span', { class: 'sandbox-detail-label' }, label),
-    h('span', { class: 'sandbox-detail-value' }, value),
+  return h('div', { class: 'detail-row' },
+    h('span', { class: 'detail-label' }, label),
+    h('span', { class: 'detail-value' }, value),
   );
 }

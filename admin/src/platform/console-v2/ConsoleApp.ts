@@ -1,4 +1,4 @@
-import { h, createSwitch, createShow } from 'formajs';
+import { h, createSwitch } from 'formajs';
 import { Sidebar } from '../../core/components/Sidebar';
 import { LoadingBar } from '../../core/components/LoadingBar';
 import { ToastView } from '../../core/components/Toast';

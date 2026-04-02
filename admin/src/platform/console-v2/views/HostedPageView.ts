@@ -1,4 +1,4 @@
-import { h, createSignal, createShow } from 'formajs';
+import { h, createSignal } from 'formajs';
 import { Field } from '../../../core/components/Field';
 import { selectedTenant, hostedPage, loadHostedPage, saveHostedPage, toast } from '../store';
 

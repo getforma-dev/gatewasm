@@ -45,6 +45,11 @@ async fn run_migrations(pool: &PgPool) -> Result<(), sqlx::Error> {
             "onboarding fields",
             include_str!("pg_migrations/002_onboarding_fields.sql"),
         ),
+        (
+            3,
+            "hosted pages",
+            include_str!("pg_migrations/003_hosted_pages.sql"),
+        ),
     ];
 
     for &(version, label, sql) in migrations {

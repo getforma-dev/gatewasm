@@ -19,7 +19,7 @@ export function ChoosePathStep({ tenant }: ChoosePathStepProps) {
     });
     setSaving(false);
     await loadTenantDetail(tenant.id);
-    setView('detail');
+    setView(choice);
   }
 
   function cardClass(option: string): string {

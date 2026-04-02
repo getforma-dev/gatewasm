@@ -1108,7 +1108,8 @@
   white-space: pre;
 }
 
-.sandbox-detail-row {
+.sandbox-detail-row,
+.detail-row {
   display: flex;
   justify-content: space-between;
   align-items: baseline;
@@ -1117,11 +1118,13 @@
   gap: 0.75rem;
 }
 
-.sandbox-detail-row:last-child {
+.sandbox-detail-row:last-child,
+.detail-row:last-child {
   border-bottom: none;
 }
 
-.sandbox-detail-label {
+.sandbox-detail-label,
+.detail-label {
   font-size: 0.6rem;
   text-transform: uppercase;
   letter-spacing: 0.1em;
@@ -1129,7 +1132,8 @@
   flex-shrink: 0;
 }
 
-.sandbox-detail-value {
+.sandbox-detail-value,
+.detail-value {
   font-size: 0.78rem;
   color: var(--text-dim);
   font-weight: 300;

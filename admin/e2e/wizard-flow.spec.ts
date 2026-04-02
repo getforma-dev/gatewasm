@@ -33,8 +33,8 @@ test.describe('Console V2 Wizard + Dashboard Loop', () => {
     await page.goto(BASE + '/t/platform/login');
     await page.waitForTimeout(2000);
 
-    // Navigate to console-v2
-    await page.goto(BASE + '/platform/console-v2');
+    // Navigate to console
+    await page.goto(BASE + '/platform/console');
     await page.waitForTimeout(5000);
 
     // Check page loaded

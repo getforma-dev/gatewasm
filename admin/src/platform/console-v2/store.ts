@@ -195,6 +195,20 @@ export async function saveHostedPage(tenantId: string, data: Partial<HostedPageD
   }
 }
 
+export async function deleteTenant(tenantId: string, confirmSlug: string): Promise<boolean> {
+  try {
+    await api.request('/platform/self-serve/tenants/' + encodeURIComponent(tenantId), {
+      method: 'DELETE',
+      body: { confirm_slug: confirmSlug },
+    });
+    toast.show('Tenant deleted', 'success');
+    return true;
+  } catch (e) {
+    toast.show(e instanceof Error ? e.message : 'Failed to delete tenant', 'error');
+    return false;
+  }
+}
+
 // ── Navigation ──────────────────────────────────────────────────────────
 
 export function selectTenant(tenant: Tenant): void {

@@ -79,8 +79,8 @@ export function UsersView() {
 }
 
 function DetailRow(label: string, value: string) {
-  return h('div', { class: 'sandbox-detail-row' },
-    h('span', { class: 'sandbox-detail-label' }, label),
-    h('span', { class: 'sandbox-detail-value' }, value),
+  return h('div', { class: 'detail-row' },
+    h('span', { class: 'detail-label' }, label),
+    h('span', { class: 'detail-value' }, value),
   );
 }
