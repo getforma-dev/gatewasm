@@ -61,7 +61,7 @@
 
   --text:           #e8e6e3;
   --text-dim:       #6b6a72;
-  --text-muted:     #3d3d45;
+  --text-muted:     #52525b;
 
   /* ── Accent — Warm Gold ─────────────────────────────────────────────── */
   --accent:         #c4a265;
@@ -83,9 +83,9 @@
   --info:           #60a5fa;
 
   /* ── Shadows ────────────────────────────────────────────────────────── */
-  --shadow-sm:      0 1px 4px rgba(0,0,0,0.3);
-  --shadow-md:      0 4px 16px rgba(0,0,0,0.35);
-  --shadow-lg:      0 8px 32px rgba(0,0,0,0.45);
+  --shadow-sm:      0 1px 2px rgba(0,0,0,0.2);
+  --shadow-md:      0 2px 8px rgba(0,0,0,0.25);
+  --shadow-lg:      0 4px 12px rgba(0,0,0,0.3);
 
   /* ── Motion ─────────────────────────────────────────────────────────── */
   --ease:           cubic-bezier(0.16, 1, 0.3, 1);
