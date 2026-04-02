@@ -1,18 +1,14 @@
 import { createSignal } from 'formajs';
 import { createAuth } from '../../core/hooks/createAuth';
+import type { IntrospectData } from '../../core/types';
+
+export type { IntrospectData };
 
 const config = (window as any).__TENANT__ || {};
 const serverUrl: string = (window as any).__FORMA_SERVER_URL__ || window.location.origin;
 const slug: string = config.slug || '';
 
 const auth = createAuth({ serverUrl, tenant: slug });
-
-export interface IntrospectData {
-  user: { id: string; email: string; name: string | null; roles: string[]; created_at: string };
-  session: { id: string; created_at: string; expires_at: string } | null;
-  tenant: { id: string; slug: string };
-  token: { issuer: string; audience: string; issued_at: number; expires_at: number; algorithm: string };
-}
 
 export const [data, setData] = createSignal<IntrospectData | null>(null);
 export const [error, setError] = createSignal<string | null>(null);
