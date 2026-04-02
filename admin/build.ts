@@ -5,7 +5,7 @@ const result = await build({
   entryPoints: [
     { entry: 'src/platform/login/app.ts', outfile: 'platform-login.js' },
     { entry: 'src/platform/onboarding/app.ts', outfile: 'platform-onboarding.js' },
-    { entry: 'src/platform/console-v2/app.ts', outfile: 'platform-console.js' },
+    { entry: 'src/platform/console/app.ts', outfile: 'platform-console.js' },
     { entry: 'src/platform/benchmark/app.ts', outfile: 'platform-benchmark.js' },
     { entry: 'src/admin/dashboard/app.ts', outfile: 'admin-dashboard.js' },
     { entry: 'src/tenant/login/app.ts', outfile: 'tenant-login.js' },
