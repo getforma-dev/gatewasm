@@ -25,25 +25,27 @@ export function OverviewView() {
       StatCard('Active Sessions', () => String(selectedTenantStats()?.active_sessions ?? '\u2014')),
       StatCard('Logins (24h)', () => String(selectedTenantStats()?.logins_24h ?? '\u2014')),
     ),
-    createShow(
-      () => selectedTenantStats()?.latest_user != null,
-      () => {
-        const lu = selectedTenantStats()!.latest_user!;
-        return h('div', { class: 'console-card' },
-          h('div', { class: 'card-label' }, 'Latest User'),
-          h('div', { class: 'card-value' }, lu.email),
-          h('div', { class: 'card-meta text-muted' },
-            new Date(lu.created_at).toLocaleString() + ' \u2014 ' + lu.provider,
-          ),
-        );
-      },
-    ),
-    h('div', { class: 'console-card' },
-      h('div', { class: 'card-label' }, 'Quick Links'),
-      h('div', { class: 'quick-links' },
-        h('a', { href: '/t/' + tenant.slug + '/login', target: '_blank', class: 'btn-link' }, 'Login Page'),
-        h('a', { href: '/t/' + tenant.slug + '/site', target: '_blank', class: 'btn-link' }, 'Your Gated Site'),
-        h('a', { href: '/t/' + tenant.slug + '/sandbox', target: '_blank', class: 'btn-link' }, 'Console Sandbox'),
+    h('div', { class: 'cards-row' },
+      createShow(
+        () => selectedTenantStats()?.latest_user != null,
+        () => {
+          const lu = selectedTenantStats()!.latest_user!;
+          return h('div', { class: 'console-card' },
+            h('div', { class: 'card-label' }, 'Latest User'),
+            h('div', { class: 'card-value' }, lu.email),
+            h('div', { class: 'card-meta text-muted' },
+              new Date(lu.created_at).toLocaleString() + ' \u2014 ' + lu.provider,
+            ),
+          );
+        },
+      ),
+      h('div', { class: 'console-card' },
+        h('div', { class: 'card-label' }, 'Quick Links'),
+        h('div', { class: 'quick-links' },
+          h('a', { href: '/t/' + tenant.slug + '/login', target: '_blank', class: 'btn-link' }, 'Login Page'),
+          h('a', { href: '/t/' + tenant.slug + '/site', target: '_blank', class: 'btn-link' }, 'Your Gated Site'),
+          h('a', { href: '/t/' + tenant.slug + '/sandbox', target: '_blank', class: 'btn-link' }, 'Console Sandbox'),
+        ),
       ),
     ),
   );
