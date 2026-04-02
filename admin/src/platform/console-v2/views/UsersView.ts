@@ -75,6 +75,10 @@ export function UsersView() {
         ),
       ),
     ),
+    createShow(
+      () => users().length >= 100,
+      () => h('div', { class: 'list-truncated' }, '100 most recent users shown'),
+    ),
   );
 }
 
