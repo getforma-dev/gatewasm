@@ -6,11 +6,11 @@
 import { h, createSignal, createShow } from 'formajs';
 import type { IntrospectData } from '../types';
 
-export function fmtDate(iso: string): string {
+function fmtDate(iso: string): string {
   return new Date(iso).toLocaleString();
 }
 
-export function relativeExpiry(unixSeconds: number): string {
+function relativeExpiry(unixSeconds: number): string {
   const diff = unixSeconds * 1000 - Date.now();
   if (diff <= 0) return 'Expired';
   const mins = Math.floor(diff / 60000);

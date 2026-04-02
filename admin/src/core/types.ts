@@ -192,7 +192,6 @@ export interface Toast {
 // ── View Names ──────────────────────────────────────────────────────────────
 
 export type OwnerView = 'overview' | 'customers' | 'billing' | 'timeline' | 'invites' | 'security';
-export type ConsoleView = 'tenants' | 'detail' | 'create';
 export type TenantDashboardView = 'profile' | 'history' | 'integration';
 export type TenantAdminView = 'stats' | 'users' | 'roles' | 'webhooks' | 'audit';
 

@@ -16,7 +16,7 @@ function b64decode(str: string): string {
   );
 }
 
-export function decodeJwt(token: string): { header: string; payload: string; signature: string } | null {
+function decodeJwt(token: string): { header: string; payload: string; signature: string } | null {
   const parts = token.split('.');
   if (parts.length !== 3) return null;
   try {

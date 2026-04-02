@@ -1,5 +1,5 @@
 import { h, createSignal, createShow } from 'formajs';
-import { selectedTenant, updateTenant, toast } from '../store';
+import { selectedTenant, toast } from '../store';
 
 export function IntegrateView() {
   const tenant = selectedTenant()!;

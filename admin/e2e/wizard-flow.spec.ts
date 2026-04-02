@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test';
 
 const BASE = 'http://localhost:3001';
 
-test.describe('Console V2 Wizard + Dashboard Loop', () => {
+test.describe('Console Wizard + Dashboard Loop', () => {
 
   let platformToken: string;
   let tenantId: string;

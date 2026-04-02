@@ -1716,3 +1716,255 @@
   width: 100%;
   font-size: 0.82rem;
 }
+
+
+/* ==========================================================================
+   Console — Utility Classes
+   ========================================================================== */
+
+.btn-sm {
+  font-size: 0.75rem;
+  padding: 0.35rem 0.75rem;
+}
+
+.text-muted {
+  color: var(--text-muted);
+}
+
+
+/* ==========================================================================
+   Console — Wizard
+   ========================================================================== */
+
+.wizard {
+  display: flex;
+  justify-content: center;
+  padding: var(--space-xl) var(--space-lg);
+}
+
+.wizard-step {
+  width: 100%;
+  max-width: 560px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-lg);
+  animation: fade-up 0.35s var(--ease) both;
+}
+
+/* ── Step Header ───────────────────────────────────────────────────── */
+
+.wizard-step-header {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+
+.wizard-step-counter {
+  font-size: 0.65rem;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text-muted);
+}
+
+.wizard-step-title {
+  font-size: 1.25rem;
+  font-weight: 500;
+  color: var(--text);
+  margin: 0;
+}
+
+.wizard-step-subtitle {
+  font-size: 0.82rem;
+  color: var(--text-dim);
+  line-height: 1.6;
+  margin: 0;
+}
+
+/* ── Step Body & Footer ────────────────────────────────────────────── */
+
+.wizard-step-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+
+.wizard-step-footer {
+  display: flex;
+  justify-content: flex-end;
+  padding-top: var(--space-md);
+  border-top: 1px solid var(--border);
+}
+
+/* ── Branding Step: Preview Card ───────────────────────────────────── */
+
+.wizard-preview {
+  margin-top: var(--space-sm);
+}
+
+.wizard-preview-card {
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: var(--space-lg);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.wizard-preview-name {
+  font-size: 1.1rem;
+  font-weight: 500;
+}
+
+.wizard-preview-subtitle {
+  font-size: 0.78rem;
+  color: var(--text-dim);
+}
+
+.wizard-preview-field {
+  width: 75%;
+  height: 32px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.wizard-preview-btn {
+  margin-top: var(--space-xs);
+  padding: 0.45rem 1.5rem;
+  border-radius: var(--radius-sm);
+  font-size: 0.78rem;
+  font-weight: 500;
+  color: var(--bg);
+  text-align: center;
+}
+
+/* ── Test Auth Step: Waiting State ─────────────────────────────────── */
+
+.wizard-waiting {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+
+.wizard-url-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: var(--space-sm) var(--space-md);
+  overflow: hidden;
+}
+
+.wizard-url-bar code {
+  flex: 1;
+  font-size: 0.72rem;
+  color: var(--text-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wizard-pulse {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: var(--space-xl) 0;
+  text-align: center;
+}
+
+.wizard-pulse-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--accent);
+  animation: pulse-glow 2s ease-in-out infinite;
+}
+
+@keyframes pulse-glow {
+  0%, 100% { opacity: 0.4; transform: scale(1); }
+  50%      { opacity: 1;   transform: scale(1.3); }
+}
+
+/* ── Test Auth Step: Success State ─────────────────────────────────── */
+
+.wizard-success {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+
+.wizard-success-card {
+  background: rgba(74, 222, 128, 0.05);
+  border: 1px solid rgba(74, 222, 128, 0.2);
+  border-radius: var(--radius-sm);
+  padding: var(--space-lg);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+
+.wizard-success-label {
+  font-size: 0.65rem;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--success);
+}
+
+.wizard-success-email {
+  font-size: 0.95rem;
+  font-weight: 500;
+  color: var(--text);
+}
+
+.wizard-success-meta {
+  font-size: 0.72rem;
+  color: var(--text-dim);
+}
+
+/* ── Choose Path Step: Option Cards ────────────────────────────────── */
+
+.wizard-paths {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-md);
+}
+
+.wizard-path-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: var(--space-lg);
+  cursor: pointer;
+  transition: border-color var(--duration) ease, background var(--duration) ease;
+}
+
+.wizard-path-card:hover {
+  border-color: var(--border-accent);
+  background: var(--surface-raised);
+}
+
+.wizard-path-card.selected {
+  border-color: var(--accent);
+  background: var(--surface-raised);
+}
+
+.wizard-path-card h3 {
+  font-size: 0.88rem;
+  font-weight: 500;
+  color: var(--text);
+  margin: 0 0 var(--space-xs);
+}
+
+.wizard-path-card p {
+  font-size: 0.78rem;
+  color: var(--text-dim);
+  line-height: 1.5;
+  margin: 0;
+}

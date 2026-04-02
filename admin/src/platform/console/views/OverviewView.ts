@@ -14,7 +14,7 @@ export function OverviewView() {
 
   loadTenantDetail(tenant.id);
   loadIntrospect(tenant.slug);
-  const cleanup = startVisibilityRefresh(tenant.slug);
+  startVisibilityRefresh(tenant.slug);
 
   // ── Quick Check Zone ──────────────────────────────────────────────────
 

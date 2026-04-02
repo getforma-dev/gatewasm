@@ -2,8 +2,6 @@ import { createSignal } from 'formajs';
 import { createAuth } from '../../core/hooks/createAuth';
 import type { IntrospectData } from '../../core/types';
 
-export type { IntrospectData };
-
 const config = (window as any).__TENANT__ || {};
 const serverUrl: string = (window as any).__FORMA_SERVER_URL__ || window.location.origin;
 const slug: string = config.slug || '';
