@@ -53,28 +53,30 @@ export function OwnerApp(ownerStore: OwnerStore, toast: ToastController, onSigno
       },
       env: detectEnv(),
     }),
-    Topbar({
-      breadcrumbs: () => {
-        const v = store.view;
-        const labels: Record<string, string> = {
-          overview: 'Overview', customers: 'Customers', billing: 'Billing',
-          timeline: 'Timeline', invites: 'Invites', security: 'Security',
-        };
-        return [{ label: 'Control Plane' }, { label: labels[v] || v }];
-      },
-    }),
-    h('main', { class: 'content page-enter' },
-      LoadingBar(() => store.loading),
-      createSwitch(
-        () => store.view,
-        [
-          { match: 'overview', render: () => OverviewView(ownerStore) },
-          { match: 'customers', render: () => CustomersView(ownerStore) },
-          { match: 'billing', render: () => BillingView(ownerStore) },
-          { match: 'timeline', render: () => TimelineView(ownerStore) },
-          { match: 'invites', render: () => InvitesView(ownerStore) },
-          { match: 'security', render: () => SecurityView() },
-        ],
+    h('div', { class: 'shell-stage' },
+      Topbar({
+        breadcrumbs: () => {
+          const v = store.view;
+          const labels: Record<string, string> = {
+            overview: 'Overview', customers: 'Customers', billing: 'Billing',
+            timeline: 'Timeline', invites: 'Invites', security: 'Security',
+          };
+          return [{ label: 'Control Plane' }, { label: labels[v] || v }];
+        },
+      }),
+      h('main', { class: 'main page-enter' },
+        LoadingBar(() => store.loading),
+        createSwitch(
+          () => store.view,
+          [
+            { match: 'overview', render: () => OverviewView(ownerStore) },
+            { match: 'customers', render: () => CustomersView(ownerStore) },
+            { match: 'billing', render: () => BillingView(ownerStore) },
+            { match: 'timeline', render: () => TimelineView(ownerStore) },
+            { match: 'invites', render: () => InvitesView(ownerStore) },
+            { match: 'security', render: () => SecurityView() },
+          ],
+        ),
       ),
     ),
     CustomerDrawer(ownerStore),

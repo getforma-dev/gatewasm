@@ -5,6 +5,7 @@ import { ToastView } from '../../core/components/ui/Toast';
 import { Topbar } from '../../core/components/ui/Topbar';
 import { Icon } from '../../core/components/ui/Icon';
 import { ICONS } from '../../core/components/ui/icon-paths';
+import { detectEnv } from '../../core/utils';
 import { WizardFlow } from './wizard/WizardFlow';
 import { OverviewView } from './views/OverviewView';
 import { UsersView } from './views/UsersView';
@@ -16,33 +17,55 @@ import {
   selectedTenant, tenants, selectTenant,
 } from './store';
 
-/** Render an Icon component and return its outerHTML for Sidebar innerHTML usage. */
 function iconSvg(name: string, size = 18): string {
   return Icon({ name, size }).outerHTML;
 }
 
-/** Brand mark SVG — uses the 64x64 viewBox variant stored in the icon registry. */
 const FORMAJS_MARK = '<svg width="64" height="64" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">' + ICONS['formajs-mark'] + '</svg>';
 
 function TenantsList() {
-  return h('div', { class: 'console-view' },
-    h('div', { class: 'view-header' },
-      h('h2', { class: 'view-title' }, 'Your Tenants'),
+  const tenantCountLabel = () => {
+    const count = tenants().length;
+    return count === 1
+      ? '1 tenant ready to manage'
+      : count + ' tenants ready to manage';
+  };
+
+  return h('div', { class: 'console-view console-view-tenants' },
+    h('div', { class: 'view-header view-header-split' },
+      h('div', { class: 'view-header-body' },
+        h('div', { class: 'view-eyebrow' }, 'Platform Console'),
+        h('h2', { class: 'view-title' }, 'Your Tenants'),
+        h('p', { class: 'view-subtitle text-muted' }, tenantCountLabel),
+      ),
+      h('p', { class: 'view-header-note' },
+        'Choose a tenant to jump straight into its overview, users, integrations, and hosted page controls.',
+      ),
     ),
-    h('div', { class: 'user-list' },
-      () => tenants().map(t =>
-        h('div', {
-          class: 'user-row',
-          key: t.id,
+    h('div', { class: 'tenant-card-grid' },
+      () => tenants().map((tenant) =>
+        h('button', {
+          type: 'button',
+          class: 'tenant-card',
+          key: tenant.id,
+          onClick: () => selectTenant(tenant),
         },
-          h('div', {
-            class: 'user-row-summary',
-            onClick: () => selectTenant(t),
-          },
-            h('div', { class: 'user-email' }, t.name),
-            h('div', { class: 'user-meta text-muted' },
-              '/t/' + t.slug + ' — ' + t.plan + ' — ' + t.status,
+          h('div', { class: 'tenant-card-top' },
+            h('div', { class: 'tenant-card-copy' },
+              h('div', { class: 'tenant-card-title' }, tenant.name),
+              h('div', { class: 'tenant-card-path' }, '/t/' + tenant.slug),
             ),
+            h('span', {
+              class: 'tenant-card-badge' + (tenant.onboarding_completed ? '' : ' tenant-card-badge-pending'),
+            }, tenant.onboarding_completed ? 'Ready' : 'Setup'),
+          ),
+          h('div', { class: 'tenant-card-meta' },
+            TenantMeta('Plan', tenant.plan),
+            TenantMeta('Status', tenant.status),
+            TenantMeta('Surface', tenant.onboarding_completed ? 'Console' : 'Wizard'),
+          ),
+          h('div', { class: 'tenant-card-footer' },
+            tenant.onboarding_completed ? 'Open workspace' : 'Continue onboarding',
           ),
         ),
       ),
@@ -50,10 +73,25 @@ function TenantsList() {
   );
 }
 
+function TenantMeta(label: string, value: string) {
+  return h('div', { class: 'tenant-card-stat' },
+    h('span', { class: 'tenant-card-stat-label' }, label),
+    h('span', { class: 'tenant-card-stat-value' }, value),
+  );
+}
+
+function TopbarTenantContext() {
+  return h('div', { class: 'topbar-context' },
+    h('span', { class: 'topbar-chip topbar-chip-mono' }, () => '/t/' + (selectedTenant()?.slug || '')),
+    h('span', { class: 'topbar-chip' }, () => selectedTenant()?.plan || ''),
+    h('span', { class: 'topbar-chip' }, () => selectedTenant()?.status || ''),
+  );
+}
+
 export function ConsoleApp() {
   const isOnboarded = () => {
-    const t = selectedTenant();
-    return t != null && t.onboarding_completed;
+    const tenant = selectedTenant();
+    return tenant != null && tenant.onboarding_completed;
   };
 
   const sidebarItems = () => {
@@ -90,36 +128,43 @@ export function ConsoleApp() {
           return;
         }
       },
+      env: detectEnv(),
     }),
-    Topbar({
-      breadcrumbs: () => {
-        const v = view();
-        const t = selectedTenant();
-        const crumbs: { label: string; onClick?: () => void }[] = [{ label: 'Console' }];
-        if (t) crumbs.push({ label: t.name, onClick: () => backToTenants() });
-        if (v !== 'tenants' && v !== 'wizard') {
-          const labels: Record<string, string> = {
-            overview: 'Overview', users: 'Users', integrate: 'Integrate',
-            'hosted-page': 'Hosted Page', settings: 'Settings',
-          };
-          crumbs.push({ label: labels[v] || v });
-        }
-        return crumbs;
-      },
-    }),
-    h('main', { class: 'content page-enter' },
-      LoadingBar(() => loading()),
-      createSwitch(
-        () => view(),
-        [
-          { match: 'tenants', render: () => TenantsList() },
-          { match: 'wizard', render: () => WizardFlow() },
-          { match: 'overview', render: () => OverviewView() },
-          { match: 'users', render: () => UsersView() },
-          { match: 'integrate', render: () => IntegrateView() },
-          { match: 'hosted-page', render: () => HostedPageView() },
-          { match: 'settings', render: () => SettingsView() },
-        ],
+    h('div', { class: 'shell-stage' },
+      Topbar({
+        breadcrumbs: () => {
+          const currentView = view();
+          const tenant = selectedTenant();
+          const crumbs: { label: string; onClick?: () => void }[] = [{ label: 'Console' }];
+          if (tenant) crumbs.push({ label: tenant.name, onClick: () => backToTenants() });
+          if (currentView !== 'tenants' && currentView !== 'wizard') {
+            const labels: Record<string, string> = {
+              overview: 'Overview',
+              users: 'Users',
+              integrate: 'Integrate',
+              'hosted-page': 'Hosted Page',
+              settings: 'Settings',
+            };
+            crumbs.push({ label: labels[currentView] || currentView });
+          }
+          return crumbs;
+        },
+        actions: () => selectedTenant() ? TopbarTenantContext() : null,
+      }),
+      h('main', { class: 'main page-enter' },
+        LoadingBar(() => loading()),
+        createSwitch(
+          () => view(),
+          [
+            { match: 'tenants', render: () => TenantsList() },
+            { match: 'wizard', render: () => WizardFlow() },
+            { match: 'overview', render: () => OverviewView() },
+            { match: 'users', render: () => UsersView() },
+            { match: 'integrate', render: () => IntegrateView() },
+            { match: 'hosted-page', render: () => HostedPageView() },
+            { match: 'settings', render: () => SettingsView() },
+          ],
+        ),
       ),
     ),
     ToastView(toast),
