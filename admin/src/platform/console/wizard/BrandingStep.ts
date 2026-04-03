@@ -1,5 +1,5 @@
 import { h, createSignal } from 'formajs';
-import { Field } from '../../../core/components/Field';
+import { Field } from '../../../core/components/ui/Field';
 import { updateTenant, type Tenant } from '../store';
 
 interface BrandingStepProps {
@@ -48,25 +48,24 @@ export function BrandingStep({ tenant, onNext }: BrandingStepProps) {
       h('div', { class: 'field' },
         h('label', null, 'Login URL'),
         h('code', {
-          class: 'code-block',
-          style: { display: 'block', fontSize: '0.82rem', wordBreak: 'break-all', whiteSpace: 'normal' },
+          class: 'code-block block text-sm break-all ws-normal',
         }, loginUrl),
       ),
       // Color field — custom layout for color picker + text input
       h('div', { class: 'field' },
         h('label', null, 'Primary Color'),
-        h('div', { style: { display: 'flex', alignItems: 'center', gap: 'var(--space-sm)' } },
+        h('div', { class: 'flex items-center gap-sm' },
           h('input', {
             type: 'color',
             value: color,
             onInput: (e: Event) => setColor((e.target as HTMLInputElement).value),
-            style: { width: '40px', height: '40px', border: 'none', padding: '0', cursor: 'pointer', borderRadius: 'var(--radius-sm)' },
+            class: 'color-picker-btn',
           }),
           h('input', {
             type: 'text',
             value: color,
             onInput: (e: Event) => setColor((e.target as HTMLInputElement).value),
-            style: { flex: '1' },
+            class: 'flex-1',
           }),
         ),
       ),

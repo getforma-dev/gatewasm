@@ -96,6 +96,10 @@ function isOauthConfigError(detail: string): boolean {
 export { copyText };
 
 // ── API helper ────────────────────────────────────────────────────────
+// Mid-auth helper: this store manages its own token lifecycle during
+// login/MFA flows. Cannot use createApi because (a) pre-auth calls have
+// no token, (b) MFA calls use a partially-issued token, and (c) there
+// is no createAuth instance here — the store IS the auth orchestrator.
 
 function apiJson(
   path: string,
@@ -378,6 +382,9 @@ export function getMfaSetupUri(): string { return mfaSetupUri; }
 
 function routeAfterAuth() {
   if (ownerInviteToken) {
+    // Post-auth: uses accessToken set during login flow.
+    // Uses raw fetch (not createApi) because this store has no createAuth
+    // instance — it manages its own token as the auth orchestrator.
     fetch(serverUrl + '/platform/admin/invites/accept', {
       method: 'POST',
       headers: {
@@ -396,6 +403,7 @@ function routeAfterAuth() {
         }
         ownerInviteToken = '';
         try { sessionStorage.removeItem('platform_owner_invite_token'); } catch { /* noop */ }
+        // Pre-auth: refresh token via httpOnly cookie to get updated claims
         return fetch(serverUrl + '/t/platform/auth/token', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -455,6 +463,9 @@ function routeAfterAuth() {
   }
 
   // Regular platform user -> console or onboarding
+  // Post-auth: checks tenant list to decide routing destination.
+  // Uses raw fetch because this store has no createAuth/createApi — it
+  // manages its own token as the auth orchestrator for the login page.
   fetch(serverUrl + '/platform/self-serve/tenants', {
     headers: { Authorization: 'Bearer ' + accessToken },
   })
@@ -517,6 +528,7 @@ export function loginWithEmail(e?: Event) {
   persistRememberedEmail();
   setBusy('login');
 
+  // Pre-auth: email/password login — no token available yet
   fetch(serverUrl + '/t/platform/auth/login', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -555,6 +567,7 @@ export function requestPasswordReset() {
     emailInput?.focus();
     return;
   }
+  // Pre-auth: password reset request — no token available yet
   fetch(serverUrl + '/t/platform/auth/forgot-password', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -568,6 +581,7 @@ export function requestPasswordReset() {
 // ── Silent refresh ────────────────────────────────────────────────────
 
 function trySilentRefresh() {
+  // Pre-auth: silent refresh via httpOnly cookie — no token available yet
   return fetch(serverUrl + '/t/platform/auth/token', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -593,6 +607,7 @@ function handleOAuthCallback() {
   try { verifier = sessionStorage.getItem('platform_pkce_verifier'); } catch { /* noop */ }
   try { sessionStorage.removeItem('platform_pkce_verifier'); } catch { /* noop */ }
 
+  // Pre-auth: OAuth authorization_code exchange — no token available yet
   fetch(serverUrl + '/t/platform/auth/token', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

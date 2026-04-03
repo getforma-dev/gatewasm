@@ -2,10 +2,10 @@
 // InvitesView.ts — Invites tab: create invite form + invites table
 // ---------------------------------------------------------------------------
 
-import { Pill } from '../../../core/components/Pill';
-import { Badge } from '../../../core/components/Badge';
-import { DataTable } from '../../../core/components/DataTable';
-import { Panel, PanelTitle } from '../../../core/components/Panel';
+import { Pill } from '../../../core/components/ui/Pill';
+import { Badge } from '../../../core/components/ui/Badge';
+import { DataTable } from '../../../core/components/ui/DataTable';
+import { Panel, PanelTitle } from '../../../core/components/ui/Panel';
 import { fmtDate } from '../../../core/utils';
 import type { OwnerStore } from '../store';
 import type { Invite } from '../../../core/types';

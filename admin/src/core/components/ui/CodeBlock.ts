@@ -1,4 +1,4 @@
-import { copyText } from '../utils';
+import { copyText } from '../../utils';
 
 import { h } from 'formajs';
 

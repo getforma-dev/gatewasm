@@ -1,4 +1,4 @@
-import type { SidebarProps } from '../types';
+import type { SidebarProps } from './types';
 
 import { h, createSignal } from 'formajs';
 

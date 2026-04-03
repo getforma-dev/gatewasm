@@ -3,9 +3,9 @@
 // ---------------------------------------------------------------------------
 
 import { h, createShow } from 'formajs';
-import { StatCard } from '../../../core/components/StatCard';
-import { Panel, PanelTitle } from '../../../core/components/Panel';
-import { Badge } from '../../../core/components/Badge';
+import { StatCard } from '../../../core/components/ui/StatCard';
+import { Panel, PanelTitle } from '../../../core/components/ui/Panel';
+import { Badge } from '../../../core/components/ui/Badge';
 import { money } from '../../../core/utils';
 import type { OwnerStore } from '../store';
 

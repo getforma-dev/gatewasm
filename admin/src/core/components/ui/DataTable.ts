@@ -1,4 +1,4 @@
-import type { DataTableProps } from '../types';
+import type { DataTableProps } from './types';
 
 import { h, createList, createShow } from 'formajs';
 

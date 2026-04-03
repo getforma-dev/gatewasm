@@ -4,7 +4,7 @@
 // ---------------------------------------------------------------------------
 
 import { h, createSignal, createShow } from 'formajs';
-import type { IntrospectData } from '../types';
+import type { IntrospectData } from '../../types';
 
 function fmtDate(iso: string): string {
   return new Date(iso).toLocaleString();

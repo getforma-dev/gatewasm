@@ -1,3 +1,10 @@
+/**
+ * PLANE 3 — Tenant Login
+ * USER: Unauthenticated End User logging in through a Tenant's branded page
+ * SERVER DATA: window.__TENANT__ { slug, server_url, providers, name, primary_color, logo_url, signup_mode, login_redirect_url, client_id }
+ * ENTRY POINT: tenant-login.js
+ * ROUTE: /t/:slug/login
+ */
 import { mount } from 'formajs';
 import { TenantLoginCard } from './TenantLoginCard';
 import { init } from './store';

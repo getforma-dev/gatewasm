@@ -1,4 +1,4 @@
-import type { HeaderProps } from '../types';
+import type { HeaderProps } from './types';
 
 import { h } from 'formajs';
 

@@ -451,6 +451,7 @@
 .items-center { align-items: center; }
 .justify-between { justify-content: space-between; }
 .justify-center { justify-content: center; }
+.flex-1 { flex: 1; }
 .inline-flex-center { display: inline-flex; align-items: center; }
 
 /* ── Gap utilities ──────────────────────────────────────────────────────── */
@@ -474,6 +475,8 @@
 .text-center { text-align: center; }
 .text-muted-dim { color: var(--text-dim); }
 .break-all { word-break: break-all; }
+.block { display: block; }
+.ws-normal { white-space: normal; }
 .truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* ── Spacing utilities ──────────────────────────────────────────────────── */
@@ -488,6 +491,7 @@
 .p-sm  { padding: 0.5rem; }
 .p-md  { padding: 1rem; }
 .p-lg  { padding: 1.5rem; }
+.mb-0 { margin-bottom: 0; }
 .no-margin { margin: 0; }
 
 /* ── Position utilities ─────────────────────────────────────────────────── */
@@ -502,6 +506,19 @@
 .divider-top  { border-top: 1px solid var(--border); }
 
 /* ── Component-specific utilities ───────────────────────────────────────── */
+
+/* Full-width textarea that allows vertical resize only */
+.full-width-resize { width: 100%; resize: vertical; }
+
+/* Color picker button — native input[type=color] reset */
+.color-picker-btn {
+  width: 36px;
+  height: 36px;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+}
 
 /* Link styled with accent colour, no underline */
 .link-accent {

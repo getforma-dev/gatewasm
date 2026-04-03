@@ -1,4 +1,4 @@
-// FilterBar.ts — Island: Search, sort, and row count controls
+// BenchmarkFilterBar.ts — Island: Search, sort, and row count controls
 // Sort, filter, and direction changes are instant (client-side derived signal).
 // Only row count increases trigger a server fetch.
 import { h } from 'formajs';
@@ -19,7 +19,7 @@ const SORT_COLUMNS = [
   { value: 'score', label: 'Score' },
 ];
 
-export function FilterBar() {
+export function BenchmarkFilterBar() {
   return h('div', { class: 'benchmark-filter-bar' },
     h('div', { class: 'filter-group' },
       h('label', { class: 'filter-label', for: 'bench-search' }, 'Search'),

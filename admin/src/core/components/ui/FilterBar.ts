@@ -1,5 +1,5 @@
 import { h } from 'formajs';
-import type { FilterBarProps, FilterField } from '../types';
+import type { FilterBarProps, FilterField } from './types';
 
 function renderFilterField(field: FilterField): HTMLElement {
   if (field.type === 'select') {

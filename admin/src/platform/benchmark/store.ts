@@ -98,6 +98,7 @@ export async function fetchData() {
   const start = performance.now();
 
   try {
+    // Public endpoint: benchmark data is unauthenticated — no token needed
     const res = await fetch(`${serverUrl}/platform/api/benchmark?rows=${needed}`);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();

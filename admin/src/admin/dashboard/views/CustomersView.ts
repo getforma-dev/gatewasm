@@ -3,12 +3,12 @@
 // ---------------------------------------------------------------------------
 
 import { h, createShow } from 'formajs';
-import { FilterBar } from '../../../core/components/FilterBar';
-import { DataTable } from '../../../core/components/DataTable';
-import { Pager } from '../../../core/components/Pager';
-import { Pill } from '../../../core/components/Pill';
-import { Badge } from '../../../core/components/Badge';
-import { Panel, PanelTitle } from '../../../core/components/Panel';
+import { FilterBar } from '../../../core/components/ui/FilterBar';
+import { DataTable } from '../../../core/components/ui/DataTable';
+import { Pager } from '../../../core/components/ui/Pager';
+import { Pill } from '../../../core/components/ui/Pill';
+import { Badge } from '../../../core/components/ui/Badge';
+import { Panel, PanelTitle } from '../../../core/components/ui/Panel';
 import { money } from '../../../core/utils';
 import type { OwnerStore } from '../store';
 import type { Customer, FilterField } from '../../../core/types';

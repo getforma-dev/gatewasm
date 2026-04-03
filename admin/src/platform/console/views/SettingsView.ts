@@ -1,5 +1,5 @@
 import { h, createSignal } from 'formajs';
-import { Field } from '../../../core/components/Field';
+import { Field } from '../../../core/components/ui/Field';
 import { selectedTenant, updateTenant, deleteTenant, toast, backToTenants, loadTenants, type Tenant } from '../store';
 
 export function SettingsView() {
@@ -27,22 +27,21 @@ export function SettingsView() {
       Field({ label: 'App Name', name: 'app-name', value: appName, onChange: setAppName, placeholder: 'My App' }),
       h('div', { class: 'field' },
         h('label', null, 'Primary Color'),
-        h('div', { style: { display: 'flex', alignItems: 'center', gap: '0.5rem' } },
+        h('div', { class: 'flex items-center gap-sm' },
           h('input', {
             type: 'color', value: color,
             onInput: (e: Event) => setColor((e.target as HTMLInputElement).value),
-            style: { width: '36px', height: '36px', border: 'none', padding: '0', cursor: 'pointer' },
+            class: 'color-picker-btn',
           }),
           h('input', {
             type: 'text', value: color,
             onInput: (e: Event) => setColor((e.target as HTMLInputElement).value),
-            style: { flex: '1' },
+            class: 'flex-1',
           }),
         ),
       ),
       h('button', {
-        class: 'btn btn-primary btn-sm',
-        style: { marginTop: '0.75rem' },
+        class: 'btn btn-primary btn-sm mt-md',
         disabled: saving,
         onClick: saveBranding,
       }, () => saving() ? 'Saving...' : 'Save'),
@@ -62,16 +61,15 @@ export function SettingsView() {
     // Danger zone
     h('div', { class: 'console-card danger-zone' },
       h('div', { class: 'card-label' }, 'Danger Zone'),
-      h('p', { class: 'text-muted', style: { fontSize: '0.75rem', marginBottom: '0.75rem' } },
+      h('p', { class: 'text-muted text-xs mb-md' },
         'Deleting a tenant removes all users, sessions, and configuration. This cannot be undone.',
       ),
       h('input', {
         type: 'text',
-        class: 'search-input',
+        class: 'search-input mb-sm',
         placeholder: () => 'Type "' + tenant.slug + '" to confirm',
         value: confirmDelete,
         onInput: (e: Event) => setConfirmDelete((e.target as HTMLInputElement).value),
-        style: { marginBottom: '0.5rem' },
       }),
       h('button', {
         class: 'btn btn-sm btn-danger',

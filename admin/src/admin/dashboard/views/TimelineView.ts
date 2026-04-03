@@ -3,10 +3,10 @@
 // ---------------------------------------------------------------------------
 
 import { h } from 'formajs';
-import { FilterBar } from '../../../core/components/FilterBar';
-import { DataTable } from '../../../core/components/DataTable';
-import { Pager } from '../../../core/components/Pager';
-import { Panel, PanelTitle } from '../../../core/components/Panel';
+import { FilterBar } from '../../../core/components/ui/FilterBar';
+import { DataTable } from '../../../core/components/ui/DataTable';
+import { Pager } from '../../../core/components/ui/Pager';
+import { Panel, PanelTitle } from '../../../core/components/ui/Panel';
 import { fmtDate } from '../../../core/utils';
 import type { OwnerStore } from '../store';
 import type { TimelineEvent, FilterField } from '../../../core/types';

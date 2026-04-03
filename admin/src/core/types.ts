@@ -3,12 +3,20 @@
 // Shared types for the Forma Auth admin frontend.
 // ─────────────────────────────────────────────────────────────────────────────
 
-// ── Pagination ──────────────────────────────────────────────────────────────
+// ── UI prop types (canonical home: components/ui/types.ts) ─────────────────
 
-export interface PageState {
-  limit: number;
-  offset: number;
-}
+export type {
+  PageState,
+  SidebarProps,
+  NavItem,
+  HeaderProps,
+  DataTableProps,
+  PagerProps,
+  FilterBarProps,
+  FilterField,
+} from './components/ui/types';
+
+// ── Pagination (re-exported above) ─────────────────────────────────────────
 
 // ── Filters ─────────────────────────────────────────────────────────────────
 
@@ -195,65 +203,7 @@ export type OwnerView = 'overview' | 'customers' | 'billing' | 'timeline' | 'inv
 export type TenantDashboardView = 'profile' | 'history' | 'integration';
 export type TenantAdminView = 'stats' | 'users' | 'roles' | 'webhooks' | 'audit';
 
-// ── Component Props ─────────────────────────────────────────────────────────
-
-export interface SidebarProps {
-  brand: { name: string; mark: string; subtitle: string };
-  items: NavItem[] | (() => NavItem[]);
-  footer: NavItem[];
-  activeView: () => string;
-  onNavigate: (view: string) => void;
-  env?: string;
-}
-
-export interface NavItem {
-  id: string;
-  label: string;
-  icon: string;  // SVG string
-  danger?: boolean;
-}
-
-export interface HeaderProps {
-  title: string;
-  subtitle?: string;
-  loading?: () => boolean;
-  actions?: HTMLElement[];
-}
-
-export interface DataTableProps<T> {
-  headers: string[];
-  rows: () => T[];
-  keyFn: (row: T) => string;
-  renderRow: (row: T) => HTMLElement;
-  emptyText?: string;
-}
-
-export interface PagerProps {
-  total: () => number;
-  page: () => PageState;
-  onNavigate: (dir: 'prev' | 'next') => void;
-}
-
-export interface FilterBarProps {
-  id: string;
-  fields: FilterField[];
-  onApply: () => void;
-  onClear: () => void;
-  onSave?: () => void;
-  onLoad?: () => void;
-  onExport?: () => void;
-  total?: () => number;
-}
-
-export interface FilterField {
-  name: string;
-  label: string;
-  type: 'text' | 'select' | 'datetime';
-  value: () => string;
-  onChange: (value: string) => void;
-  placeholder?: string;
-  options?: () => { value: string; label: string }[];
-}
+// ── Component Props (moved to components/ui/types.ts, re-exported above) ───
 
 export interface TenantConfig {
   slug: string;

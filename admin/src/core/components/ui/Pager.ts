@@ -1,5 +1,5 @@
 import { h } from 'formajs';
-import type { PagerProps } from '../types';
+import type { PagerProps } from './types';
 
 export function Pager(props: PagerProps) {
   return h('div', { class: 'pager' },

@@ -1,5 +1,61 @@
 @import "tailwindcss";
-@import "./theme/tokens.css";
+@import "../core/theme/tokens.css";
+
+/* ==========================================================================
+   Forma Owner — Tailwind Theme Mapping
+   ─────────────────────────────────────
+   Maps CSS custom properties from tokens.css to Tailwind's theme system.
+   This enables Tailwind utility classes like bg-surface, text-accent, etc.
+   ========================================================================== */
+
+@theme {
+  /* ── Colors ──────────────────────────────────────────────────────────── */
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-raised: var(--surface-raised);
+  --color-surface-overlay: var(--surface-overlay);
+
+  --color-border: var(--border);
+  --color-border-accent: var(--border-accent);
+  --color-border-strong: var(--border-strong);
+
+  --color-text: var(--text);
+  --color-text-dim: var(--text-dim);
+  --color-text-muted: var(--text-muted);
+
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-dim: var(--accent-dim);
+  --color-accent-glow: var(--accent-glow);
+  --color-accent-border: var(--accent-border);
+
+  --color-success: var(--success);
+  --color-success-dim: var(--success-dim);
+  --color-success-border: var(--success-border);
+  --color-warning: var(--warning);
+  --color-warning-dim: var(--warning-dim);
+  --color-warning-border: var(--warning-border);
+  --color-danger: var(--danger);
+  --color-danger-dim: var(--danger-dim);
+  --color-danger-border: var(--danger-border);
+  --color-info: var(--info);
+
+  /* ── Shadows (inlined to avoid circular var() self-reference) ────────── */
+  --shadow-sm: 0 1px 2px rgba(0,0,0,0.2);
+  --shadow-md: 0 2px 8px rgba(0,0,0,0.25);
+  --shadow-lg: 0 4px 12px rgba(0,0,0,0.3);
+
+  /* ── Radius (inlined to avoid circular var() self-reference) ─────────── */
+  --radius-sm: 4px;
+  --radius-md: 8px;
+
+  /* ── Spacing ─────────────────────────────────────────────────────────── */
+  --spacing-xs: var(--space-xs);
+  --spacing-sm: var(--space-sm);
+  --spacing-md: var(--space-md);
+  --spacing-lg: var(--space-lg);
+  --spacing-xl: var(--space-xl);
+}
 
 /* ==========================================================================
    Forma Auth — Provider Control Plane (Owner Dashboard)

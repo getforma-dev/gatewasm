@@ -4,9 +4,9 @@
 
 import { h, createSwitch } from 'formajs';
 import { detectEnv } from '../../core/utils';
-import { Sidebar } from '../../core/components/Sidebar';
-import { LoadingBar } from '../../core/components/LoadingBar';
-import { ToastView } from '../../core/components/Toast';
+import { Sidebar } from '../../core/components/ui/Sidebar';
+import { LoadingBar } from '../../core/components/ui/LoadingBar';
+import { ToastView } from '../../core/components/ui/Toast';
 import { OverviewView } from './views/OverviewView';
 import { CustomersView } from './views/CustomersView';
 import { CustomerDrawer } from './views/CustomerDrawer';

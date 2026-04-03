@@ -1,4 +1,4 @@
-// DataTable.ts — Island: Data table with createList + createShow
+// BenchmarkDataTable.ts — Island: Data table with createList + createShow
 // Sort header clicks are instant (derived signal). No server fetch.
 import { h, createList, createShow } from 'formajs';
 import { rows, loading, error, sortCol, setSortCol, sortDir, setSortDir } from './store';

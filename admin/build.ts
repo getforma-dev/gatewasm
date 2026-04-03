@@ -27,7 +27,7 @@ const result = await build({
   },
   cssEntries: [
     { input: 'src/styles/main.css', outfile: 'owner.css', tailwind: true },
-    { input: ['src/core/theme/tokens.css', 'src/core/theme/base.css', 'src/core/theme/components.css', 'src/core/theme/pages.css'], outfile: 'forma-platform.css' },
+    { input: 'src/core/theme/platform.css', outfile: 'forma-platform.css', tailwind: true },
   ],
   outputDir: 'dist',
   formaAlias: '@getforma/core',

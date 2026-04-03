@@ -1,5 +1,5 @@
 import { h } from 'formajs';
-import type { ToastController } from '../hooks/createToast';
+import type { ToastController } from '../../hooks/createToast';
 
 export function ToastView(controller: ToastController) {
   return h('div', {

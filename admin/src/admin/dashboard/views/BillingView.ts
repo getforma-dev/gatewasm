@@ -3,12 +3,12 @@
 // ---------------------------------------------------------------------------
 
 import { h, createSignal } from 'formajs';
-import { StatCard } from '../../../core/components/StatCard';
-import { FilterBar } from '../../../core/components/FilterBar';
-import { DataTable } from '../../../core/components/DataTable';
-import { Pager } from '../../../core/components/Pager';
-import { Pill } from '../../../core/components/Pill';
-import { Panel, PanelTitle } from '../../../core/components/Panel';
+import { StatCard } from '../../../core/components/ui/StatCard';
+import { FilterBar } from '../../../core/components/ui/FilterBar';
+import { DataTable } from '../../../core/components/ui/DataTable';
+import { Pager } from '../../../core/components/ui/Pager';
+import { Pill } from '../../../core/components/ui/Pill';
+import { Panel, PanelTitle } from '../../../core/components/ui/Panel';
 import { money, fmtDate } from '../../../core/utils';
 import type { OwnerStore } from '../store';
 import type { Payment, FilterField } from '../../../core/types';

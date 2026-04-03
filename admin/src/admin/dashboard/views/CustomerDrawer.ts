@@ -2,11 +2,11 @@
 // CustomerDrawer.ts — Customer 360 detail drawer (side panel)
 // ---------------------------------------------------------------------------
 
-import { StatCard } from '../../../core/components/StatCard';
-import { Pill } from '../../../core/components/Pill';
-import { Badge } from '../../../core/components/Badge';
-import { Panel, PanelTitle } from '../../../core/components/Panel';
-import { DataTable } from '../../../core/components/DataTable';
+import { StatCard } from '../../../core/components/ui/StatCard';
+import { Pill } from '../../../core/components/ui/Pill';
+import { Badge } from '../../../core/components/ui/Badge';
+import { Panel, PanelTitle } from '../../../core/components/ui/Panel';
+import { DataTable } from '../../../core/components/ui/DataTable';
 import { money, fmtDate } from '../../../core/utils';
 import type { OwnerStore } from '../store';
 import type {

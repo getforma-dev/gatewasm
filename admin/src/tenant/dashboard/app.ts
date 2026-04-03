@@ -1,3 +1,10 @@
+/**
+ * PLANE 3 — Tenant Dashboard
+ * USER: Authenticated End User
+ * SERVER DATA: window.__TENANT__ { slug }
+ * ENTRY POINT: tenant-dashboard.js
+ * ROUTE: /t/:slug/dashboard
+ */
 import { mount } from 'formajs';
 import { createAuth } from '../../core/hooks/createAuth';
 import { createApi } from '../../core/hooks/createApi';

@@ -1,7 +1,7 @@
 import { h, createSwitch } from 'formajs';
-import { Sidebar } from '../../core/components/Sidebar';
-import { LoadingBar } from '../../core/components/LoadingBar';
-import { ToastView } from '../../core/components/Toast';
+import { Sidebar } from '../../core/components/ui/Sidebar';
+import { LoadingBar } from '../../core/components/ui/LoadingBar';
+import { ToastView } from '../../core/components/ui/Toast';
 import { WizardFlow } from './wizard/WizardFlow';
 import { OverviewView } from './views/OverviewView';
 import { UsersView } from './views/UsersView';

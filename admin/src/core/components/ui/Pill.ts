@@ -1,5 +1,5 @@
 import { h } from 'formajs';
-import { normalizePillStatus } from '../utils';
+import { normalizePillStatus } from '../../utils';
 
 export function Pill(status: string) {
   const normalized = normalizePillStatus(status);

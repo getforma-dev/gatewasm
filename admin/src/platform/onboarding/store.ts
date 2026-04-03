@@ -7,6 +7,7 @@
 import { createSignal } from 'formajs';
 import { createAuth } from '../../core/hooks/createAuth';
 
+
 // ── Server-injected config ──────────────────────────────────────────────
 
 export const serverUrl: string =
@@ -23,7 +24,6 @@ export const hasOAuth = hasGoogle || hasGithub;
 // ── Auth hook ───────────────────────────────────────────────────────────
 
 const auth = createAuth({ serverUrl, tenant: 'platform' });
-
 // ── Signals ─────────────────────────────────────────────────────────────
 
 export const [email, setEmail] = createSignal('');
@@ -41,8 +41,9 @@ import { randomState, generatePKCE, decodeJwtClaims } from '../../core/utils';
 
 // ── Post-auth routing ───────────────────────────────────────────────────
 
-async function autoCreateTenant(accessToken: string): Promise<void> {
-  const claims = decodeJwtClaims(accessToken) || {};
+async function autoCreateTenant(): Promise<void> {
+  const token = auth.accessToken();
+  const claims = decodeJwtClaims(token) || {};
   const emailAddr = (claims.email as string) || (claims.sub as string) || '';
   const userPart = emailAddr.split('@')[0] || 'my-app';
   let slug = userPart
@@ -55,12 +56,13 @@ async function autoCreateTenant(accessToken: string): Promise<void> {
   const name = userPart.charAt(0).toUpperCase() + userPart.slice(1) + ' App';
 
   try {
+    // Post-auth but platform-scoped (not tenant-scoped) — raw fetch because
+    // createApi prepends /t/platform which would double the path prefix.
+    const token = auth.accessToken();
     await fetch(serverUrl + '/platform/self-serve/tenants', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: 'Bearer ' + accessToken,
-      },
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+      credentials: 'include',
       body: JSON.stringify({ name, slug }),
     });
   } catch {
@@ -69,20 +71,23 @@ async function autoCreateTenant(accessToken: string): Promise<void> {
   window.location.href = '/platform/console';
 }
 
-async function routeAfterAuth(accessToken: string): Promise<void> {
+async function routeAfterAuth(): Promise<void> {
   try {
+    // Post-auth but platform-scoped (not tenant-scoped) — raw fetch because
+    // createApi prepends /t/platform which would double the path prefix.
     const res = await fetch(serverUrl + '/platform/self-serve/tenants', {
-      headers: { Authorization: 'Bearer ' + accessToken },
+      headers: { Authorization: 'Bearer ' + auth.accessToken() },
+      credentials: 'include',
     });
-    if (!res.ok) throw new Error('tenant_list_failed');
-    const data = await res.json();
+    if (!res.ok) throw new Error('fetch_failed');
+    const data: { tenants: { id: string }[] } = await res.json();
     if (data && Array.isArray(data.tenants) && data.tenants.length > 0) {
       window.location.href = '/platform/console';
     } else {
-      await autoCreateTenant(accessToken);
+      await autoCreateTenant();
     }
   } catch {
-    await autoCreateTenant(accessToken);
+    await autoCreateTenant();
   }
 }
 
@@ -128,6 +133,7 @@ export async function handleRegister(e: Event) {
   setSubmitting(true);
 
   try {
+    // Pre-auth: registration endpoint — no token available yet
     const res = await fetch(serverUrl + '/t/platform/auth/register', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -143,7 +149,7 @@ export async function handleRegister(e: Event) {
     }
 
     auth.setAccessToken(data.access_token);
-    await routeAfterAuth(data.access_token);
+    await routeAfterAuth();
   } catch {
     setSubmitting(false);
     setError('Network error. Please try again.');
@@ -163,6 +169,7 @@ export function init() {
 
     setInfo('Completing sign-in...');
 
+    // Pre-auth: OAuth code-for-token exchange — no token available yet
     fetch(serverUrl + '/t/platform/auth/token', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -181,14 +188,14 @@ export function init() {
         if (!res.ok) throw new Error(res.data?.message || 'oauth_failed');
         auth.setAccessToken(res.data.access_token);
         history.replaceState(null, '', '/platform/onboarding');
-        routeAfterAuth(res.data.access_token);
+        routeAfterAuth();
       })
       .catch(() => {
         setInfo(null);
         setError('OAuth sign-in failed. Please try again.');
       });
   } else {
-    // Silent refresh — check if already authenticated
+    // Pre-auth: silent refresh via httpOnly cookie — no token available yet
     fetch(serverUrl + '/t/platform/auth/token', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -201,7 +208,7 @@ export function init() {
       })
       .then((d: any) => {
         auth.setAccessToken(d.access_token);
-        routeAfterAuth(d.access_token);
+        routeAfterAuth();
       })
       .catch(() => {
         // Not authenticated — stay on registration form

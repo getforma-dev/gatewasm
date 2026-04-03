@@ -1,5 +1,6 @@
 import { createSignal } from 'formajs';
 import { createAuth } from '../../core/hooks/createAuth';
+import { createApi } from '../../core/hooks/createApi';
 import type { IntrospectData } from '../../core/types';
 
 const config = (window as any).__TENANT__ || {};
@@ -7,6 +8,7 @@ const serverUrl: string = (window as any).__FORMA_SERVER_URL__ || window.locatio
 const slug: string = config.slug || '';
 
 const auth = createAuth({ serverUrl, tenant: slug });
+const api = createApi(auth);
 
 export const [data, setData] = createSignal<IntrospectData | null>(null);
 export const [error, setError] = createSignal<string | null>(null);
@@ -19,12 +21,8 @@ export async function init(): Promise<void> {
     const token = await auth.silentRefresh();
     setRawToken(token);
 
-    const res = await fetch(serverUrl + '/t/' + slug + '/auth/introspect', {
-      headers: { 'Authorization': 'Bearer ' + token },
-      credentials: 'include',
-    });
-    if (!res.ok) throw new Error('introspect_failed');
-    setData(await res.json());
+    const result = await api.get<IntrospectData>('/auth/introspect');
+    setData(result);
   } catch (e: any) {
     setError(e.message || 'Failed to load auth data');
   }

@@ -4,9 +4,9 @@ import {
   introspectData, introspectToken, introspectUnavailable,
   loadIntrospect, startVisibilityRefresh,
 } from '../store';
-import { CallbackPreview } from '../../../core/components/CallbackPreview';
-import { UserProfile, SessionInfo } from '../../../core/components/AuthDataCards';
-import { JwtViewer } from '../../../core/components/JwtViewer';
+import { CallbackPreview } from '../../../core/components/domain/CallbackPreview';
+import { UserProfile, SessionInfo } from '../../../core/components/domain/AuthDataCards';
+import { JwtViewer } from '../../../core/components/domain/JwtViewer';
 
 export function OverviewView() {
   const tenant = selectedTenant()!;

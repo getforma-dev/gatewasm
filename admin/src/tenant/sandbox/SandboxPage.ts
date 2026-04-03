@@ -4,9 +4,9 @@
 
 import { h, createShow } from 'formajs';
 import { data, error, rawToken, tenantName, slug, serverUrl, logout } from './store';
-import { CallbackPreview } from '../../core/components/CallbackPreview';
-import { UserProfile, SessionInfo } from '../../core/components/AuthDataCards';
-import { JwtViewer } from '../../core/components/JwtViewer';
+import { CallbackPreview } from '../../core/components/domain/CallbackPreview';
+import { UserProfile, SessionInfo } from '../../core/components/domain/AuthDataCards';
+import { JwtViewer } from '../../core/components/domain/JwtViewer';
 
 export function SandboxPage() {
   const consoleUrl = '/platform/console';
@@ -15,7 +15,7 @@ export function SandboxPage() {
     () => error() != null,
     () => h('div', { class: 'sandbox-error' },
       h('p', null, 'Failed to load sandbox data.'),
-      h('p', { class: 'text-xs mt-sm', style: 'color: var(--text-muted)' }, error),
+      h('p', { class: 'text-xs mt-sm text-muted' }, error),
       h('button', {
         class: 'btn mt-md',
         onClick: () => { window.location.reload(); },

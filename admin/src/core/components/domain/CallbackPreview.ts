@@ -4,7 +4,7 @@
 // ---------------------------------------------------------------------------
 
 import { h, createSignal } from 'formajs';
-import type { IntrospectData } from '../types';
+import type { IntrospectData } from '../../types';
 
 interface CallbackPreviewProps {
   data: IntrospectData;

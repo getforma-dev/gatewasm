@@ -1,3 +1,10 @@
+/**
+ * PLANE 3 — Tenant Admin
+ * USER: Authenticated Member managing a specific Tenant
+ * SERVER DATA: window.__TENANT__ { slug }
+ * ENTRY POINT: tenant-admin.js
+ * ROUTE: /t/:slug/admin
+ */
 import { mount } from 'formajs';
 import { createAuth } from '../../core/hooks/createAuth';
 import { createApi } from '../../core/hooks/createApi';

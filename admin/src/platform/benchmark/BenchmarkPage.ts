@@ -5,8 +5,8 @@
 // ---------------------------------------------------------------------------
 
 import { h } from 'formajs';
-import { FilterBar } from './FilterBar';
-import { BenchmarkDataTable } from './DataTable';
+import { BenchmarkFilterBar } from './BenchmarkFilterBar';
+import { BenchmarkDataTable } from './BenchmarkDataTable';
 import { PerfPanel } from './PerfPanel';
 
 // ── Page component ──────────────────────────────────────────────────────
@@ -27,7 +27,7 @@ export function BenchmarkPage() {
 
     h('div', { class: 'benchmark-layout' },
       // ── Islands: function calls trigger Rule 11 → ISLAND_START/END ──
-      FilterBar(),
+      BenchmarkFilterBar(),
       PerfPanel(),
       BenchmarkDataTable(),
     ),

@@ -3,15 +3,15 @@
 // ---------------------------------------------------------------------------
 
 import { detectEnv } from '../../core/utils';
-import { Sidebar } from '../../core/components/Sidebar';
-import { LoadingBar } from '../../core/components/LoadingBar';
-import { ToastView } from '../../core/components/Toast';
-import { StatCard } from '../../core/components/StatCard';
-import { DataTable } from '../../core/components/DataTable';
-import { Pager } from '../../core/components/Pager';
-import { Panel, PanelTitle } from '../../core/components/Panel';
-import { Badge } from '../../core/components/Badge';
-import { Pill } from '../../core/components/Pill';
+import { Sidebar } from '../../core/components/ui/Sidebar';
+import { LoadingBar } from '../../core/components/ui/LoadingBar';
+import { ToastView } from '../../core/components/ui/Toast';
+import { StatCard } from '../../core/components/ui/StatCard';
+import { DataTable } from '../../core/components/ui/DataTable';
+import { Pager } from '../../core/components/ui/Pager';
+import { Panel, PanelTitle } from '../../core/components/ui/Panel';
+import { Badge } from '../../core/components/ui/Badge';
+import { Pill } from '../../core/components/ui/Pill';
 import { fmtDate } from '../../core/utils';
 import type { TenantAdminStore } from './store';
 import type { TenantUser, TenantRole, TenantWebhook, AuditEntry } from './store';

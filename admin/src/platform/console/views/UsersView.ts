@@ -35,7 +35,7 @@ export function UsersView() {
     ),
     createShow(
       () => usersLoading(),
-      () => h('p', { class: 'text-muted', style: { padding: '1rem' } }, 'Loading...'),
+      () => h('p', { class: 'text-muted p-md' }, 'Loading...'),
     ),
     h('div', { class: 'user-list' },
       () => filteredUsers().map(u =>

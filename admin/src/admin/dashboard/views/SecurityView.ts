@@ -2,7 +2,7 @@
 // SecurityView.ts — Security / operational guardrails tab (playbook)
 // ---------------------------------------------------------------------------
 
-import { Panel, PanelTitle } from '../../../core/components/Panel';
+import { Panel, PanelTitle } from '../../../core/components/ui/Panel';
 
 import { h } from 'formajs';
 

@@ -1,3 +1,10 @@
+/**
+ * PLANE 1 — Operator Dashboard
+ * USER: Operator (platform owner — Victor)
+ * SERVER DATA: window.__FORMA_SERVER_URL__
+ * ENTRY POINT: admin-dashboard.js
+ * ROUTE: /platform/admin/dashboard
+ */
 import { mount } from 'formajs';
 import { createAuth } from '../../core/hooks/createAuth';
 import { createApi } from '../../core/hooks/createApi';

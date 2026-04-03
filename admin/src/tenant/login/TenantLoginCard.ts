@@ -6,7 +6,7 @@
  * All state imported from store.ts singleton.
  */
 import { h, createShow } from 'formajs';
-import { Alert } from '../../core/components/Alert';
+import { Alert } from '../../core/components/ui/Alert';
 import {
   error, success, loading, mode, setMode, showPassword, setShowPassword,
   email, setEmail, password, setPassword, name, setName,

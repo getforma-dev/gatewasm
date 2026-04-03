@@ -139,6 +139,7 @@ function handleOAuthCallback() {
   }
 
   setLoading(true);
+  // Pre-auth: OAuth authorization_code exchange — no token available yet
   fetch(serverUrl + '/auth/token', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -204,6 +205,7 @@ export function submitForm(e: Event) {
     body.invite_token = inviteToken;
   }
 
+  // Pre-auth: login, register, or reset-password — no token available yet
   fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -253,6 +255,7 @@ export function sendForgotPassword() {
   }
   setLoading(true);
   setError(null);
+  // Pre-auth: forgot-password request — no token available yet
   fetch(serverUrl + '/auth/forgot-password', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -267,6 +270,7 @@ export function sendForgotPassword() {
 function setupBfcacheListener() {
   window.addEventListener('pageshow', (evt: PageTransitionEvent) => {
     if (evt.persisted) {
+      // Pre-auth: bfcache refresh via httpOnly cookie — no token available
       fetch(serverUrl + '/auth/token', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

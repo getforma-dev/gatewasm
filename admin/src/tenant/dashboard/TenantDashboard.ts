@@ -3,16 +3,16 @@
 // ---------------------------------------------------------------------------
 
 import { detectEnv } from '../../core/utils';
-import { Sidebar } from '../../core/components/Sidebar';
-import { LoadingBar } from '../../core/components/LoadingBar';
-import { ToastView } from '../../core/components/Toast';
-import { Header } from '../../core/components/Header';
-import { Card, CardHead } from '../../core/components/Card';
-import { Badge } from '../../core/components/Badge';
-import { CodeBlock } from '../../core/components/CodeBlock';
-import { DataTable } from '../../core/components/DataTable';
-import { Panel } from '../../core/components/Panel';
-import { Field } from '../../core/components/Field';
+import { Sidebar } from '../../core/components/ui/Sidebar';
+import { LoadingBar } from '../../core/components/ui/LoadingBar';
+import { ToastView } from '../../core/components/ui/Toast';
+import { Header } from '../../core/components/ui/Header';
+import { Card, CardHead } from '../../core/components/ui/Card';
+import { Badge } from '../../core/components/ui/Badge';
+import { CodeBlock } from '../../core/components/ui/CodeBlock';
+import { DataTable } from '../../core/components/ui/DataTable';
+import { Panel } from '../../core/components/ui/Panel';
+import { Field } from '../../core/components/ui/Field';
 import { fmtDate, copyText } from '../../core/utils';
 import type { TenantDashboardStore, LoginHistoryEntry } from './store';
 import type { ToastController } from '../../core/hooks/createToast';

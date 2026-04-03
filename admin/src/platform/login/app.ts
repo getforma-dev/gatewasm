@@ -1,3 +1,10 @@
+/**
+ * PLANE 2 — Platform Login
+ * USER: Unauthenticated Member signing in
+ * SERVER DATA: window.__FORMA_SERVER_URL__, window.__PLATFORM_CONFIG__ { google_enabled, github_enabled }
+ * ENTRY POINT: platform-login.js
+ * ROUTE: /platform/login
+ */
 import { activateIslands, mount } from 'formajs';
 import { LoginPage } from './LoginPage';
 import { AuthCard } from './AuthCard';

@@ -43,7 +43,7 @@ export function JwtViewer({ token, slug, serverUrl }: JwtViewerProps) {
 
   return h('div', { class: 'sandbox-section' },
     h('div', { class: 'sandbox-toggle-row' },
-      h('div', { class: 'sandbox-section-title', style: 'margin-bottom:0' }, 'JWT Access Token'),
+      h('div', { class: 'sandbox-section-title mb-0' }, 'JWT Access Token'),
       h('button', {
         class: 'sandbox-toggle-btn',
         onClick: () => setShowRaw(!showRaw()),
@@ -78,7 +78,7 @@ export function JwtViewer({ token, slug, serverUrl }: JwtViewerProps) {
       createShow(
         () => showRefresh(),
         () => h('div', { class: 'mt-sm' },
-          h('p', { class: 'text-xs', style: 'color: var(--text-muted); margin-bottom: 0.5rem' },
+          h('p', { class: 'text-xs text-muted mb-sm' },
             'Refresh tokens are httpOnly cookies. They are not visible to JavaScript. Your server exchanges them silently via POST /auth/token.',
           ),
           h('pre', { class: 'sandbox-code' },

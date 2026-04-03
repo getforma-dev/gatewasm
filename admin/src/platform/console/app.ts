@@ -1,3 +1,10 @@
+/**
+ * PLANE 2 — Tenant Management Console
+ * USER: Authenticated Member managing their Organization's Tenants
+ * SERVER DATA: window.__FORMA_SERVER_URL__ (via store)
+ * ENTRY POINT: platform-console.js
+ * ROUTE: /platform/console
+ */
 import { mount } from 'formajs';
 import { ConsoleApp } from './ConsoleApp';
 import { init } from './store';
