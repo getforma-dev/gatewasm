@@ -2,6 +2,7 @@ import { h, createSwitch } from 'formajs';
 import { Sidebar } from '../../core/components/ui/Sidebar';
 import { LoadingBar } from '../../core/components/ui/LoadingBar';
 import { ToastView } from '../../core/components/ui/Toast';
+import { Topbar } from '../../core/components/ui/Topbar';
 import { WizardFlow } from './wizard/WizardFlow';
 import { OverviewView } from './views/OverviewView';
 import { UsersView } from './views/UsersView';
@@ -94,7 +95,23 @@ export function ConsoleApp() {
         }
       },
     }),
-    h('main', { class: 'main' },
+    Topbar({
+      breadcrumbs: () => {
+        const v = view();
+        const t = selectedTenant();
+        const crumbs: { label: string; onClick?: () => void }[] = [{ label: 'Console' }];
+        if (t) crumbs.push({ label: t.name, onClick: () => backToTenants() });
+        if (v !== 'tenants' && v !== 'wizard') {
+          const labels: Record<string, string> = {
+            overview: 'Overview', users: 'Users', integrate: 'Integrate',
+            'hosted-page': 'Hosted Page', settings: 'Settings',
+          };
+          crumbs.push({ label: labels[v] || v });
+        }
+        return crumbs;
+      },
+    }),
+    h('main', { class: 'content page-enter' },
       LoadingBar(() => loading()),
       createSwitch(
         () => view(),

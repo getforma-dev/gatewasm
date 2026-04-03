@@ -7,6 +7,7 @@ import { detectEnv } from '../../core/utils';
 import { Sidebar } from '../../core/components/ui/Sidebar';
 import { LoadingBar } from '../../core/components/ui/LoadingBar';
 import { ToastView } from '../../core/components/ui/Toast';
+import { Topbar } from '../../core/components/ui/Topbar';
 import { OverviewView } from './views/OverviewView';
 import { CustomersView } from './views/CustomersView';
 import { CustomerDrawer } from './views/CustomerDrawer';
@@ -67,7 +68,17 @@ export function OwnerApp(ownerStore: OwnerStore, toast: ToastController, onSigno
       },
       env: detectEnv(),
     }),
-    h('main', { class: 'main' },
+    Topbar({
+      breadcrumbs: () => {
+        const v = store.view;
+        const labels: Record<string, string> = {
+          overview: 'Overview', customers: 'Customers', billing: 'Billing',
+          timeline: 'Timeline', invites: 'Invites', security: 'Security',
+        };
+        return [{ label: 'Control Plane' }, { label: labels[v] || v }];
+      },
+    }),
+    h('main', { class: 'content page-enter' },
       LoadingBar(() => store.loading),
       createSwitch(
         () => store.view,

@@ -15,6 +15,17 @@ export { DataTable } from './ui/DataTable';
 export { Sidebar } from './ui/Sidebar';
 export { FilterBar } from './ui/FilterBar';
 
+// Design system components
+export { Icon } from './ui/Icon';
+export { ICON_PATHS } from './ui/icon-paths';
+export { Skeleton, SkeletonTable, SkeletonStats } from './ui/Skeleton';
+export { Tooltip } from './ui/Tooltip';
+export { EmptyState } from './ui/EmptyState';
+export { Modal } from './ui/Modal';
+export { Dropdown } from './ui/Dropdown';
+export { Breadcrumb } from './ui/Breadcrumb';
+export { Topbar } from './ui/Topbar';
+
 // Domain components
 export { UserProfile, SessionInfo } from './domain/AuthDataCards';
 export { CallbackPreview } from './domain/CallbackPreview';

@@ -58,4 +58,18 @@
   --spacing-md: var(--space-md);
   --spacing-lg: var(--space-lg);
   --spacing-xl: var(--space-xl);
+
+  /* ── Timing ──────────────────────────────────────────────────────────── */
+  --duration-fast: 120ms;
+  --duration-normal: 200ms;
+  --duration-slow: 300ms;
+
+  /* ── Typography ──────────────────────────────────────────────────────── */
+  --text-xs: 11px;
+  --text-sm: 12px;
+  --text-base: 13px;
+  --text-md: 14px;
+  --text-lg: 16px;
+  --text-xl: 20px;
+  --text-2xl: 24px;
 }

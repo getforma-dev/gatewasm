@@ -6,3 +6,4 @@ export { createToast } from './createToast';
 export type { ToastController } from './createToast';
 export { createFilters } from './createFilters';
 export { createPager } from './createPager';
+export { createKeyboard } from './createKeyboard';
