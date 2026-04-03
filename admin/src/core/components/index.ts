@@ -17,7 +17,7 @@ export { FilterBar } from './ui/FilterBar';
 
 // Design system components
 export { Icon } from './ui/Icon';
-export { ICON_PATHS } from './ui/icon-paths';
+export { ICONS } from './ui/icon-paths';
 export { Skeleton, SkeletonTable, SkeletonStats } from './ui/Skeleton';
 export { Tooltip } from './ui/Tooltip';
 export { EmptyState } from './ui/EmptyState';

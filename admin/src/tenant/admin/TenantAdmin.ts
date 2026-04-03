@@ -19,23 +19,12 @@ import type { ToastController } from '../../core/hooks/createToast';
 import type { TenantAdminView } from '../../core/types';
 
 import { h, createSignal, createShow, createSwitch } from 'formajs';
+import { Icon } from '../../core/components/ui/Icon';
 
-// -- SVG icons (Lucide, stroke-width 1.5) ------------------------------------
-
-const STATS_ICON =
-  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>';
-const USERS_ICON =
-  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>';
-const ROLES_ICON =
-  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>';
-const WEBHOOKS_ICON =
-  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>';
-const AUDIT_ICON =
-  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>';
-const REFRESH_ICON =
-  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>';
-const SIGNOUT_ICON =
-  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>';
+/** Render an Icon component and return its outerHTML for Sidebar innerHTML usage. */
+function iconSvg(name: string, size = 18): string {
+  return Icon({ name, size }).outerHTML;
+}
 
 // -- Modal overlay helper ----------------------------------------------------
 
@@ -550,15 +539,15 @@ export function TenantAdmin(
     Sidebar({
       brand: { name: 'Admin Console', mark: '\u25C7', subtitle: 'TENANT ADMIN' },
       items: [
-        { id: 'stats', label: 'Stats', icon: STATS_ICON },
-        { id: 'users', label: 'Users', icon: USERS_ICON },
-        { id: 'roles', label: 'Roles', icon: ROLES_ICON },
-        { id: 'webhooks', label: 'Webhooks', icon: WEBHOOKS_ICON },
-        { id: 'audit', label: 'Audit', icon: AUDIT_ICON },
+        { id: 'stats', label: 'Stats', icon: iconSvg('overview-grid') },
+        { id: 'users', label: 'Users', icon: iconSvg('customers') },
+        { id: 'roles', label: 'Roles', icon: iconSvg('security') },
+        { id: 'webhooks', label: 'Webhooks', icon: iconSvg('webhooks') },
+        { id: 'audit', label: 'Audit', icon: iconSvg('timeline') },
       ],
       footer: [
-        { id: 'refresh', label: 'Refresh', icon: REFRESH_ICON },
-        { id: 'signout', label: 'Sign Out', icon: SIGNOUT_ICON, danger: true },
+        { id: 'refresh', label: 'Refresh', icon: iconSvg('refresh-stroke') },
+        { id: 'signout', label: 'Sign Out', icon: iconSvg('signout'), danger: true },
       ],
       activeView: () => store.view,
       onNavigate: (id: string) => {

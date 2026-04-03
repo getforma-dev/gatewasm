@@ -19,17 +19,12 @@ import type { ToastController } from '../../core/hooks/createToast';
 import type { TenantDashboardView } from '../../core/types';
 
 import { h, createSignal, createSwitch, createShow } from 'formajs';
+import { Icon } from '../../core/components/ui/Icon';
 
-// -- SVG icons (Lucide, stroke-width 1.5) ------------------------------------
-
-const PROFILE_ICON =
-  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>';
-const HISTORY_ICON =
-  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>';
-const INTEGRATION_ICON =
-  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>';
-const SIGNOUT_ICON =
-  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>';
+/** Render an Icon component and return its outerHTML for Sidebar innerHTML usage. */
+function iconSvg(name: string, size = 18): string {
+  return Icon({ name, size }).outerHTML;
+}
 
 // -- Profile View ------------------------------------------------------------
 
@@ -305,12 +300,12 @@ export function TenantDashboard(
     Sidebar({
       brand: { name: appName, mark: '\u25C7', subtitle: 'DASHBOARD' },
       items: [
-        { id: 'profile', label: 'Profile', icon: PROFILE_ICON },
-        { id: 'history', label: 'Login History', icon: HISTORY_ICON },
-        { id: 'integration', label: 'Integration', icon: INTEGRATION_ICON },
+        { id: 'profile', label: 'Profile', icon: iconSvg('profile') },
+        { id: 'history', label: 'Login History', icon: iconSvg('timeline') },
+        { id: 'integration', label: 'Integration', icon: iconSvg('integrate') },
       ],
       footer: [
-        { id: 'signout', label: 'Sign Out', icon: SIGNOUT_ICON, danger: true },
+        { id: 'signout', label: 'Sign Out', icon: iconSvg('signout'), danger: true },
       ],
       activeView: () => store.view,
       onNavigate: (id: string) => {

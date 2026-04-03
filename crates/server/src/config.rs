@@ -29,6 +29,12 @@ pub struct AppConfig {
     pub platform_owner_emails: Vec<String>,
     /// Base domain for tenant subdomains (e.g., `gatewasm.io`)
     pub platform_domain: Option<String>,
+    /// Resend API key for transactional email delivery (preferred over SMTP).
+    pub resend_api_key: Option<String>,
+    /// Sender email address for outbound auth emails (used by Resend and as SMTP fallback).
+    pub email_from_address: String,
+    /// Sender display name for outbound auth emails.
+    pub email_from_name: String,
     /// SMTP host for outbound transactional emails.
     pub smtp_host: Option<String>,
     /// SMTP port (typically 587 for STARTTLS).
@@ -167,6 +173,14 @@ impl AppConfig {
                 .filter(|s| !s.is_empty())
                 .collect(),
             platform_domain: env::var("PLATFORM_DOMAIN").ok(),
+            resend_api_key: env::var("RESEND_API_KEY")
+                .ok()
+                .map(|v| v.trim().to_string())
+                .filter(|v| !v.is_empty()),
+            email_from_address: env::var("EMAIL_FROM_ADDRESS")
+                .unwrap_or_else(|_| "noreply@getforma.dev".to_string()),
+            email_from_name: env::var("EMAIL_FROM_NAME")
+                .unwrap_or_else(|_| "Forma Auth".to_string()),
             smtp_host: env::var("SMTP_HOST")
                 .ok()
                 .map(|v| v.trim().to_string())

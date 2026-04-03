@@ -1,5 +1,5 @@
 import { h } from 'formajs';
-import { ICON_PATHS } from './icon-paths';
+import { ICONS } from './icon-paths';
 
 interface IconProps {
   name: string;
@@ -9,9 +9,9 @@ interface IconProps {
 
 export function Icon(props: IconProps): HTMLElement {
   const size = props.size || 20;
-  const path = ICON_PATHS[props.name];
+  const content = ICONS[props.name];
 
-  if (!path) {
+  if (!content) {
     if (typeof console !== 'undefined') console.warn('Icon "' + props.name + '" not found');
     return h('span', { class: 'icon-missing', style: 'width:' + size + 'px;height:' + size + 'px;display:inline-block' }) as HTMLElement;
   }
@@ -23,6 +23,6 @@ export function Icon(props: IconProps): HTMLElement {
     fill: 'none',
     'aria-hidden': 'true',
     class: ('icon ' + (props.class || '')).trim(),
-    innerHTML: '<path d="' + path + '" fill="currentColor"/>',
+    innerHTML: content,
   }) as HTMLElement;
 }

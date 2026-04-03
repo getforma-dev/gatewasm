@@ -37,6 +37,7 @@ tower_governor = "0.8"
 data-encoding = "2"
 qrcode = "0.14"
 lettre = { version = "0.11", default-features = false, features = ["builder", "smtp-transport", "tokio1-rustls-tls"] }
+resend-rs = { version = "0.22", default-features = false, features = ["rustls-tls"] }
 subtle = "2"
 serde_urlencoded = "0.7"
 rust-embed = "8"
