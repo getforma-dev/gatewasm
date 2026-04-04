@@ -16,9 +16,14 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+let logged = false;
 while (Date.now() < deadline) {
   if (readBuildHash() === 'dev') {
     process.exit(0);
+  }
+  if (!logged) {
+    console.log('Waiting for admin/dist/manifest.json (build_hash="dev")...');
+    logged = true;
   }
   await sleep(200);
 }

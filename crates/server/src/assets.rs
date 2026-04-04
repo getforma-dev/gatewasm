@@ -6,7 +6,7 @@ use axum::{
 use rust_embed::Embed;
 use std::{
     fs,
-    path::{Path as FsPath, PathBuf},
+    path::Path as FsPath,
 };
 
 // Re-export asset types from forma-server so handler code using
@@ -35,16 +35,22 @@ self.addEventListener('activate', (event) => {
 });
 "#;
 
+/// Whether the server should read assets from the filesystem (`admin/dist`)
+/// instead of the compile-time embedded copy.  Resolved once at first call;
+/// `CARGO_MANIFEST_DIR` is baked at compile time, so if the binary is moved
+/// the check fails gracefully and embedded assets are used.
 pub fn use_filesystem_assets() -> bool {
-    cfg!(debug_assertions) && FsPath::new(DEV_ASSET_DIR).exists()
-}
-
-fn filesystem_asset_path(name: &str) -> PathBuf {
-    FsPath::new(DEV_ASSET_DIR).join(name)
+    static USE_FS: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *USE_FS.get_or_init(|| cfg!(debug_assertions) && FsPath::new(DEV_ASSET_DIR).exists())
 }
 
 fn filesystem_asset_bytes(name: &str) -> Option<Vec<u8>> {
-    fs::read(filesystem_asset_path(name)).ok()
+    let base = FsPath::new(DEV_ASSET_DIR).canonicalize().ok()?;
+    let resolved = base.join(name).canonicalize().ok()?;
+    if !resolved.starts_with(&base) {
+        return None;
+    }
+    fs::read(resolved).ok()
 }
 
 fn asset_response(filename: &str, data: Vec<u8>, encoding: Option<&str>, cache_control: &str) -> Response {
