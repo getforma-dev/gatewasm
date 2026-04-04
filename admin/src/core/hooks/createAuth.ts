@@ -54,12 +54,16 @@ export function createAuth(opts: AuthOptions) {
   async function logout(): Promise<void> {
     stopAutoRefresh();
     setAccessToken(null);
-    fetch(baseUrl + '/auth/logout', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      credentials: 'include',
-      body: JSON.stringify({}),
-    }).catch(() => {});
+    try {
+      await fetch(baseUrl + '/auth/logout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({}),
+      });
+    } catch {
+      // Best-effort logout — clear local state even if the network request fails.
+    }
   }
 
   return {

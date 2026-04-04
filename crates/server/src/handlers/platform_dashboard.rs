@@ -3,12 +3,14 @@ use axum::{
     response::{Html, IntoResponse},
 };
 
+use crate::frontend::FrontendSnapshot;
 use crate::html_template::{render_page, PageConfig};
 use crate::{AppState, RenderMode};
 
 /// GET /platform/console — Platform console for tenant owners.
 /// Serves an HTML shell that loads external CSS and JS bundles via /_assets/.
 pub async fn dashboard_page(State(state): State<AppState>) -> impl IntoResponse {
+    let frontend = FrontendSnapshot::capture(&state);
     let config_script = format!(
         "window.__FORMA_SERVER_URL__=\"{}\";",
         state.config.server_url
@@ -17,7 +19,7 @@ pub async fn dashboard_page(State(state): State<AppState>) -> impl IntoResponse 
     let page = render_page(&PageConfig {
         title: "Platform Console — Forma Auth",
         route_pattern: "/platform/console",
-        manifest: &state.asset_manifest,
+        manifest: frontend.manifest(),
         config_script: Some(&config_script),
         body_class: None,
         personality_css: Some("body{background:#0a0a0c;color:#e8e6e3;}"),

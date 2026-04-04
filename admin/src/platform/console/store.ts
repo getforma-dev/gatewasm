@@ -32,7 +32,31 @@ export interface TenantStats {
   total_users: number;
   active_sessions: number;
   logins_24h: number;
+  failed_logins_24h: number;
+  window: OverviewWindow;
+  logins_in_window: number;
+  failed_logins_in_window: number;
+  series: TenantStatsSeriesPoint[];
+  activity: TenantActivityItem[];
+  providers: Record<string, number>;
   latest_user: { email: string; provider: string; created_at: string } | null;
+}
+
+export interface TenantStatsSeriesPoint {
+  bucket_start: string;
+  label: string;
+  logins: number;
+  failed_logins: number;
+  sessions_started: number;
+}
+
+export interface TenantActivityItem {
+  id: string;
+  kind: 'user_created' | 'login_succeeded' | 'login_failed' | 'session_started';
+  email: string;
+  provider: string | null;
+  description: string;
+  created_at: string;
 }
 
 export interface TenantUser {
@@ -55,19 +79,70 @@ export interface HostedPageData {
   updated_at: string | null;
 }
 
+export type ConsoleView =
+  | 'tenants'
+  | 'overview'
+  | 'users'
+  | 'hosted-page'
+  | 'integrate'
+  | 'settings';
+
+export type TenantWorkspaceView = Exclude<ConsoleView, 'tenants'>;
+export type IntegrateSection = 'guide' | 'session-inspector';
+export type OverviewWindow = '24h' | '7d' | '30d';
+
 // ── State ───────────────────────────────────────────────────────────────
 
 export const [tenants, setTenants] = createSignal<Tenant[]>([]);
 export const [selectedTenant, setSelectedTenant] = createSignal<Tenant | null>(null);
 export const [selectedTenantStats, setSelectedTenantStats] = createSignal<TenantStats | null>(null);
 export const [loading, setLoading] = createSignal(false);
-export const [view, setView] = createSignal<'tenants' | 'wizard' | 'overview' | 'users' | 'hosted-page' | 'integrate' | 'settings'>('tenants');
+export const [view, setView] = createSignal<ConsoleView>('tenants');
 export const [users, setUsers] = createSignal<TenantUser[]>([]);
 export const [usersLoading, setUsersLoading] = createSignal(false);
 export const [hostedPage, setHostedPage] = createSignal<HostedPageData | null>(null);
 export const [introspectData, setIntrospectData] = createSignal<IntrospectData | null>(null);
 export const [introspectToken, setIntrospectToken] = createSignal<string | null>(null);
 export const [introspectUnavailable, setIntrospectUnavailable] = createSignal(false);
+export const [integrateSection, setIntegrateSectionSignal] = createSignal<IntegrateSection>('guide');
+export const [overviewWindow, setOverviewWindowSignal] = createSignal<OverviewWindow>('7d');
+
+let tenantDetailRequestSeq = 0;
+let usersRequestSeq = 0;
+let hostedPageRequestSeq = 0;
+let introspectRequestSeq = 0;
+let stopOverviewRefresh: (() => void) | null = null;
+
+function withTransientTenantFields(nextTenant: Tenant, existingTenant?: Tenant | null): Tenant {
+  if (nextTenant.management_api_key || !existingTenant?.management_api_key) {
+    return nextTenant;
+  }
+
+  return { ...nextTenant, management_api_key: existingTenant.management_api_key };
+}
+
+function findKnownTenant(id: string): Tenant | null {
+  const current = selectedTenant();
+  if (current?.id === id) {
+    return current;
+  }
+
+  return tenants().find((tenant) => tenant.id === id) || null;
+}
+
+function resetTenantScopedState(): void {
+  batch(() => {
+    setSelectedTenantStats(null);
+    setUsers([]);
+    setUsersLoading(false);
+    setHostedPage(null);
+    setIntrospectData(null);
+    setIntrospectToken(null);
+    setIntrospectUnavailable(false);
+    setIntegrateSectionSignal('guide');
+    setOverviewWindowSignal('7d');
+  });
+}
 
 // ── API Functions ───────────────────────────────────────────────────────
 
@@ -75,7 +150,10 @@ export async function loadTenants(): Promise<void> {
   setLoading(true);
   try {
     const data = await api.get<{ tenants: Tenant[] }>('/platform/self-serve/tenants');
-    setTenants(data.tenants || []);
+    const nextTenants = (data.tenants || []).map((tenant) =>
+      withTransientTenantFields(tenant, findKnownTenant(tenant.id)),
+    );
+    setTenants(nextTenants);
   } catch (e) {
     toast.show(e instanceof Error ? e.message : 'Failed to load tenants', 'error');
   } finally {
@@ -83,35 +161,42 @@ export async function loadTenants(): Promise<void> {
   }
 }
 
-export async function loadTenantDetail(id: string): Promise<void> {
+export async function loadTenantDetail(id: string, window: OverviewWindow = overviewWindow()): Promise<void> {
   if (!id) return;
+  const requestSeq = ++tenantDetailRequestSeq;
   setLoading(true);
   try {
     const encodedId = encodeURIComponent(id);
     const [tenant, stats] = await Promise.all([
       api.get<Tenant>('/platform/self-serve/tenants/' + encodedId),
-      api.get<TenantStats>('/platform/self-serve/tenants/' + encodedId + '/stats'),
+      api.get<TenantStats>('/platform/self-serve/tenants/' + encodedId + '/stats', { window }),
     ]);
+    if (requestSeq !== tenantDetailRequestSeq || selectedTenant()?.id !== id) {
+      return;
+    }
     batch(() => {
-      setSelectedTenant(tenant);
+      setSelectedTenant(withTransientTenantFields(tenant, findKnownTenant(id)));
       setSelectedTenantStats(stats);
       setLoading(false);
     });
   } catch (e) {
-    setLoading(false);
-    toast.show(e instanceof Error ? e.message : 'Failed to load tenant', 'error');
+    if (requestSeq === tenantDetailRequestSeq && selectedTenant()?.id === id) {
+      setLoading(false);
+      toast.show(e instanceof Error ? e.message : 'Failed to load tenant', 'error');
+    }
   }
 }
 
 export async function updateTenant(
   id: string,
-  fields: Partial<Pick<Tenant, 'name' | 'primary_color' | 'login_redirect_url' | 'onboarding_completed' | 'onboarding_step' | 'preferred_tab'>>,
-): Promise<void> {
+  fields: Partial<Pick<Tenant, 'name' | 'slug' | 'primary_color' | 'login_redirect_url' | 'onboarding_completed' | 'onboarding_step' | 'preferred_tab'>>,
+): Promise<Tenant | null> {
   try {
-    const updated = await api.patch<Tenant>(
+    const updatedTenant = await api.patch<Tenant>(
       '/platform/self-serve/tenants/' + encodeURIComponent(id),
       fields,
     );
+    const updated = withTransientTenantFields(updatedTenant, findKnownTenant(id));
     // Refresh selected tenant if it matches
     const current = selectedTenant();
     if (current && current.id === id) {
@@ -120,28 +205,62 @@ export async function updateTenant(
     // Refresh the tenant list so the card reflects changes
     const list = tenants();
     setTenants(list.map((t) => (t.id === id ? { ...t, ...updated } : t)));
+    return updated;
   } catch (e) {
     toast.show(e instanceof Error ? e.message : 'Failed to update tenant', 'error');
+    return null;
+  }
+}
+
+export async function createTenant(fields: { name: string; slug: string }): Promise<Tenant | null> {
+  try {
+    const data = await api.post<{ tenant: Tenant; api_key?: string }>(
+      '/platform/self-serve/tenants',
+      fields,
+    );
+    const created = withTransientTenantFields(
+      {
+        ...data.tenant,
+        management_api_key: data.api_key || undefined,
+      },
+      null,
+    );
+
+    setTenants([created, ...tenants()]);
+    toast.show('Tenant created', 'success');
+    return created;
+  } catch (e) {
+    toast.show(e instanceof Error ? e.message : 'Failed to create tenant', 'error');
+    return null;
   }
 }
 
 export async function pollTenantStats(id: string): Promise<TenantStats> {
   return api.get<TenantStats>(
     '/platform/self-serve/tenants/' + encodeURIComponent(id) + '/stats',
+    { window: overviewWindow() },
   );
 }
 
 export async function loadUsers(tenantId: string): Promise<void> {
+  const requestSeq = ++usersRequestSeq;
   setUsersLoading(true);
   try {
     const data = await api.get<{ users: TenantUser[] }>(
       '/platform/self-serve/tenants/' + encodeURIComponent(tenantId) + '/users',
     );
+    if (requestSeq !== usersRequestSeq || selectedTenant()?.id !== tenantId) {
+      return;
+    }
     setUsers(data.users || []);
   } catch (e) {
-    toast.show(e instanceof Error ? e.message : 'Failed to load users', 'error');
+    if (requestSeq === usersRequestSeq && selectedTenant()?.id === tenantId) {
+      toast.show(e instanceof Error ? e.message : 'Failed to load users', 'error');
+    }
   } finally {
-    setUsersLoading(false);
+    if (requestSeq === usersRequestSeq) {
+      setUsersLoading(false);
+    }
   }
 }
 
@@ -176,27 +295,36 @@ export async function revokeUserSessions(tenantId: string, userId: string): Prom
 }
 
 export async function loadHostedPage(tenantId: string): Promise<void> {
+  const requestSeq = ++hostedPageRequestSeq;
   try {
     const data = await api.get<HostedPageData>(
       '/platform/self-serve/tenants/' + encodeURIComponent(tenantId) + '/hosted-page',
     );
+    if (requestSeq !== hostedPageRequestSeq || selectedTenant()?.id !== tenantId) {
+      return;
+    }
     setHostedPage(data);
   } catch (e) {
-    toast.show(e instanceof Error ? e.message : 'Failed to load hosted page', 'error');
+    if (requestSeq === hostedPageRequestSeq && selectedTenant()?.id === tenantId) {
+      toast.show(e instanceof Error ? e.message : 'Failed to load hosted page', 'error');
+    }
   }
 }
 
-export async function saveHostedPage(tenantId: string, data: Partial<HostedPageData>): Promise<void> {
+export async function saveHostedPage(tenantId: string, data: Partial<HostedPageData>): Promise<boolean> {
   try {
     await api.put(
       '/platform/self-serve/tenants/' + encodeURIComponent(tenantId) + '/hosted-page',
       data,
     );
     toast.show('Page saved', 'success');
-    await loadHostedPage(tenantId);
   } catch (e) {
     toast.show(e instanceof Error ? e.message : 'Failed to save page', 'error');
+    return false;
   }
+
+  await loadHostedPage(tenantId);
+  return true;
 }
 
 export async function deleteTenant(tenantId: string, confirmSlug: string): Promise<boolean> {
@@ -214,6 +342,7 @@ export async function deleteTenant(tenantId: string, confirmSlug: string): Promi
 }
 
 export async function loadIntrospect(slug: string): Promise<void> {
+  const requestSeq = ++introspectRequestSeq;
   try {
     // Plane 3 introspect: uses tenant's refresh cookie (same-origin, sent automatically)
     const res = await fetch('/t/' + encodeURIComponent(slug) + '/auth/token', {
@@ -223,13 +352,25 @@ export async function loadIntrospect(slug: string): Promise<void> {
       body: JSON.stringify({ grant_type: 'refresh_token' }),
     });
     if (!res.ok) {
-      setIntrospectUnavailable(true);
+      if (requestSeq === introspectRequestSeq && selectedTenant()?.slug === slug) {
+        batch(() => {
+          setIntrospectData(null);
+          setIntrospectToken(null);
+          setIntrospectUnavailable(true);
+        });
+      }
       return;
     }
     const tokenData = await res.json();
     const accessToken = tokenData.access_token;
     if (!accessToken) {
-      setIntrospectUnavailable(true);
+      if (requestSeq === introspectRequestSeq && selectedTenant()?.slug === slug) {
+        batch(() => {
+          setIntrospectData(null);
+          setIntrospectToken(null);
+          setIntrospectUnavailable(true);
+        });
+      }
       return;
     }
 
@@ -238,18 +379,33 @@ export async function loadIntrospect(slug: string): Promise<void> {
       credentials: 'include',
     });
     if (!introspectRes.ok) {
-      setIntrospectUnavailable(true);
+      if (requestSeq === introspectRequestSeq && selectedTenant()?.slug === slug) {
+        batch(() => {
+          setIntrospectData(null);
+          setIntrospectToken(null);
+          setIntrospectUnavailable(true);
+        });
+      }
       return;
     }
 
     const data = await introspectRes.json();
+    if (requestSeq !== introspectRequestSeq || selectedTenant()?.slug !== slug) {
+      return;
+    }
     batch(() => {
       setIntrospectData(data);
       setIntrospectToken(accessToken);
       setIntrospectUnavailable(false);
     });
   } catch {
-    setIntrospectUnavailable(true);
+    if (requestSeq === introspectRequestSeq && selectedTenant()?.slug === slug) {
+      batch(() => {
+        setIntrospectData(null);
+        setIntrospectToken(null);
+        setIntrospectUnavailable(true);
+      });
+    }
   }
 }
 
@@ -263,27 +419,156 @@ export function startVisibilityRefresh(slug: string): () => void {
   return () => document.removeEventListener('visibilitychange', handler);
 }
 
+function clearOverviewRefresh(): void {
+  if (stopOverviewRefresh) {
+    stopOverviewRefresh();
+    stopOverviewRefresh = null;
+  }
+}
+
+function syncIntrospectRefresh(slug: string): void {
+  clearOverviewRefresh();
+  stopOverviewRefresh = startVisibilityRefresh(slug);
+}
+
+function preferredTenantView(tenant: Tenant): TenantWorkspaceView {
+  const tab = tenant.preferred_tab;
+  if (tab === 'hosted-page') return 'hosted-page';
+  if (tab === 'integrate') return 'integrate';
+  return 'overview';
+}
+
+async function hydrateTenantView(nextView: TenantWorkspaceView, tenant: Tenant): Promise<void> {
+  const tasks: Promise<void>[] = [loadTenantDetail(tenant.id, overviewWindow())];
+
+  if (nextView === 'overview') {
+    tasks.push(loadIntrospect(tenant.slug));
+    syncIntrospectRefresh(tenant.slug);
+    await Promise.all(tasks);
+    return;
+  }
+
+  if (nextView === 'integrate' && integrateSection() === 'session-inspector') {
+    tasks.push(loadIntrospect(tenant.slug));
+    syncIntrospectRefresh(tenant.slug);
+    await Promise.all(tasks);
+    return;
+  }
+
+  clearOverviewRefresh();
+
+  if (nextView === 'users') {
+    tasks.push(loadUsers(tenant.id));
+  } else if (nextView === 'hosted-page') {
+    tasks.push(loadHostedPage(tenant.id));
+  }
+
+  await Promise.all(tasks);
+}
+
+export function navigateTenantView(nextView: TenantWorkspaceView): void {
+  const tenant = selectedTenant();
+  if (!tenant) return;
+
+  setView(nextView);
+  void hydrateTenantView(nextView, tenant);
+}
+
+export function changeOverviewWindow(nextWindow: OverviewWindow): void {
+  if (overviewWindow() === nextWindow) {
+    return;
+  }
+
+  setOverviewWindowSignal(nextWindow);
+
+  const tenant = selectedTenant();
+  if (!tenant || view() !== 'overview') {
+    return;
+  }
+
+  void loadTenantDetail(tenant.id, nextWindow);
+}
+
+export function openIntegrateGuide(): void {
+  setIntegrateSectionSignal('guide');
+  navigateTenantView('integrate');
+}
+
+export function openSessionInspector(): void {
+  const tenant = selectedTenant();
+
+  setIntegrateSectionSignal('session-inspector');
+
+  if (!tenant) return;
+
+  if (view() === 'integrate') {
+    void hydrateTenantView('integrate', tenant);
+    return;
+  }
+
+  navigateTenantView('integrate');
+}
+
+export function setIntegrateSection(nextSection: IntegrateSection): void {
+  if (integrateSection() === nextSection) {
+    return;
+  }
+
+  setIntegrateSectionSignal(nextSection);
+
+  const tenant = selectedTenant();
+  if (!tenant || view() !== 'integrate') {
+    return;
+  }
+
+  if (nextSection === 'session-inspector') {
+    void hydrateTenantView('integrate', tenant);
+    return;
+  }
+
+  clearOverviewRefresh();
+}
+
+export async function refreshCurrentView(): Promise<void> {
+  const currentView = view();
+  const tenant = selectedTenant();
+
+  if (currentView === 'tenants' || !tenant) {
+    await loadTenants();
+    return;
+  }
+
+  await Promise.all([
+    loadTenants(),
+    hydrateTenantView(currentView, tenant),
+  ]);
+}
+
 // ── Navigation ──────────────────────────────────────────────────────────
 
 export function selectTenant(tenant: Tenant): void {
+  const nextView = preferredTenantView(tenant);
+
   batch(() => {
     setSelectedTenant(tenant);
-    setSelectedTenantStats(null);
-    if (tenant.onboarding_completed) {
-      const tab = tenant.preferred_tab;
-      if (tab === 'hosted-page') setView('hosted-page');
-      else if (tab === 'integrate') setView('integrate');
-      else setView('overview');
-    } else {
-      setView('wizard');
-    }
+    resetTenantScopedState();
+    setView(nextView);
   });
+
+  void hydrateTenantView(nextView, tenant);
 }
 
 export function backToTenants(): void {
+  clearOverviewRefresh();
+
   batch(() => {
+    tenantDetailRequestSeq += 1;
+    usersRequestSeq += 1;
+    hostedPageRequestSeq += 1;
+    introspectRequestSeq += 1;
+    setLoading(false);
     setSelectedTenant(null);
-    setSelectedTenantStats(null);
+    resetTenantScopedState();
     setView('tenants');
   });
 }
@@ -295,13 +580,6 @@ export async function init(): Promise<void> {
     await auth.silentRefresh();
     await loadTenants();
     auth.startAutoRefresh();
-
-    // Auto-select if there is exactly one unboarded tenant
-    const list = tenants();
-    const unboarded = list.filter((t) => !t.onboarding_completed);
-    if (unboarded.length === 1) {
-      selectTenant(unboarded[0]);
-    }
   } catch {
     window.location.href = '/platform/login';
     throw new Error('auth_redirect');
@@ -309,6 +587,7 @@ export async function init(): Promise<void> {
 }
 
 export async function signout(): Promise<void> {
+  clearOverviewRefresh();
   auth.stopAutoRefresh();
   await auth.logout();
   window.location.href = '/platform/login';

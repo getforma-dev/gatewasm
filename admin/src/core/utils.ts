@@ -105,3 +105,67 @@ export function detectEnv(): string {
   const host = typeof window !== 'undefined' ? window.location.hostname : '';
   return (host === 'localhost' || host === '127.0.0.1') ? 'dev' : 'prod';
 }
+
+export type ThemeMode = 'dark' | 'light';
+
+const THEME_STORAGE_KEY = 'forma-theme-mode';
+
+function isThemeMode(value: unknown): value is ThemeMode {
+  return value === 'dark' || value === 'light';
+}
+
+export function getStoredThemeMode(): ThemeMode | null {
+  if (typeof window === 'undefined') {
+    return null;
+  }
+
+  try {
+    const stored = window.localStorage.getItem(THEME_STORAGE_KEY);
+    return isThemeMode(stored) ? stored : null;
+  } catch {
+    return null;
+  }
+}
+
+export function getThemeMode(): ThemeMode {
+  if (typeof document !== 'undefined') {
+    const applied = document.documentElement.getAttribute('data-theme');
+    if (isThemeMode(applied)) {
+      return applied;
+    }
+  }
+
+  return getStoredThemeMode() || 'dark';
+}
+
+export function applyThemeMode(theme: ThemeMode, persist = true): ThemeMode {
+  if (typeof document !== 'undefined') {
+    document.documentElement.setAttribute('data-theme', theme);
+    document.documentElement.style.colorScheme = theme;
+    document.documentElement.style.backgroundColor = 'var(--bg)';
+
+    if (document.body) {
+      document.body.style.backgroundColor = 'var(--bg)';
+      document.body.style.color = 'var(--text)';
+    }
+  }
+
+  if (persist && typeof window !== 'undefined') {
+    try {
+      window.localStorage.setItem(THEME_STORAGE_KEY, theme);
+    } catch {
+      // Ignore storage failures.
+    }
+  }
+
+  return theme;
+}
+
+export function initThemeMode(): ThemeMode {
+  return applyThemeMode(getStoredThemeMode() || 'dark', false);
+}
+
+export function toggleThemeMode(currentTheme?: ThemeMode): ThemeMode {
+  const nextTheme = (currentTheme || getThemeMode()) === 'dark' ? 'light' : 'dark';
+  return applyThemeMode(nextTheme);
+}

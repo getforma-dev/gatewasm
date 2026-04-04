@@ -6,8 +6,11 @@
  * ROUTE: /platform/console
  */
 import { mount } from 'formajs';
+import { initThemeMode } from '../../core/utils';
 import { ConsoleApp } from './ConsoleApp';
 import { init } from './store';
+
+initThemeMode();
 
 // Dev mode: clear stale service workers
 if (location.hostname === 'localhost') {

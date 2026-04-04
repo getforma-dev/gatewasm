@@ -155,6 +155,8 @@ npm run dev
 
 This starts both the Rust server and frontend watch mode (via `concurrently`) in one terminal. The server reads `.env` automatically via `dotenvy`.
 
+In debug builds, the server reads `admin/dist` from the filesystem instead of relying only on compile-time embedded frontend artifacts. That keeps the manifest, emitted JS/CSS, and SSR IR modules aligned with the watcher while preserving embedded, content-hashed assets in release builds.
+
 You should see:
 
 ```

@@ -52,12 +52,13 @@ async fn main() {
         build_hash = %asset_manifest.build_hash,
         assets = asset_manifest.assets.len(),
         routes = asset_manifest.routes.len(),
+        source = if assets::use_filesystem_assets() { "filesystem" } else { "embedded" },
         "Loaded asset manifest"
     );
 
-    // Load IR modules from embedded assets via forma-server
-    let (render_modes, ir_modules) =
-        ir::load_ir_modules::<assets::AdminAssets>(&asset_manifest);
+    // Load IR modules from the same asset source as the manifest so SSR,
+    // the IR walker, and hydrated bundles stay aligned in development.
+    let (render_modes, ir_modules) = ir::load_ir_modules(&asset_manifest);
 
     let state = AppState {
         db: pool,

@@ -9,8 +9,11 @@ import { mount } from 'formajs';
 import { createAuth } from '../../core/hooks/createAuth';
 import { createApi } from '../../core/hooks/createApi';
 import { createToast } from '../../core/hooks/createToast';
+import { initThemeMode } from '../../core/utils';
 import { OwnerApp } from './OwnerApp';
 import { createOwnerStore } from './store';
+
+initThemeMode();
 
 const serverUrl = (window as any).__FORMA_SERVER_URL__ || window.location.origin;
 const auth = createAuth({ serverUrl, tenant: 'platform' });

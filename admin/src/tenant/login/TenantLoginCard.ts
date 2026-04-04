@@ -74,11 +74,12 @@ function PasswordField(opts: {
   value: () => string; onInput: (v: string) => void;
   id?: string;
 }) {
+  const inputId = opts.id || 'tl-password';
   return h('div', { class: 'tl-field' },
-    h('label', null, opts.label),
+    h('label', { for: inputId }, opts.label),
     h('div', { class: 'tl-password-wrap' },
       h('input', {
-        id: opts.id,
+        id: inputId,
         type: 'password',
         placeholder: opts.placeholder,
         required: true,
@@ -91,7 +92,7 @@ function PasswordField(opts: {
         'aria-label': () => showPassword() ? 'Hide password' : 'Show password',
         onClick: () => {
           setShowPassword(!showPassword());
-          const el = document.getElementById(opts.id || 'tl-password');
+          const el = document.getElementById(inputId);
           if (el) (el as HTMLInputElement).type = showPassword() ? 'text' : 'password';
         },
       }, () => showPassword() ? EyeOffIcon() : EyeIcon()),
@@ -149,16 +150,18 @@ function AuthFormView() {
       ? h('form', { onSubmit: submitForm },
           createShow(() => mode() === 'register', () =>
             h('div', { class: 'tl-field' },
-              h('label', null, 'Name'),
+              h('label', { for: 'tl-name' }, 'Name'),
               h('input', {
+                id: 'tl-name',
                 type: 'text', placeholder: 'Your name', value: name,
                 onInput: (e: Event) => setName((e.target as HTMLInputElement).value),
               }),
             ),
           ),
           h('div', { class: 'tl-field' },
-            h('label', null, 'Email'),
+            h('label', { for: 'tl-email' }, 'Email'),
             h('input', {
+              id: 'tl-email',
               type: 'email', placeholder: 'you@example.com', required: true,
               autocomplete: 'email', value: email,
               onInput: (e: Event) => setEmail((e.target as HTMLInputElement).value),
@@ -175,8 +178,9 @@ function AuthFormView() {
               h('a', { class: 'tl-link', onClick: sendForgotPassword }, 'Forgot password?'),
             ),
           ),
-          h('label', { class: 'tl-remember' },
+          h('label', { class: 'tl-remember', for: 'tl-remember-email' },
             h('input', {
+              id: 'tl-remember-email',
               type: 'checkbox', checked: rememberEmail,
               onChange: (e: Event) => {
                 setRememberEmail((e.target as HTMLInputElement).checked);

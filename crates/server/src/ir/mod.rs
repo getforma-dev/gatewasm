@@ -5,12 +5,76 @@ pub use forma_ir::slot;
 pub use forma_ir::walker;
 pub use forma_ir::dump;
 
-// Re-export IR compatibility and loading functions from forma-server.
-// `load_ir_modules` replaces the inline loop in main.rs.
-pub use forma_server::ir_compat::{check_ir_compatibility, load_ir_modules};
-
 use forma_ir::parser::IrModule;
 use std::collections::HashMap;
+
+use crate::{assets, AssetManifest, RenderMode};
+
+// Re-export the shared compatibility check from forma-server.
+pub use forma_server::ir_compat::check_ir_compatibility;
+
+/// Load and parse all IR modules from the active asset source.
+///
+/// In development we read `.ir` files from `admin/dist` on the filesystem so
+/// the SSR walker, hydration manifest, and emitted JS/CSS stay in sync.
+/// In production the same helper reads from embedded assets through
+/// `crate::assets::asset_bytes`, preserving single-binary delivery.
+pub fn load_ir_modules(
+    manifest: &AssetManifest,
+) -> (HashMap<String, RenderMode>, HashMap<String, IrModule>) {
+    let mut render_modes = HashMap::new();
+    let mut ir_modules = HashMap::new();
+
+    for (route_pattern, route_assets) in &manifest.routes {
+        if let Some(ref ir_filename) = route_assets.ir {
+            if let Some(ir_bytes) = assets::asset_bytes(ir_filename) {
+                match IrModule::parse(&ir_bytes) {
+                    Ok(module) => match check_ir_compatibility(&module) {
+                        Ok(()) => {
+                            tracing::info!(
+                                route = %route_pattern,
+                                ir_file = %ir_filename,
+                                source = if assets::use_filesystem_assets() { "filesystem" } else { "embedded" },
+                                "Loaded IR module for SSR"
+                            );
+                            render_modes
+                                .insert(route_pattern.clone(), RenderMode::Phase2SsrReconcile);
+                            ir_modules.insert(route_pattern.clone(), module);
+                        }
+                        Err(e) => {
+                            tracing::warn!(
+                                route = %route_pattern,
+                                error = %e,
+                                "IR compatibility check failed — Phase 1 fallback"
+                            );
+                            render_modes
+                                .insert(route_pattern.clone(), RenderMode::Phase1ClientMount);
+                        }
+                    },
+                    Err(e) => {
+                        tracing::warn!(
+                            route = %route_pattern,
+                            error = %e,
+                            "Failed to parse IR module — Phase 1 fallback"
+                        );
+                        render_modes.insert(route_pattern.clone(), RenderMode::Phase1ClientMount);
+                    }
+                }
+            }
+        }
+    }
+
+    if !ir_modules.is_empty() {
+        tracing::info!(
+            ssr_routes = ir_modules.len(),
+            source = if assets::use_filesystem_assets() { "filesystem" } else { "embedded" },
+            "Phase 2 SSR enabled for {} route(s)",
+            ir_modules.len()
+        );
+    }
+
+    (render_modes, ir_modules)
+}
 
 /// Validate all IR modules against the current runtime version.
 /// Returns a map of route -> render mode decisions.

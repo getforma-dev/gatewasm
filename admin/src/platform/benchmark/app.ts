@@ -6,17 +6,19 @@
  * ROUTE: /platform/benchmark
  */
 import { activateIslands, mount } from 'formajs';
+import { initThemeMode } from '../../core/utils';
 import { BenchmarkPage } from './BenchmarkPage';
 import { BenchmarkFilterBar } from './BenchmarkFilterBar';
 import { BenchmarkDataTable } from './BenchmarkDataTable';
-import { PerfPanel, PerfStat } from './PerfPanel';
+import { PerfPanel } from './PerfPanel';
 import { detectWasm } from './store';
 
+initThemeMode();
 detectWasm();
 
 // Phase 2 SSR: hydrate island markers. Phase 1 (dev mode): full CSR mount.
 if (document.querySelector('[data-forma-island]')) {
-  activateIslands({ BenchmarkFilterBar, BenchmarkDataTable, PerfPanel, PerfStat });
+  activateIslands({ BenchmarkFilterBar, BenchmarkDataTable, PerfPanel });
 } else {
   mount(() => BenchmarkPage(), '#app');
 }

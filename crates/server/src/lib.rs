@@ -5,6 +5,7 @@ pub mod crypto;
 pub mod db;
 pub mod email;
 pub mod error;
+pub mod frontend;
 pub mod handlers;
 pub mod html_template;
 pub mod ir;

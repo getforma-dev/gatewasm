@@ -24,7 +24,6 @@ pub mod par;
 pub mod password_reset;
 pub mod platform_dashboard;
 pub mod roles;
-pub mod sandbox;
 pub mod ssf;
 pub mod ssf_engine;
 pub mod token;
@@ -163,7 +162,7 @@ fn create_router_inner(state: AppState, rate_limit_enabled: bool) -> Router {
         .route("/login", get(hosted_login::login_page))
         .route("/dashboard", get(dashboard::dashboard_page))
         .route("/admin", get(dashboard::admin_console_page))
-        .route("/sandbox", get(sandbox::sandbox_page))
+        .route("/sandbox", get(|| async { StatusCode::NOT_FOUND }))
         .route("/site", get(hosted_page::site_page))
         .merge(mfa_routes)
         .merge(webauthn_authed_routes)

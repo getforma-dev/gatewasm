@@ -13,6 +13,28 @@ export class ApiError extends Error {
 }
 
 export function createApi(auth: Auth) {
+  function asRecord(value: unknown): Record<string, unknown> {
+    return value && typeof value === 'object' ? value as Record<string, unknown> : {};
+  }
+
+  function getStringField(record: Record<string, unknown>, key: string): string | null {
+    const value = record[key];
+    return typeof value === 'string' ? value : null;
+  }
+
+  async function parseJsonResponse<T>(res: Response): Promise<T> {
+    if (res.status === 204) {
+      return undefined as T;
+    }
+
+    const text = await res.text();
+    if (!text) {
+      return undefined as T;
+    }
+
+    return JSON.parse(text) as T;
+  }
+
   async function request<T = Record<string, unknown>>(
     path: string,
     opts?: { method?: string; body?: unknown; headers?: Record<string, string> },
@@ -37,7 +59,11 @@ export function createApi(auth: Auth) {
 
     // Auto-retry on 401
     if (res.status === 401) {
-      await auth.silentRefresh();
+      try {
+        await auth.silentRefresh();
+      } catch {
+        throw new ApiError('Unauthorized', 401, 'unauthorized');
+      }
       headers['Authorization'] = 'Bearer ' + auth.accessToken();
       res = await fetch(auth.baseUrl + path, {
         method,
@@ -48,15 +74,15 @@ export function createApi(auth: Auth) {
     }
 
     if (!res.ok) {
-      const data = await res.json().catch(() => ({}));
+      const data = asRecord(await parseJsonResponse<unknown>(res).catch(() => null));
       throw new ApiError(
-        data.message || data.error || 'Request failed',
+        getStringField(data, 'message') || getStringField(data, 'error') || 'Request failed',
         res.status,
-        data.error || 'unknown_error',
+        getStringField(data, 'error') || 'unknown_error',
       );
     }
 
-    return res.json();
+    return parseJsonResponse<T>(res);
   }
 
   function get<T = Record<string, unknown>>(path: string, params?: Record<string, unknown>): Promise<T> {

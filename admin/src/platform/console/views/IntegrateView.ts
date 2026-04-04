@@ -1,15 +1,24 @@
-import { h, createSignal, createShow } from 'formajs';
-import { selectedTenant, toast } from '../store';
+import { h, createShow, createSignal, createSwitch } from 'formajs';
+import {
+  selectedTenant,
+  toast,
+  integrateSection,
+  setIntegrateSection,
+  type IntegrateSection,
+} from '../store';
+import { SessionInspectorPanel } from './SessionInspectorPanel';
 
 export function IntegrateView() {
   const tenant = selectedTenant()!;
   const serverUrl: string = (window as any).__FORMA_SERVER_URL__ || window.location.origin;
-  const [showKey, setShowKey] = createSignal(false);
+  const tenantState = () => selectedTenant() || tenant;
 
-  const loginUrl = () => serverUrl + '/t/' + (selectedTenant()?.slug || '') + '/login';
+  const loginUrl = () => serverUrl + '/t/' + tenantState().slug + '/login';
+  const previewLoginUrl = () => loginUrl() + '?preview=1';
+  const siteUrl = () => serverUrl + '/t/' + tenantState().slug + '/site';
 
   const bridgeSnippet = () => {
-    const currentTenant = selectedTenant()!;
+    const currentTenant = tenantState();
     return `<script src="${serverUrl}/bridge.js"><\/script>
 <script>
   GateAuthBridge.init({
@@ -29,17 +38,77 @@ export function IntegrateView() {
       h('div', { class: 'view-header-body' },
         h('div', { class: 'view-eyebrow' }, 'Developer Setup'),
         h('h2', { class: 'view-title' }, 'Integrate'),
-        h('p', { class: 'view-subtitle text-muted' }, 'Everything you need to wire auth into /t/' + tenant.slug),
+        h('p', { class: 'view-subtitle text-muted' }, () => 'Everything you need to wire auth into /t/' + tenantState().slug),
       ),
       h('p', { class: 'view-header-note' },
-        'The layout below keeps the setup path linear: load the bridge, direct unauthenticated users to login, and use the management key server-side only.',
+        'Keep setup and debugging in one place: integrate the hosted login flow, then inspect the live tenant session without leaving the workspace.',
       ),
     ),
-    h('div', { class: 'integrate-grid' },
-      h('div', { class: 'console-card integrate-card integrate-card-wide' },
+    h('section', { class: 'zone' },
+      h('div', { class: 'zone-head' },
+        h('div', { class: 'zone-label' }, 'Integration Workspace'),
+        h('p', { class: 'zone-copy' },
+          'Use the setup tab when you are wiring URLs and credentials. Switch to Session Inspector when you want to validate a real tenant-user session and see the callback payload your app receives.',
+        ),
+      ),
+      h('div', { class: 'console-subtabs', role: 'tablist', 'aria-label': 'Integrate sections' },
+        IntegrateTab('guide', 'Getting Started'),
+        IntegrateTab('session-inspector', 'Session Inspector'),
+      ),
+      h('div', { class: 'integrate-pane' },
+        createSwitch(
+          integrateSection,
+          [
+            {
+              match: 'guide',
+              render: () => GuidePanel({
+                bridgeSnippet,
+                loginUrl,
+                previewLoginUrl,
+                siteUrl,
+                tenantState,
+                openInspector: () => setIntegrateSection('session-inspector'),
+              }),
+            },
+            { match: 'session-inspector', render: () => SessionInspectorPanel() },
+          ],
+        ),
+      ),
+    ),
+  );
+}
+
+function IntegrateTab(id: IntegrateSection, label: string) {
+  return h('button', {
+    type: 'button',
+    role: 'tab',
+    class: () => 'console-subtab' + (integrateSection() === id ? ' active' : ''),
+    'aria-selected': () => String(integrateSection() === id),
+    onClick: () => setIntegrateSection(id),
+  }, label);
+}
+
+function GuidePanel({
+  bridgeSnippet,
+  loginUrl,
+  previewLoginUrl,
+  siteUrl,
+  tenantState,
+  openInspector,
+}: {
+  bridgeSnippet: () => string;
+  loginUrl: () => string;
+  previewLoginUrl: () => string;
+  siteUrl: () => string;
+  tenantState: () => { management_api_key?: string; name: string; slug: string };
+  openInspector: () => void;
+}) {
+  return h('div', { class: 'integrate-guide-layout' },
+    h('div', { class: 'integrate-main dashboard-stack' },
+      h('div', { class: 'console-card integrate-card' },
         h('div', { class: 'step-label' }, 'Step 1'),
         h('h3', { class: 'section-title' }, 'Load the bridge script'),
-        h('p', { class: 'card-copy' }, 'Drop this snippet into your app shell so you can observe auth state changes and access the signed-in user payload.' ),
+        h('p', { class: 'card-copy' }, 'Drop this snippet into your app shell so you can observe auth state changes and access the signed-in user payload.'),
         h('pre', { class: 'code-block' }, bridgeSnippet),
         h('div', { class: 'card-actions' },
           h('button', {
@@ -51,49 +120,113 @@ export function IntegrateView() {
       h('div', { class: 'console-card integrate-card' },
         h('div', { class: 'step-label' }, 'Step 2'),
         h('h3', { class: 'section-title' }, 'Redirect to your login page'),
-        h('p', { class: 'card-copy' }, 'Use this URL whenever a user needs to authenticate before returning to your app.' ),
+        h('p', { class: 'card-copy' }, 'Use this URL whenever a user needs to authenticate before returning to your app.'),
         h('code', { class: 'code-block code-inline-block' }, loginUrl),
         h('div', { class: 'card-actions' },
           h('button', {
             class: 'btn btn-sm btn-ghost',
             onClick: () => { navigator.clipboard.writeText(loginUrl()); toast.show('Copied', 'success'); },
           }, 'Copy URL'),
+          h('a', {
+            class: 'btn btn-sm btn-ghost',
+            href: previewLoginUrl,
+            target: '_blank',
+          }, 'Preview login page'),
+        ),
+      ),
+    ),
+    h('aside', { class: 'integrate-aside dashboard-stack' },
+      h('div', { class: 'console-card integrate-summary-card' },
+        h('div', { class: 'card-label' }, 'Tenant Endpoints'),
+        h('h3', { class: 'section-title' }, 'Everything you need for QA'),
+        h('p', { class: 'card-copy' },
+          'Keep your most useful tenant links together so you can test the hosted flow without leaving the setup screen.',
+        ),
+        h('div', { class: 'surface-link-list' },
+          EndpointRow('Login URL', loginUrl(), {
+            label: 'Copy',
+            onClick: () => { navigator.clipboard.writeText(loginUrl()); toast.show('Copied', 'success'); },
+          }),
+          EndpointRow('Login Preview', previewLoginUrl(), {
+            label: 'Open',
+            href: previewLoginUrl(),
+          }),
+          EndpointRow('Protected Site', siteUrl(), {
+            label: 'Open',
+            href: siteUrl(),
+          }),
+        ),
+        h('div', { class: 'card-actions' },
+          h('button', {
+            type: 'button',
+            class: 'btn btn-primary btn-sm',
+            onClick: openInspector,
+          }, 'Open Session Inspector'),
         ),
       ),
       h('div', { class: 'console-card integrate-card' },
         h('div', { class: 'step-label' }, 'Step 3'),
         h('h3', { class: 'section-title' }, 'Use the management key on your backend'),
-        h('p', { class: 'card-copy' }, 'Keep this key server-side only when you need to manage users, roles, or webhooks via the Management API.' ),
+        h('p', { class: 'card-copy' }, 'Keep this key server-side only when you need to manage users, roles, or webhooks via the Management API.'),
         createShow(
-          () => !!selectedTenant()?.management_api_key,
-          () => h('div', { class: 'stack-sm' },
-            createShow(
-              () => showKey(),
-              () => h('code', { class: 'code-block code-inline-block break-all' },
-                () => selectedTenant()?.management_api_key || '',
-              ),
-            ),
-            h('div', { class: 'card-actions' },
-              h('button', { class: 'btn btn-sm btn-ghost', onClick: () => setShowKey(!showKey()) },
-                () => showKey() ? 'Hide key' : 'Reveal key',
-              ),
-              createShow(
-                () => showKey(),
-                () => h('button', {
-                  class: 'btn btn-sm btn-ghost',
-                  onClick: () => { navigator.clipboard.writeText(selectedTenant()?.management_api_key || ''); toast.show('Copied', 'success'); },
-                }, 'Copy key'),
-              ),
-            ),
-          ),
+          () => !!tenantState().management_api_key,
+          () => ManagementKeyCard(tenantState().management_api_key || ''),
         ),
         createShow(
-          () => !selectedTenant()?.management_api_key,
+          () => !tenantState().management_api_key,
           () => h('p', { class: 'card-copy' },
             'The key is only shown at creation time. Rotate it if you need a fresh credential.',
           ),
         ),
       ),
+    ),
+  );
+}
+
+function EndpointRow(
+  label: string,
+  value: string,
+  action: { label: string; href?: string; onClick?: () => void },
+) {
+  return h('div', { class: 'surface-link-row' },
+    h('div', { class: 'surface-link-copy' },
+      h('span', { class: 'detail-label' }, label),
+      h('code', { class: 'surface-link-value' }, value),
+    ),
+    action.href
+      ? h('a', {
+          href: action.href,
+          target: '_blank',
+          class: 'btn btn-sm btn-ghost',
+        }, action.label)
+      : h('button', {
+          type: 'button',
+          class: 'btn btn-sm btn-ghost',
+          onClick: action.onClick,
+        }, action.label),
+  );
+}
+
+function ManagementKeyCard(key: string) {
+  const [reveal, setReveal] = createSignal(false);
+
+  return h('div', { class: 'stack-sm' },
+    () => reveal()
+      ? h('code', { class: 'code-block code-inline-block break-all' }, key)
+      : null,
+    h('div', { class: 'card-actions' },
+      h('button', {
+        class: 'btn btn-sm btn-ghost',
+        onClick: () => {
+          setReveal(!reveal());
+        },
+      }, () => reveal() ? 'Hide key' : 'Reveal key'),
+      () => reveal()
+        ? h('button', {
+            class: 'btn btn-sm btn-ghost',
+            onClick: () => { navigator.clipboard.writeText(key); toast.show('Copied', 'success'); },
+          }, 'Copy key')
+        : null,
     ),
   );
 }

@@ -3,7 +3,7 @@ use axum::{
     response::{Html, IntoResponse, Response},
 };
 
-use crate::assets::AssetManifest;
+use crate::frontend::FrontendSnapshot;
 use crate::handlers::hosted_login::{html_escape, json_for_script};
 use crate::html_template::{render_page, PageConfig};
 use crate::middleware::tenant::TenantContext;
@@ -16,7 +16,8 @@ pub async fn dashboard_page(
     State(state): State<AppState>,
     Extension(tenant): Extension<TenantContext>,
 ) -> Response {
-    render_dashboard_page(tenant, false, &state.asset_manifest)
+    let frontend = FrontendSnapshot::capture(&state);
+    render_dashboard_page(tenant, false, &frontend)
 }
 
 /// GET /admin — Tenant admin console route, separate from the end-user dashboard.
@@ -24,13 +25,14 @@ pub async fn admin_console_page(
     State(state): State<AppState>,
     Extension(tenant): Extension<TenantContext>,
 ) -> Response {
-    render_dashboard_page(tenant, true, &state.asset_manifest)
+    let frontend = FrontendSnapshot::capture(&state);
+    render_dashboard_page(tenant, true, &frontend)
 }
 
 fn render_dashboard_page(
     tenant: TenantContext,
     admin_console_mode: bool,
-    manifest: &AssetManifest,
+    frontend: &FrontendSnapshot,
 ) -> Response {
     let app_name = tenant.branding_app_name.as_deref().unwrap_or(&tenant.name);
     let primary_color = &tenant.branding_primary_color;
@@ -75,7 +77,7 @@ fn render_dashboard_page(
     let page = render_page(&PageConfig {
         title: &page_title,
         route_pattern,
-        manifest,
+        manifest: frontend.manifest(),
         config_script: Some(&config_script),
         body_class: None,
         personality_css: Some(&personality_css),

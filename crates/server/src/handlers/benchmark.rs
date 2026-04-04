@@ -4,6 +4,7 @@ use axum::{
 };
 use serde::{Deserialize, Serialize};
 
+use crate::frontend::FrontendSnapshot;
 use crate::html_template::{render_page, PageConfig};
 use crate::ir;
 use crate::{AppState, RenderMode};
@@ -110,6 +111,7 @@ pub async fn benchmark_page(
     State(state): State<AppState>,
     Query(params): Query<BenchmarkParams>,
 ) -> impl IntoResponse {
+    let frontend = FrontendSnapshot::capture(&state);
     let row_count = params.rows.unwrap_or(DEFAULT_ROWS).min(MAX_ROWS);
     let rows = process_rows(&params);
 
@@ -126,12 +128,8 @@ pub async fn benchmark_page(
     );
 
     let route_pattern = "/platform/benchmark";
-    let render_mode = state
-        .render_modes
-        .get(route_pattern)
-        .copied()
-        .unwrap_or(RenderMode::Phase1ClientMount);
-    let ir_module = state.ir_modules.get(route_pattern);
+    let render_mode = frontend.render_mode(route_pattern);
+    let ir_module = frontend.ir_module(route_pattern);
 
     // Populate slot data from IR module defaults.
     // Phase 6: Islands render client-side; only static shell has SSR opcodes.
@@ -144,7 +142,7 @@ pub async fn benchmark_page(
     let page = render_page(&PageConfig {
         title: "Benchmark - Forma Auth",
         route_pattern,
-        manifest: &state.asset_manifest,
+        manifest: frontend.manifest(),
         config_script: Some(&config_script),
         body_class: None,
         personality_css: Some(

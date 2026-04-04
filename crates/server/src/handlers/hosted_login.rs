@@ -4,6 +4,7 @@ use axum::{
 };
 use chrono::Utc;
 
+use crate::frontend::FrontendSnapshot;
 use crate::handlers::auth::extract_refresh_cookie;
 use crate::html_template::{render_page, PageConfig};
 use crate::jwt::signing;
@@ -20,23 +21,26 @@ pub async fn login_page(
 ) -> Response {
     // Extract ?redirect= query param and validate it's a same-tenant path
     let safe_redirect = extract_safe_redirect(req.uri().query(), &tenant.slug);
+    let preview_mode = extract_preview_mode(req.uri().query());
 
     // Server-side redirect: if user has a valid refresh cookie, skip the login page
-    if let Some(rt) = extract_refresh_cookie(req.headers(), Some(&tenant.slug)) {
-        let hash = signing::hash_token(&rt);
-        let valid = sqlx::query_scalar::<_, bool>(
-            "SELECT EXISTS(SELECT 1 FROM refresh_tokens WHERE token_hash = $1 AND revoked = FALSE AND expires_at > $2 AND tenant_id = $3)"
-        )
-        .bind(&hash)
-        .bind(Utc::now())
-        .bind(&tenant.tenant_id)
-        .fetch_one(&state.db)
-        .await
-        .unwrap_or(false);
+    if !preview_mode {
+        if let Some(rt) = extract_refresh_cookie(req.headers(), Some(&tenant.slug)) {
+            let hash = signing::hash_token(&rt);
+            let valid = sqlx::query_scalar::<_, bool>(
+                "SELECT EXISTS(SELECT 1 FROM refresh_tokens WHERE token_hash = $1 AND revoked = FALSE AND expires_at > $2 AND tenant_id = $3)"
+            )
+            .bind(&hash)
+            .bind(Utc::now())
+            .bind(&tenant.tenant_id)
+            .fetch_one(&state.db)
+            .await
+            .unwrap_or(false);
 
-        if valid {
-            let target = safe_redirect.as_deref().unwrap_or(&tenant.login_redirect_url);
-            return Redirect::temporary(target).into_response();
+            if valid {
+                let target = safe_redirect.as_deref().unwrap_or(&tenant.login_redirect_url);
+                return Redirect::temporary(target).into_response();
+            }
         }
     }
 
@@ -59,6 +63,7 @@ async fn login_page_render(
     state: &AppState,
     tenant: &TenantContext,
 ) -> crate::html_template::PageOutput {
+    let frontend = FrontendSnapshot::capture(state);
     let app_name = tenant.branding_app_name.as_deref().unwrap_or(&tenant.name);
     let primary_color = &tenant.branding_primary_color;
     let logo_html = tenant
@@ -115,7 +120,7 @@ async fn login_page_render(
     render_page(&PageConfig {
         title: &page_title,
         route_pattern: "/t/:slug/login",
-        manifest: &state.asset_manifest,
+        manifest: frontend.manifest(),
         config_script: Some(&config_script),
         body_class: None,
         personality_css: Some(&personality_css),
@@ -157,4 +162,15 @@ fn extract_safe_redirect(query: Option<&str>, slug: &str) -> Option<String> {
         }
     }
     None
+}
+
+fn extract_preview_mode(query: Option<&str>) -> bool {
+    let q = match query {
+        Some(q) => q,
+        None => return false,
+    };
+
+    q.split('&').any(|pair| {
+        pair == "preview=1" || pair == "preview=true"
+    })
 }

@@ -20,10 +20,14 @@ export function Breadcrumb(props: BreadcrumbProps): HTMLElement {
           nodes.push(Icon({ name: 'chevron-right', size: 14, class: 'breadcrumb-sep' }));
         }
         const isLast = i === segs.length - 1;
+        const clickable = !!seg.onClick && !isLast;
         nodes.push(
-          h(isLast ? 'span' : 'button', {
-            class: isLast ? 'breadcrumb-current' : 'breadcrumb-link',
-            ...(seg.onClick && !isLast ? { onClick: seg.onClick } : {}),
+          h('button', {
+            type: 'button',
+            class: isLast ? 'breadcrumb-link breadcrumb-current' : 'breadcrumb-link',
+            disabled: !clickable,
+            'aria-current': isLast ? 'page' : undefined,
+            ...(clickable ? { onClick: seg.onClick } : {}),
           }, seg.label),
         );
       });

@@ -37,58 +37,12 @@ export const [showConfirm, setShowConfirm] = createSignal(false);
 
 // ── Shared helpers ──────────────────────────────────────────────────────
 
-import { randomState, generatePKCE, decodeJwtClaims } from '../../core/utils';
+import { randomState, generatePKCE } from '../../core/utils';
 
 // ── Post-auth routing ───────────────────────────────────────────────────
 
-async function autoCreateTenant(): Promise<void> {
-  const token = auth.accessToken();
-  const claims = decodeJwtClaims(token) || {};
-  const emailAddr = (claims.email as string) || (claims.sub as string) || '';
-  const userPart = emailAddr.split('@')[0] || 'my-app';
-  let slug = userPart
-    .replace(/[^a-z0-9-]/g, '-')
-    .replace(/-+/g, '-')
-    .replace(/^-|-$/g, '')
-    .slice(0, 26);
-  const rand = Math.random().toString(36).slice(2, 6);
-  slug = slug + '-' + rand;
-  const name = userPart.charAt(0).toUpperCase() + userPart.slice(1) + ' App';
-
-  try {
-    // Post-auth but platform-scoped (not tenant-scoped) — raw fetch because
-    // createApi prepends /t/platform which would double the path prefix.
-    const token = auth.accessToken();
-    await fetch(serverUrl + '/platform/self-serve/tenants', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
-      credentials: 'include',
-      body: JSON.stringify({ name, slug }),
-    });
-  } catch {
-    // Best-effort — redirect to console regardless
-  }
-  window.location.href = '/platform/console';
-}
-
 async function routeAfterAuth(): Promise<void> {
-  try {
-    // Post-auth but platform-scoped (not tenant-scoped) — raw fetch because
-    // createApi prepends /t/platform which would double the path prefix.
-    const res = await fetch(serverUrl + '/platform/self-serve/tenants', {
-      headers: { Authorization: 'Bearer ' + auth.accessToken() },
-      credentials: 'include',
-    });
-    if (!res.ok) throw new Error('fetch_failed');
-    const data: { tenants: { id: string }[] } = await res.json();
-    if (data && Array.isArray(data.tenants) && data.tenants.length > 0) {
-      window.location.href = '/platform/console';
-    } else {
-      await autoCreateTenant();
-    }
-  } catch {
-    await autoCreateTenant();
-  }
+  window.location.href = '/platform/console';
 }
 
 // ── OAuth ───────────────────────────────────────────────────────────────

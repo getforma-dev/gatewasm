@@ -7,7 +7,6 @@ import { Sidebar } from '../../core/components/ui/Sidebar';
 import { LoadingBar } from '../../core/components/ui/LoadingBar';
 import { ToastView } from '../../core/components/ui/Toast';
 import { Header } from '../../core/components/ui/Header';
-import { Card, CardHead } from '../../core/components/ui/Card';
 import { Badge } from '../../core/components/ui/Badge';
 import { CodeBlock } from '../../core/components/ui/CodeBlock';
 import { DataTable } from '../../core/components/ui/DataTable';
@@ -74,7 +73,7 @@ function ProfileView(dashStore: TenantDashboardStore, toast: ToastController, on
 
         return h('div', { class: 'flex-col gap-lg' },
           // Avatar + name header
-          Panel(null,
+          Panel(undefined,
             h('div', { class: 'flex items-center gap-md mb-md' },
               h('div', { class: 'avatar large' }, initials),
               h('div', null,
@@ -114,7 +113,7 @@ function ProfileView(dashStore: TenantDashboardStore, toast: ToastController, on
           ),
 
           // Change password
-          Panel(null,
+          Panel(undefined,
             h('h3', { class: 'heading-sm mb-md' }, 'Change Password'),
             Field({
               label: 'Current Password',
@@ -184,7 +183,6 @@ function HistoryView(dashStore: TenantDashboardStore) {
 
 function IntegrationView() {
   const config = (window as any).__TENANT__ || {};
-  const slug = config.slug || 'default';
   const serverUrl = config.server_url || window.location.origin;
   const cdnUrl = 'https://cdn.getforma.dev/bridge/v1/gate-bridge.min.js';
   const directUrl = window.location.origin + '/bridge.js';
@@ -216,7 +214,7 @@ function IntegrationView() {
 
     h('div', { class: 'flex-col gap-lg' },
       // Quick Start
-      Panel(null,
+      Panel(undefined,
         h('h3', { class: 'heading-sm mb-md' }, 'Quick Start'),
         h('p', { class: 'text-muted text-sm mb-md' },
           'Add GateWASM authentication to your app in under 5 minutes.',
@@ -225,7 +223,7 @@ function IntegrationView() {
       ),
 
       // Distribution Options
-      Panel(null,
+      Panel(undefined,
         h('h3', { class: 'heading-sm mb-md' }, 'Distribution Options'),
         h('div', { class: 'detail-grid' },
           h('div', { class: 'detail-row' },
@@ -265,7 +263,7 @@ function IntegrationView() {
       ),
 
       // API Reference
-      Panel(null,
+      Panel(undefined,
         h('h3', { class: 'heading-sm mb-md' }, 'API Reference'),
         h('p', { class: 'text-muted text-sm mb-md' },
           'Full API documentation and OpenAPI spec:',
@@ -275,9 +273,7 @@ function IntegrationView() {
           target: '_blank',
           class: 'btn outline inline-flex-center api-docs-btn',
         },
-          h('span', {
-            innerHTML: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>',
-          }),
+          Icon({ name: 'external-link', size: 14 }),
           'Open API Docs',
         ),
       ),

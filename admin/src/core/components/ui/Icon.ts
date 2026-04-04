@@ -16,6 +16,18 @@ export function Icon(props: IconProps): HTMLElement {
     return h('span', { class: 'icon-missing', style: 'width:' + size + 'px;height:' + size + 'px;display:inline-block' }) as HTMLElement;
   }
 
+  if (typeof document !== 'undefined') {
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.setAttribute('width', String(size));
+    svg.setAttribute('height', String(size));
+    svg.setAttribute('viewBox', '0 0 24 24');
+    svg.setAttribute('fill', 'none');
+    svg.setAttribute('aria-hidden', 'true');
+    svg.setAttribute('class', ('icon ' + (props.class || '')).trim());
+    svg.innerHTML = content;
+    return svg as unknown as HTMLElement;
+  }
+
   return h('svg', {
     width: size,
     height: size,
@@ -23,6 +35,5 @@ export function Icon(props: IconProps): HTMLElement {
     fill: 'none',
     'aria-hidden': 'true',
     class: ('icon ' + (props.class || '')).trim(),
-    innerHTML: content,
   }) as HTMLElement;
 }

@@ -6,10 +6,12 @@
  * ROUTE: /platform/onboarding
  */
 import { activateIslands, mount } from 'formajs';
+import { initThemeMode } from '../../core/utils';
 import { OnboardingPage } from './OnboardingPage';
 import { RegistrationForm } from './RegistrationForm';
 import { init } from './store';
 
+initThemeMode();
 init();
 
 // Phase 2 SSR: hydrate island markers. Phase 1 (dev mode): full CSR mount.

@@ -55,7 +55,7 @@ npm run dev
 npm run db:seed
 ```
 
-The watcher generates a dev manifest automatically, and the server auto-runs migrations on startup. No manual build step needed. The seed script creates test tenants and users — run it once after a fresh DB or after `db:reset`.
+The watcher generates a dev manifest automatically, and the server auto-runs migrations on startup. No manual build step needed. In local debug builds, the Rust server reads `admin/dist` from the filesystem so the manifest, emitted bundles, and any SSR IR modules stay aligned with the watcher. Release builds still serve embedded, content-hashed assets for single-binary delivery. The seed script creates test tenants and users — run it once after a fresh DB or after `db:reset`.
 
 For detailed local dev setup (creating tenants, API usage, env vars, troubleshooting), see [LOCAL-DEV.md](LOCAL-DEV.md).
 
@@ -71,8 +71,9 @@ Three `package.json` files exist in this repo. The root orchestrates everything 
 
 | Script | What it does | When to use |
 |--------|-------------|-------------|
-| `npm run dev` | Starts Rust server + frontend watcher (watcher auto-generates dev manifest) | Day-to-day development |
+| `npm run dev` | Starts Rust server + frontend watcher, waiting for the watch-mode manifest before booting the server | Day-to-day development |
 | `npm run dev:server` | Starts only the Rust backend | When you only need the API, no UI changes |
+| `npm run dev:server:watch` | Starts the Rust backend after the watch-mode manifest is ready | Used internally by `npm run dev` |
 | `npm run dev:frontend` | Starts only the frontend file watcher | When you only need UI changes, server already running |
 
 #### Database

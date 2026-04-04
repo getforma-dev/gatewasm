@@ -8,7 +8,8 @@ use crate::AppState;
 /// GET /auth/introspect
 ///
 /// Returns decoded JWT claims, session info, and user profile for the
-/// currently authenticated tenant user (Plane 3). Used by the sandbox page.
+/// currently authenticated tenant user (Plane 3). Used by the platform console
+/// auth sandbox and other live session inspection surfaces.
 pub async fn introspect(
     State(state): State<AppState>,
     req: axum::extract::Request,

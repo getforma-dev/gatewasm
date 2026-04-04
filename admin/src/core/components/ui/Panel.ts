@@ -1,6 +1,6 @@
 import { h } from 'formajs';
 
-export function Panel(props?: { class?: string }, ...children: unknown[]) {
+export function Panel(props?: { class?: string } | null, ...children: unknown[]) {
   return h('section', { class: 'panel' + (props?.class ? ' ' + props.class : '') }, ...children);
 }
 

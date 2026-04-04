@@ -6,6 +6,9 @@ interface ModalProps {
   onClose: () => void;
   title: string;
   children: () => HTMLElement | HTMLElement[];
+  overlayClassName?: string;
+  contentClassName?: string;
+  bodyClassName?: string;
 }
 
 export function Modal(props: ModalProps): HTMLElement {
@@ -14,18 +17,18 @@ export function Modal(props: ModalProps): HTMLElement {
   onCleanup(() => document.removeEventListener('keydown', handleKey));
 
   return createShow(props.open, () =>
-    h('div', { class: 'modal-overlay animate-fade', onClick: (e: Event) => {
+    h('div', { class: 'modal-overlay animate-fade' + (props.overlayClassName ? ' ' + props.overlayClassName : ''), onClick: (e: Event) => {
       if ((e.target as HTMLElement).classList.contains('modal-overlay')) props.onClose();
     }},
-      h('div', { class: 'modal-content' },
+      h('div', { class: 'modal-content' + (props.contentClassName ? ' ' + props.contentClassName : '') },
         h('div', { class: 'modal-header' },
           h('h2', { class: 'modal-title' }, props.title),
           h('button', { class: 'modal-close', onClick: props.onClose },
             Icon({ name: 'close', size: 18 }),
           ),
         ),
-        h('div', { class: 'modal-body' }, props.children()),
+        h('div', { class: 'modal-body' + (props.bodyClassName ? ' ' + props.bodyClassName : '') }, props.children()),
       ),
     ),
-  ) as HTMLElement;
+  ) as unknown as HTMLElement;
 }

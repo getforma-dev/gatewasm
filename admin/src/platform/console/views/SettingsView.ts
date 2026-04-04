@@ -1,19 +1,69 @@
-import { h, createSignal } from 'formajs';
+import { h, createEffect, createSignal } from 'formajs';
 import { Field } from '../../../core/components/ui/Field';
 import { selectedTenant, updateTenant, deleteTenant, toast, backToTenants, loadTenants } from '../store';
+import { normalizeTenantSlugInput } from '../../tenantSlug';
 
 export function SettingsView() {
   const tenant = selectedTenant()!;
+  const tenantState = () => selectedTenant() || tenant;
+  const loginUrl = () => '/t/' + tenantState().slug + '/login';
+  const previewLoginUrl = () => loginUrl() + '?preview=1';
+  const siteUrl = () => '/t/' + tenantState().slug + '/site';
   const [appName, setAppName] = createSignal(tenant.name || '');
+  const [slug, setSlug] = createSignal(tenant.slug || '');
   const [color, setColor] = createSignal(tenant.primary_color || '#6366f1');
   const [saving, setSaving] = createSignal(false);
   const [confirmDelete, setConfirmDelete] = createSignal('');
+  const [syncedTenantId, setSyncedTenantId] = createSignal(tenant.id);
+  const [syncedName, setSyncedName] = createSignal(tenant.name || '');
+  const [syncedSlug, setSyncedSlug] = createSignal(tenant.slug || '');
+  const [syncedColor, setSyncedColor] = createSignal(tenant.primary_color || '#6366f1');
+
+  createEffect(() => {
+    const currentTenant = tenantState();
+    const nextName = currentTenant.name || '';
+    const nextSlug = currentTenant.slug || '';
+    const nextColor = currentTenant.primary_color || '#6366f1';
+    const tenantChanged = syncedTenantId() !== currentTenant.id;
+    const pristine = appName() === syncedName() && slug() === syncedSlug() && color() === syncedColor();
+
+    if (tenantChanged || pristine) {
+      setAppName(nextName);
+      setSlug(nextSlug);
+      setColor(nextColor);
+    }
+    if (tenantChanged) {
+      setConfirmDelete('');
+    }
+    setSyncedTenantId(currentTenant.id);
+    setSyncedName(nextName);
+    setSyncedSlug(nextSlug);
+    setSyncedColor(nextColor);
+  });
 
   async function saveBranding() {
+    const nextName = appName().trim();
+    const nextSlug = slug().trim();
+
+    if (!nextName) {
+      toast.show('App name is required', 'error');
+      return;
+    }
+    if (!nextSlug) {
+      toast.show('Tenant slug is required', 'error');
+      return;
+    }
+
     setSaving(true);
-    await updateTenant(tenant.id, { name: appName(), primary_color: color() });
+    const updated = await updateTenant(tenantState().id, {
+      name: nextName,
+      slug: nextSlug,
+      primary_color: color(),
+    });
     setSaving(false);
-    toast.show('Settings saved', 'success');
+    if (updated) {
+      toast.show('Settings saved', 'success');
+    }
   }
 
   return h('div', { class: 'console-view' },
@@ -21,19 +71,40 @@ export function SettingsView() {
       h('div', { class: 'view-header-body' },
         h('div', { class: 'view-eyebrow' }, 'Tenant Configuration'),
         h('h2', { class: 'view-title' }, 'Settings'),
-        h('p', { class: 'view-subtitle text-muted' }, 'Manage branding and lifecycle settings for /t/' + tenant.slug),
+        h('p', { class: 'view-subtitle text-muted' }, () => 'Manage naming, URLs, branding, and lifecycle settings for /t/' + tenantState().slug),
       ),
       h('p', { class: 'view-header-note' },
-        'Branding controls stay separated from irreversible actions so the page is easier to scan and safer to use.',
+        'This is where owners can tighten the tenant identity, including changing the shareable slug when the generated URL is not good enough.',
       ),
     ),
     h('div', { class: 'settings-layout' },
       h('div', { class: 'settings-main' },
         h('div', { class: 'console-card' },
-          h('div', { class: 'card-label' }, 'Branding'),
-          h('p', { class: 'card-copy' }, 'Set the app name and primary accent used across the hosted tenant experience.' ),
+          h('div', { class: 'card-label' }, 'Identity & Branding'),
+          h('p', { class: 'card-copy' }, 'Set the app name, tenant URL, and primary accent used across the hosted tenant experience.' ),
           h('div', { class: 'form-stack' },
-            Field({ label: 'App Name', name: 'app-name', value: appName, onChange: setAppName, placeholder: 'My App' }),
+            Field({
+              label: 'App Name',
+              name: 'app-name',
+              value: appName,
+              onChange: setAppName,
+              placeholder: 'My App',
+              hint: 'Shown in the console and hosted tenant pages.',
+            }),
+            Field({
+              label: 'Tenant Slug',
+              name: 'tenant-slug',
+              value: slug,
+              onChange: (value) => setSlug(normalizeTenantSlugInput(value)),
+              placeholder: 'my-app',
+              hint: 'Changing this updates every /t/{slug}/... URL for the tenant.',
+            }),
+            h('div', { class: 'tenant-create-preview' },
+              h('span', { class: 'detail-label' }, 'Tenant URL'),
+              h('code', { class: 'code-block code-inline-block break-all' },
+                () => slug() ? '/t/' + slug() : '/t/your-slug',
+              ),
+            ),
             h('div', { class: 'field' },
               h('label', null, 'Primary Color'),
               h('div', { class: 'inline-input-row' },
@@ -68,16 +139,16 @@ export function SettingsView() {
           h('input', {
             type: 'text',
             class: 'search-input',
-            placeholder: () => 'Type "' + tenant.slug + '" to confirm',
+            placeholder: () => 'Type "' + tenantState().slug + '" to confirm',
             value: confirmDelete,
             onInput: (e: Event) => setConfirmDelete((e.target as HTMLInputElement).value),
           }),
           h('div', { class: 'card-actions' },
             h('button', {
               class: 'btn btn-sm btn-danger',
-              disabled: () => confirmDelete() !== tenant.slug,
+              disabled: () => confirmDelete() !== tenantState().slug,
               onClick: async () => {
-                const ok = await deleteTenant(tenant.id, confirmDelete());
+                const ok = await deleteTenant(tenantState().id, confirmDelete());
                 if (ok) {
                   await loadTenants();
                   backToTenants();
@@ -87,16 +158,40 @@ export function SettingsView() {
           ),
         ),
       ),
-      h('aside', { class: 'console-card settings-sidebar' },
-        h('div', { class: 'card-label' }, 'Tenant Info'),
-        h('div', { class: 'detail-grid' },
-          InfoRow('Slug', tenant.slug),
-          InfoRow('Plan', tenant.plan),
-          InfoRow('Status', tenant.status),
-          InfoRow('Created', new Date(tenant.created_at).toLocaleDateString()),
+      h('aside', { class: 'settings-sidebar settings-sidebar-stack' },
+        h('div', { class: 'console-card' },
+          h('div', { class: 'card-label' }, 'Tenant Info'),
+          h('div', { class: 'detail-grid' },
+            InfoRow('Slug', tenantState().slug),
+            InfoRow('Login URL', loginUrl()),
+            InfoRow('Plan', tenantState().plan),
+            InfoRow('Status', tenantState().status),
+            InfoRow('Created', new Date(tenantState().created_at).toLocaleDateString()),
+          ),
+        ),
+        h('div', { class: 'console-card' },
+          h('div', { class: 'card-label' }, 'Surface URLs'),
+          h('div', { class: 'surface-link-list' },
+            SettingsLinkRow('Login Preview', previewLoginUrl()),
+            SettingsLinkRow('Protected Site', siteUrl()),
+          ),
         ),
       ),
     ),
+  );
+}
+
+function SettingsLinkRow(label: string, href: string) {
+  return h('div', { class: 'surface-link-row' },
+    h('div', { class: 'surface-link-copy' },
+      h('span', { class: 'detail-label' }, label),
+      h('code', { class: 'surface-link-value' }, href),
+    ),
+    h('a', {
+      href,
+      target: '_blank',
+      class: 'btn btn-sm btn-ghost',
+    }, 'Open'),
   );
 }
 

@@ -1,6 +1,7 @@
 use axum::response::{Html, IntoResponse, Redirect};
 use axum::extract::State;
 
+use crate::frontend::FrontendSnapshot;
 use crate::handlers::auth as auth_handlers;
 use crate::html_template::{render_page, PageConfig};
 use crate::jwt::signing;
@@ -107,6 +108,7 @@ pub async fn dashboard_page(
     State(state): State<AppState>,
     headers: axum::http::HeaderMap,
 ) -> impl IntoResponse {
+    let frontend = FrontendSnapshot::capture(&state);
     let login_redirect = "/platform/login".to_string();
 
     let request_id = headers
@@ -133,7 +135,7 @@ pub async fn dashboard_page(
     let page = render_page(&PageConfig {
         title: "Admin Dashboard — Forma Auth",
         route_pattern: "/platform/admin/dashboard",
-        manifest: &state.asset_manifest,
+        manifest: frontend.manifest(),
         config_script: None,
         body_class: Some("owner-dashboard min-h-screen antialiased"),
         personality_css: Some("body{background:#0a0a0c;color:#e8e6e3;--grid-opacity:0.25;--glow-size:700px;--glow-intensity:0.04;}"),

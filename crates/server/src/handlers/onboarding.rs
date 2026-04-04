@@ -1,5 +1,5 @@
 use axum::{
-    extract::{FromRequest, Path, State},
+    extract::{FromRequest, Path, Query, State},
     http::StatusCode,
     response::{Html, IntoResponse},
     Json,
@@ -10,6 +10,7 @@ use serde::Deserialize;
 use sqlx::Row;
 
 use crate::error::AppError;
+use crate::frontend::FrontendSnapshot;
 use crate::handlers::management::is_valid_css_color;
 use crate::html_template::{render_page, PageConfig, PageOutput};
 use crate::ir;
@@ -79,6 +80,7 @@ fn populate_onboarding_slots(state: &AppState, ir_module: &ir::parser::IrModule)
 }
 
 fn render_get_started_page_html(state: &AppState) -> PageOutput {
+    let frontend = FrontendSnapshot::capture(state);
     let google_enabled = state.config.google_client_id.is_some()
         && state.config.google_client_secret.is_some();
     let github_enabled = state.config.github_client_id.is_some()
@@ -95,10 +97,8 @@ fn render_get_started_page_html(state: &AppState) -> PageOutput {
     );
 
     let route_pattern = "/platform/onboarding";
-    let render_mode = state.render_modes.get(route_pattern)
-        .copied()
-        .unwrap_or(RenderMode::Phase1ClientMount);
-    let ir_module = state.ir_modules.get(route_pattern);
+    let render_mode = frontend.render_mode(route_pattern);
+    let ir_module = frontend.ir_module(route_pattern);
 
     // Populate slot data from IR module defaults + server overrides
     let slots = if render_mode == RenderMode::Phase2SsrReconcile {
@@ -110,7 +110,7 @@ fn render_get_started_page_html(state: &AppState) -> PageOutput {
     render_page(&PageConfig {
         title: "Get Started — Forma Auth",
         route_pattern,
-        manifest: &state.asset_manifest,
+        manifest: frontend.manifest(),
         config_script: Some(&config_script),
         body_class: None,
         personality_css: Some("body{background:#0a0a0c;color:#e8e6e3;--grid-opacity:0.15;--glow-size:1100px;--glow-intensity:0.10;}"),
@@ -122,6 +122,7 @@ fn render_get_started_page_html(state: &AppState) -> PageOutput {
 }
 
 fn render_platform_login_page_html(state: &AppState) -> PageOutput {
+    let frontend = FrontendSnapshot::capture(state);
     let google_enabled = state.config.google_client_id.is_some()
         && state.config.google_client_secret.is_some();
     let github_enabled = state.config.github_client_id.is_some()
@@ -138,10 +139,8 @@ fn render_platform_login_page_html(state: &AppState) -> PageOutput {
     );
 
     let route_pattern = "/platform/login";
-    let render_mode = state.render_modes.get(route_pattern)
-        .copied()
-        .unwrap_or(RenderMode::Phase1ClientMount);
-    let ir_module = state.ir_modules.get(route_pattern);
+    let render_mode = frontend.render_mode(route_pattern);
+    let ir_module = frontend.ir_module(route_pattern);
 
     // Populate slot data from IR module defaults + server overrides
     let slots = if render_mode == RenderMode::Phase2SsrReconcile {
@@ -153,7 +152,7 @@ fn render_platform_login_page_html(state: &AppState) -> PageOutput {
     render_page(&PageConfig {
         title: "Platform Login — Forma Auth",
         route_pattern,
-        manifest: &state.asset_manifest,
+        manifest: frontend.manifest(),
         config_script: Some(&config_script),
         body_class: None,
         personality_css: Some("body{background:#0a0a0c;color:#e8e6e3;--grid-opacity:0.25;--glow-size:900px;--glow-intensity:0.07;}"),
@@ -234,6 +233,7 @@ pub struct CreateTenantRequest {
 #[derive(Debug, Deserialize)]
 pub struct UpdateTenantRequest {
     pub name: Option<String>,
+    pub slug: Option<String>,
     pub allowed_providers: Option<Vec<String>>,
     pub branding_logo_url: Option<String>,
     pub branding_primary_color: Option<String>,
@@ -250,6 +250,19 @@ pub struct UpdateTenantRequest {
 #[derive(Debug, Deserialize)]
 pub struct DeleteTenantRequest {
     pub confirm_slug: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct TenantStatsQuery {
+    pub window: Option<String>,
+}
+
+fn normalize_tenant_stats_window(raw: Option<&str>) -> &'static str {
+    match raw {
+        Some("24h") => "24h",
+        Some("30d") => "30d",
+        _ => "7d",
+    }
 }
 
 /// POST /platform/self-serve/tenants — Create a new tenant (authenticated platform user).
@@ -380,6 +393,14 @@ pub async fn create_tenant(
 
     tx.commit().await?;
 
+    let row = sqlx::query(
+        "SELECT created_at, onboarding_completed, onboarding_step, preferred_tab, branding_primary_color \
+         FROM tenants WHERE id = $1",
+    )
+    .bind(&tenant_id)
+    .fetch_one(&state.db)
+    .await?;
+
     tracing::info!(
         tenant_id = %tenant_id,
         slug = %slug,
@@ -402,7 +423,12 @@ pub async fn create_tenant(
                 "plan": "trial",
                 "trial_ends_at": trial_ends_at.to_rfc3339(),
                 "status": "active",
+                "onboarding_completed": row.get::<bool, _>("onboarding_completed"),
+                "onboarding_step": row.get::<i16, _>("onboarding_step"),
+                "preferred_tab": row.get::<Option<String>, _>("preferred_tab"),
+                "primary_color": row.get::<Option<String>, _>("branding_primary_color"),
                 "login_redirect_url": default_login_redirect,
+                "created_at": row.get::<chrono::DateTime<Utc>, _>("created_at").to_rfc3339(),
             },
             "api_key": api_key,
             "dashboard_url": format!("/t/{}/site", slug),
@@ -557,8 +583,9 @@ pub async fn update_my_tenant(
         })?;
 
     // Verify ownership
-    let slug = sqlx::query_scalar::<_, String>(
-        "SELECT slug FROM tenants WHERE id = $1 AND owner_user_id = $2 AND status != 'deleted'",
+    let existing_tenant = sqlx::query(
+        "SELECT slug, login_redirect_url FROM tenants \
+         WHERE id = $1 AND owner_user_id = $2 AND status != 'deleted'",
     )
     .bind(&tenant_id)
     .bind(&user.user_id)
@@ -568,6 +595,8 @@ pub async fn update_my_tenant(
         error: "tenant_not_found",
         message: "Tenant not found or you don't have access".into(),
     })?;
+    let current_slug: String = existing_tenant.get("slug");
+    let current_login_redirect: Option<String> = existing_tenant.get("login_redirect_url");
 
     let body: UpdateTenantRequest = axum::Json::<UpdateTenantRequest>::from_request(req, &state)
         .await
@@ -578,36 +607,20 @@ pub async fn update_my_tenant(
         .0;
 
     if let Some(ref name) = body.name {
-        sqlx::query("UPDATE tenants SET name = $1, updated_at = NOW() WHERE id = $2")
-            .bind(name.trim())
-            .bind(&tenant_id)
-            .execute(&state.db)
-            .await?;
+        if name.trim().is_empty() {
+            return Err(AppError::BadRequest {
+                error: "invalid_name",
+                message: "Tenant name is required".into(),
+            });
+        }
     }
-    if let Some(ref providers) = body.allowed_providers {
-        let json = serde_json::to_value(providers).unwrap_or_default();
-        sqlx::query("UPDATE tenants SET allowed_providers = $1, updated_at = NOW() WHERE id = $2")
-            .bind(&json)
-            .bind(&tenant_id)
-            .execute(&state.db)
-            .await?;
-    }
-    if let Some(ref origins) = body.allowed_origins {
-        let json = serde_json::to_value(origins).unwrap_or_default();
-        sqlx::query("UPDATE tenants SET allowed_origins = $1, updated_at = NOW() WHERE id = $2")
-            .bind(&json)
-            .bind(&tenant_id)
-            .execute(&state.db)
-            .await?;
-    }
-    if let Some(ref v) = body.branding_logo_url {
-        sqlx::query("UPDATE tenants SET branding_logo_url = $1, updated_at = NOW() WHERE id = $2")
-            .bind(v)
-            .bind(&tenant_id)
-            .execute(&state.db)
-            .await?;
-    }
-    // Accept both `branding_primary_color` and `primary_color` (frontend alias)
+
+    let requested_slug = match body.slug.as_ref() {
+        Some(slug) => Some(validate_slug(slug)?),
+        None => None,
+    };
+    let effective_slug = requested_slug.as_deref().unwrap_or(&current_slug);
+
     let effective_color = body.branding_primary_color.as_ref().or(body.primary_color.as_ref());
     if let Some(v) = effective_color {
         if !is_valid_css_color(v) {
@@ -616,27 +629,108 @@ pub async fn update_my_tenant(
                 message: "primary_color must be a valid CSS hex color (e.g. #abc, #aabbcc)".into(),
             });
         }
+    }
+
+    let validated_login_redirect = match body.login_redirect_url.as_ref() {
+        Some(v) => Some(validate_login_redirect_input(
+            &state.config.server_url,
+            effective_slug,
+            v,
+        )?),
+        None => None,
+    };
+
+    let derived_login_redirect = match requested_slug.as_ref() {
+        Some(next_slug) if next_slug != &current_slug => {
+            let previous_default = default_login_redirect(&state.config.server_url, &current_slug);
+            let current_resolved_redirect = resolve_login_redirect(
+                &state.config.server_url,
+                &current_slug,
+                current_login_redirect.as_deref(),
+            );
+            if current_resolved_redirect == previous_default {
+                Some(default_login_redirect(&state.config.server_url, next_slug))
+            } else {
+                None
+            }
+        }
+        _ => None,
+    };
+
+    let mut tx = state.db.begin().await?;
+
+    if let Some(ref next_slug) = requested_slug {
+        if next_slug != &current_slug {
+            sqlx::query("UPDATE tenants SET slug = $1, updated_at = NOW() WHERE id = $2")
+                .bind(next_slug)
+                .bind(&tenant_id)
+                .execute(&mut *tx)
+                .await
+                .map_err(|e| {
+                    if let sqlx::Error::Database(ref db_err) = e {
+                        if db_err.is_unique_violation() {
+                            return AppError::Conflict {
+                                error: "slug_taken",
+                                message: format!("Tenant slug '{}' is already in use", next_slug),
+                            };
+                        }
+                    }
+                    AppError::from(e)
+                })?;
+        }
+    }
+
+    if let Some(ref name) = body.name {
+        sqlx::query("UPDATE tenants SET name = $1, updated_at = NOW() WHERE id = $2")
+            .bind(name.trim())
+            .bind(&tenant_id)
+            .execute(&mut *tx)
+            .await?;
+    }
+    if let Some(ref providers) = body.allowed_providers {
+        let json = serde_json::to_value(providers).unwrap_or_default();
+        sqlx::query("UPDATE tenants SET allowed_providers = $1, updated_at = NOW() WHERE id = $2")
+            .bind(&json)
+            .bind(&tenant_id)
+            .execute(&mut *tx)
+            .await?;
+    }
+    if let Some(ref origins) = body.allowed_origins {
+        let json = serde_json::to_value(origins).unwrap_or_default();
+        sqlx::query("UPDATE tenants SET allowed_origins = $1, updated_at = NOW() WHERE id = $2")
+            .bind(&json)
+            .bind(&tenant_id)
+            .execute(&mut *tx)
+            .await?;
+    }
+    if let Some(ref v) = body.branding_logo_url {
+        sqlx::query("UPDATE tenants SET branding_logo_url = $1, updated_at = NOW() WHERE id = $2")
+            .bind(v)
+            .bind(&tenant_id)
+            .execute(&mut *tx)
+            .await?;
+    }
+    if let Some(v) = effective_color {
         sqlx::query(
             "UPDATE tenants SET branding_primary_color = $1, updated_at = NOW() WHERE id = $2",
         )
         .bind(v)
         .bind(&tenant_id)
-        .execute(&state.db)
+        .execute(&mut *tx)
         .await?;
     }
     if let Some(ref v) = body.branding_app_name {
         sqlx::query("UPDATE tenants SET branding_app_name = $1, updated_at = NOW() WHERE id = $2")
             .bind(v)
             .bind(&tenant_id)
-            .execute(&state.db)
+            .execute(&mut *tx)
             .await?;
     }
-    if let Some(ref v) = body.login_redirect_url {
-        let validated = validate_login_redirect_input(&state.config.server_url, &slug, v)?;
+    if let Some(ref validated) = validated_login_redirect.or(derived_login_redirect) {
         sqlx::query("UPDATE tenants SET login_redirect_url = $1, updated_at = NOW() WHERE id = $2")
             .bind(validated)
             .bind(&tenant_id)
-            .execute(&state.db)
+            .execute(&mut *tx)
             .await?;
     }
     if let Some(v) = body.onboarding_completed {
@@ -645,7 +739,7 @@ pub async fn update_my_tenant(
         )
         .bind(v)
         .bind(&tenant_id)
-        .execute(&state.db)
+        .execute(&mut *tx)
         .await?;
     }
     if let Some(v) = body.onboarding_step {
@@ -654,7 +748,7 @@ pub async fn update_my_tenant(
         )
         .bind(v)
         .bind(&tenant_id)
-        .execute(&state.db)
+        .execute(&mut *tx)
         .await?;
     }
     if let Some(ref v) = body.preferred_tab {
@@ -663,11 +757,13 @@ pub async fn update_my_tenant(
         )
         .bind(v)
         .bind(&tenant_id)
-        .execute(&state.db)
+        .execute(&mut *tx)
         .await?;
     }
 
-    state.tenant_cache.invalidate(&slug);
+    tx.commit().await?;
+
+    state.tenant_cache.invalidate(&current_slug);
     tracing::info!(tenant_id = %tenant_id, "Self-serve tenant config updated");
 
     // Return the full updated tenant so the frontend can refresh state
@@ -688,6 +784,10 @@ pub async fn update_my_tenant(
     let redirect_url: Option<String> = row.get("login_redirect_url");
     let resolved_redirect =
         resolve_login_redirect(&state.config.server_url, &updated_slug, redirect_url.as_deref());
+
+    if updated_slug != current_slug {
+        state.tenant_cache.invalidate(&updated_slug);
+    }
 
     Ok(Json(serde_json::json!({
         "id": row.get::<String, _>("id"),
@@ -839,6 +939,7 @@ pub async fn rotate_my_tenant_key(
 pub async fn tenant_stats(
     State(state): State<AppState>,
     Path(tenant_id): Path<String>,
+    Query(query): Query<TenantStatsQuery>,
     req: axum::extract::Request,
 ) -> Result<impl IntoResponse, AppError> {
     let user = req
@@ -925,7 +1026,7 @@ pub async fn tenant_stats(
         providers.insert(provider, serde_json::json!(count));
     }
 
-    // Latest user (for wizard success state)
+    // Latest user (for console overview activity)
     let latest_user = if total_users > 0 {
         sqlx::query_as::<_, (String, String, chrono::DateTime<chrono::Utc>)>(
             "SELECT u.email, \
@@ -945,6 +1046,202 @@ pub async fn tenant_stats(
         None
     };
 
+    let selected_window = normalize_tenant_stats_window(query.window.as_deref());
+    let series_start = match selected_window {
+        "24h" => Utc::now() - Duration::hours(23),
+        "30d" => Utc::now() - Duration::days(29),
+        _ => Utc::now() - Duration::days(6),
+    };
+
+    let series_rows = if selected_window == "24h" {
+        sqlx::query(
+            "WITH buckets AS (
+                SELECT generate_series(
+                    date_trunc('hour', $2::timestamptz),
+                    date_trunc('hour', NOW()),
+                    INTERVAL '1 hour'
+                ) AS bucket
+            ),
+            logins AS (
+                SELECT date_trunc('hour', la.created_at) AS bucket,
+                       COUNT(*) FILTER (WHERE la.success = TRUE) AS logins,
+                       COUNT(*) FILTER (WHERE la.success = FALSE) AS failed_logins
+                  FROM login_attempts la
+                 WHERE la.tenant_id = $1
+                   AND la.created_at >= $2
+                 GROUP BY 1
+            ),
+            sessions AS (
+                SELECT date_trunc('hour', rt.created_at) AS bucket,
+                       COUNT(*) AS sessions_started
+                  FROM refresh_tokens rt
+                 WHERE rt.tenant_id = $1
+                   AND rt.created_at >= $2
+                 GROUP BY 1
+            )
+            SELECT b.bucket,
+                   to_char(b.bucket, 'HH24:00') AS label,
+                   COALESCE(l.logins, 0)::BIGINT AS logins,
+                   COALESCE(l.failed_logins, 0)::BIGINT AS failed_logins,
+                   COALESCE(s.sessions_started, 0)::BIGINT AS sessions_started
+              FROM buckets b
+              LEFT JOIN logins l ON l.bucket = b.bucket
+              LEFT JOIN sessions s ON s.bucket = b.bucket
+             ORDER BY b.bucket ASC"
+        )
+        .bind(&tenant_id)
+        .bind(series_start)
+        .fetch_all(&state.db)
+        .await?
+    } else {
+        sqlx::query(
+            "WITH buckets AS (
+                SELECT generate_series(
+                    date_trunc('day', $2::timestamptz),
+                    date_trunc('day', NOW()),
+                    INTERVAL '1 day'
+                ) AS bucket
+            ),
+            logins AS (
+                SELECT date_trunc('day', la.created_at) AS bucket,
+                       COUNT(*) FILTER (WHERE la.success = TRUE) AS logins,
+                       COUNT(*) FILTER (WHERE la.success = FALSE) AS failed_logins
+                  FROM login_attempts la
+                 WHERE la.tenant_id = $1
+                   AND la.created_at >= $2
+                 GROUP BY 1
+            ),
+            sessions AS (
+                SELECT date_trunc('day', rt.created_at) AS bucket,
+                       COUNT(*) AS sessions_started
+                  FROM refresh_tokens rt
+                 WHERE rt.tenant_id = $1
+                   AND rt.created_at >= $2
+                 GROUP BY 1
+            )
+            SELECT b.bucket,
+                   to_char(b.bucket, 'Mon DD') AS label,
+                   COALESCE(l.logins, 0)::BIGINT AS logins,
+                   COALESCE(l.failed_logins, 0)::BIGINT AS failed_logins,
+                   COALESCE(s.sessions_started, 0)::BIGINT AS sessions_started
+              FROM buckets b
+              LEFT JOIN logins l ON l.bucket = b.bucket
+              LEFT JOIN sessions s ON s.bucket = b.bucket
+             ORDER BY b.bucket ASC"
+        )
+        .bind(&tenant_id)
+        .bind(series_start)
+        .fetch_all(&state.db)
+        .await?
+    };
+
+    let mut logins_in_window = 0_i64;
+    let mut failed_logins_in_window = 0_i64;
+    let series: Vec<serde_json::Value> = series_rows
+        .into_iter()
+        .map(|row| {
+            let logins: i64 = row.get("logins");
+            let failed_logins: i64 = row.get("failed_logins");
+            let sessions_started: i64 = row.get("sessions_started");
+            logins_in_window += logins;
+            failed_logins_in_window += failed_logins;
+
+            serde_json::json!({
+                "bucket_start": row.get::<chrono::DateTime<chrono::Utc>, _>("bucket"),
+                "label": row.get::<String, _>("label"),
+                "logins": logins,
+                "failed_logins": failed_logins,
+                "sessions_started": sessions_started,
+            })
+        })
+        .collect();
+
+    let activity_rows = sqlx::query(
+        "SELECT id, kind, email, provider, description, created_at
+           FROM (
+                SELECT CONCAT('user:', u.id) AS id,
+                       'user_created'::TEXT AS kind,
+                       u.email AS email,
+                       COALESCE(cp.provider, 'email') AS provider,
+                       'Joined the tenant workspace.'::TEXT AS description,
+                       u.created_at AS created_at
+                  FROM users u
+                  LEFT JOIN LATERAL (
+                      SELECT c.provider
+                        FROM credentials c
+                       WHERE c.user_id = u.id
+                         AND c.tenant_id = u.tenant_id
+                       ORDER BY c.created_at DESC
+                       LIMIT 1
+                  ) cp ON TRUE
+                 WHERE u.tenant_id = $1
+                   AND u.created_at >= $2
+
+                UNION ALL
+
+                SELECT CONCAT('login:', la.id) AS id,
+                       CASE WHEN la.success THEN 'login_succeeded' ELSE 'login_failed' END AS kind,
+                       COALESCE(u.email, la.email) AS email,
+                       COALESCE(cp.provider, 'email') AS provider,
+                       CASE
+                           WHEN la.success THEN 'Authenticated through the tenant login flow.'
+                           ELSE COALESCE(la.failure_reason, 'Sign-in failed before a session was created.')
+                       END AS description,
+                       la.created_at AS created_at
+                  FROM login_attempts la
+                  LEFT JOIN users u ON u.id = la.user_id
+                  LEFT JOIN LATERAL (
+                      SELECT c.provider
+                        FROM credentials c
+                       WHERE c.user_id = la.user_id
+                         AND c.tenant_id = $1
+                       ORDER BY c.created_at DESC
+                       LIMIT 1
+                  ) cp ON TRUE
+                 WHERE la.tenant_id = $1
+                   AND la.created_at >= $2
+
+                UNION ALL
+
+                SELECT CONCAT('session:', rt.id) AS id,
+                       'session_started'::TEXT AS kind,
+                       COALESCE(u.email, 'Unknown user') AS email,
+                       COALESCE(cp.provider, rt.auth_provider, 'email') AS provider,
+                       'A browser session was issued for this tenant.'::TEXT AS description,
+                       rt.created_at AS created_at
+                  FROM refresh_tokens rt
+                  LEFT JOIN users u ON u.id = rt.user_id
+                  LEFT JOIN LATERAL (
+                      SELECT c.provider
+                        FROM credentials c
+                       WHERE c.user_id = rt.user_id
+                         AND c.tenant_id = $1
+                       ORDER BY c.created_at DESC
+                       LIMIT 1
+                  ) cp ON TRUE
+                 WHERE rt.tenant_id = $1
+                   AND rt.created_at >= $2
+            ) activity
+          ORDER BY created_at DESC
+          LIMIT 8"
+    )
+    .bind(&tenant_id)
+    .bind(series_start)
+    .fetch_all(&state.db)
+    .await?;
+
+    let activity: Vec<serde_json::Value> = activity_rows
+        .into_iter()
+        .map(|row| serde_json::json!({
+            "id": row.get::<String, _>("id"),
+            "kind": row.get::<String, _>("kind"),
+            "email": row.get::<String, _>("email"),
+            "provider": row.get::<String, _>("provider"),
+            "description": row.get::<String, _>("description"),
+            "created_at": row.get::<chrono::DateTime<chrono::Utc>, _>("created_at"),
+        }))
+        .collect();
+
     Ok(Json(serde_json::json!({
         "tenant_id": tenant_id,
         "total_users": total_users,
@@ -953,6 +1250,11 @@ pub async fn tenant_stats(
         "active_sessions": active_sessions,
         "logins_24h": logins_24h,
         "failed_logins_24h": failed_logins_24h,
+        "window": selected_window,
+        "logins_in_window": logins_in_window,
+        "failed_logins_in_window": failed_logins_in_window,
+        "series": series,
+        "activity": activity,
         "providers": providers,
         "latest_user": latest_user,
     })))

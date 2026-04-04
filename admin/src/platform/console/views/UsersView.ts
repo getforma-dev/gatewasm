@@ -1,15 +1,17 @@
 import { h, createSignal, createShow } from 'formajs';
+import { Skeleton } from '../../../core/components/ui/Skeleton';
 import {
-  selectedTenant, users, usersLoading, loadUsers,
+  selectedTenant, users, usersLoading,
   blockUser, unblockUser, revokeUserSessions,
 } from '../store';
 
 export function UsersView() {
   const tenant = selectedTenant()!;
+  const tenantState = () => selectedTenant() || tenant;
   const [search, setSearch] = createSignal('');
   const [expandedId, setExpandedId] = createSignal<string | null>(null);
-
-  loadUsers(tenant.id);
+  const blockedCount = () => users().filter((user) => user.is_locked).length;
+  const verifiedCount = () => users().filter((user) => user.email_verified).length;
 
   const filteredUsers = () => {
     const q = search().toLowerCase();
@@ -24,10 +26,11 @@ export function UsersView() {
       h('div', { class: 'view-header-body' },
         h('div', { class: 'view-eyebrow' }, 'Tenant Directory'),
         h('h2', { class: 'view-title' }, 'Users'),
-        h('p', { class: 'view-subtitle text-muted' }, () => users().length + ' total users in /t/' + tenant.slug),
+        h('p', { class: 'view-subtitle text-muted' }, () => users().length + ' total users in /t/' + tenantState().slug),
       ),
-      h('p', { class: 'view-header-note' },
-        'Search recent users, inspect account details, and take action on blocking or session revocation without leaving the tenant workspace.',
+      h('div', { class: 'view-header-actions' },
+        MetricCard('Verified', () => String(verifiedCount())),
+        MetricCard('Blocked', () => String(blockedCount())),
       ),
     ),
     h('section', { class: 'console-card list-shell' },
@@ -48,13 +51,21 @@ export function UsersView() {
       ),
       createShow(
         () => usersLoading(),
-        () => h('p', { class: 'card-copy' }, 'Loading users...'),
+        () => h('div', { class: 'list-empty-state list-empty-state-loading' },
+          Skeleton({ width: '24%', height: '12px' }),
+          Skeleton({ width: '88%', height: '12px' }),
+          Skeleton({ width: '82%', height: '12px' }),
+        ),
       ),
       createShow(
         () => !usersLoading() && filteredUsers().length === 0,
         () => h('div', { class: 'list-empty-state' },
-          h('div', { class: 'card-label' }, 'No Matches'),
-          h('p', { class: 'card-copy' }, 'Try a different name or email search to find a user.'),
+          h('div', { class: 'card-label' }, search().trim() ? 'No Matches' : 'No Users Yet'),
+          h('p', { class: 'card-copy' },
+            () => search().trim()
+              ? 'Try a different name or email search to find a user.'
+              : 'The first tenant members will appear here as soon as someone signs up or completes a login flow.',
+          ),
         ),
       ),
       createShow(
@@ -91,9 +102,9 @@ export function UsersView() {
                   ),
                   h('div', { class: 'user-actions' },
                     user.is_locked
-                      ? h('button', { class: 'btn btn-sm btn-ghost', onClick: () => unblockUser(tenant.id, user.id) }, 'Unblock')
-                      : h('button', { class: 'btn btn-sm btn-ghost', onClick: () => blockUser(tenant.id, user.id) }, 'Block'),
-                    h('button', { class: 'btn btn-sm btn-ghost', onClick: () => revokeUserSessions(tenant.id, user.id) }, 'Revoke Sessions'),
+                      ? h('button', { class: 'btn btn-sm btn-ghost', onClick: () => unblockUser(tenantState().id, user.id) }, 'Unblock')
+                      : h('button', { class: 'btn btn-sm btn-ghost', onClick: () => blockUser(tenantState().id, user.id) }, 'Block'),
+                    h('button', { class: 'btn btn-sm btn-ghost', onClick: () => revokeUserSessions(tenantState().id, user.id) }, 'Revoke Sessions'),
                   ),
                 ),
               ),
@@ -106,6 +117,13 @@ export function UsersView() {
         () => h('div', { class: 'list-truncated' }, '100 most recent users shown'),
       ),
     ),
+  );
+}
+
+function MetricCard(label: string, value: () => string) {
+  return h('div', { class: 'header-metric' },
+    h('span', { class: 'header-metric-label' }, label),
+    h('span', { class: 'header-metric-value' }, value),
   );
 }
 

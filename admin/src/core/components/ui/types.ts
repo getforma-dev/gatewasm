@@ -10,11 +10,13 @@ export interface PageState {
 
 export interface SidebarProps {
   brand: { name: string; mark: string; subtitle: string };
-  items: NavItem[] | (() => NavItem[]);
+  items?: NavItem[] | (() => NavItem[]);
+  groups?: NavGroup[] | (() => NavGroup[]);
   footer: NavItem[];
   activeView: () => string;
   onNavigate: (view: string) => void;
   env?: string;
+  context?: () => HTMLElement | null;
 }
 
 export interface NavItem {
@@ -22,6 +24,11 @@ export interface NavItem {
   label: string;
   icon: string;  // SVG string
   danger?: boolean;
+}
+
+export interface NavGroup {
+  label?: string;
+  items: NavItem[] | (() => NavItem[]);
 }
 
 export interface HeaderProps {
