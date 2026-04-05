@@ -144,6 +144,7 @@ let tenantDetailRequestSeq = 0;
 let usersRequestSeq = 0;
 let hostedPageRequestSeq = 0;
 let introspectRequestSeq = 0;
+let sessionRequestSeq = 0;
 let stopOverviewRefresh: (() => void) | null = null;
 const WORKSPACE_STORAGE_PREFIX = 'forma-console-workspace:';
 
@@ -422,19 +423,24 @@ export async function revokeUserSessions(tenantId: string, userId: string): Prom
 }
 
 export async function loadUserSessions(tenantId: string, userId: string): Promise<void> {
+  const seq = ++sessionRequestSeq;
   setUserSessionsLoading(true);
   try {
     const data = await api.get<{ sessions: UserSession[] }>(
       '/platform/self-serve/tenants/' + encodeURIComponent(tenantId) + '/users/' + encodeURIComponent(userId) + '/sessions',
     );
-    if (selectedTenant()?.id !== tenantId) {
+    if (seq !== sessionRequestSeq || selectedTenant()?.id !== tenantId) {
       return;
     }
     setUserSessions(data.sessions || []);
   } catch (e) {
-    toast.show(e instanceof Error ? e.message : 'Failed to load sessions', 'error');
+    if (seq === sessionRequestSeq) {
+      toast.show(e instanceof Error ? e.message : 'Failed to load sessions', 'error');
+    }
   } finally {
-    setUserSessionsLoading(false);
+    if (seq === sessionRequestSeq) {
+      setUserSessionsLoading(false);
+    }
   }
 }
 

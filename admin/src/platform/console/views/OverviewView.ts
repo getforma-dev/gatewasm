@@ -98,7 +98,7 @@ export function OverviewView() {
           hasLiveSession
             ? 'A real tenant-user session is already present in this browser.'
             : introspectUnavailable()
-              ? 'Session Inspector will unlock after one tenant sign-in in this browser.'
+              ? 'Auth Reference is always available. Sign in once to also see live session data.'
               : 'The console is checking whether this browser already has a tenant session.',
           sessionStatus,
           hasLiveSession
@@ -106,7 +106,7 @@ export function OverviewView() {
                 type: 'button',
                 class: 'btn btn-sm btn-ghost',
                 onClick: openSessionInspector,
-              }, 'Open Session Inspector')
+              }, 'Open Auth Reference')
             : h('a', {
                 href: () => '/t/' + tenantState().slug + '/login?redirect=/t/' + tenantState().slug + '/site',
                 target: '_blank',
@@ -158,10 +158,10 @@ export function OverviewView() {
         'Open site',
       ),
       QuickAction(
-        'Session Inspector',
-        'Jump into Integrate and inspect the live tenant session, callback payload, and JWT claims.',
+        'Auth Reference',
+        'Jump into Integrate to see the auth payload shape, token format, and endpoints.',
         openSessionInspector,
-        'Inspect session',
+        'View reference',
       ),
     ),
   );
@@ -403,7 +403,7 @@ function authStatusCard() {
       h('div', { class: 'card-label' }, 'Tenant Auth Status'),
       h('div', { class: 'card-value card-value-strong' }, 'Live session detected'),
       h('p', { class: 'card-copy' },
-        data.user.email + ' is authenticated in this browser. Open Session Inspector inside Integrate for the full callback, JWT, and session payload.',
+        data.user.email + ' is authenticated in this browser. Open Auth Reference inside Integrate for the full payload shape, JWT format, and live session details.',
       ),
       h('div', { class: 'detail-grid' },
         OverviewDetailRow('Roles', data.user.roles.join(', ') || 'user'),
@@ -414,7 +414,7 @@ function authStatusCard() {
           type: 'button',
           class: 'btn btn-primary btn-sm',
           onClick: openSessionInspector,
-        }, 'Open Session Inspector'),
+        }, 'Open Auth Reference'),
       ),
     );
   }
@@ -424,7 +424,7 @@ function authStatusCard() {
       h('div', { class: 'card-label' }, 'Tenant Auth Status'),
       h('div', { class: 'card-value card-value-strong' }, 'No live tenant session yet'),
       h('p', { class: 'card-copy' },
-        'Platform ownership does not automatically sign you into the tenant app. Complete one tenant sign-in in this browser to unlock Session Inspector inside Integrate.',
+        'Auth Reference is always available inside Integrate. Sign into the tenant once to also see live session data alongside the reference.',
       ),
       h('div', { class: 'card-actions' },
         h('a', {

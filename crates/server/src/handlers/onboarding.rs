@@ -1499,7 +1499,7 @@ pub async fn list_tenant_user_sessions(
          last_activity_at, login_ip, mfa_verified \
          FROM refresh_tokens \
          WHERE user_id = $1 AND tenant_id = $2 AND revoked = FALSE AND expires_at > NOW() \
-         ORDER BY created_at DESC",
+         ORDER BY created_at DESC LIMIT 50",
     )
     .bind(&user_id)
     .bind(&tenant_id)
