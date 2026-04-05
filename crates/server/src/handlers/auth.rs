@@ -783,7 +783,7 @@ pub async fn register(
         &state.keys,
     )?;
 
-    db::enforce_refresh_token_limit(&state.db, &user_id, db::MAX_REFRESH_TOKENS_PER_USER).await;
+    db::enforce_refresh_token_limit(&state.db, &user_id, tenant.as_ref().map_or(10, |t| t.security_config.max_sessions_per_user) as i64).await;
 
     tracing::info!(user_id = %user_id, email = %email, "User created");
 
@@ -1389,7 +1389,7 @@ pub async fn login(
         .await;
     }
 
-    db::enforce_refresh_token_limit(&state.db, &user_id, db::MAX_REFRESH_TOKENS_PER_USER).await;
+    db::enforce_refresh_token_limit(&state.db, &user_id, tenant.as_ref().map_or(10, |t| t.security_config.max_sessions_per_user) as i64).await;
 
     tracing::info!(user_id = %user_id, email = %db_email, "Login success");
 

@@ -283,7 +283,7 @@ async fn handle_auth_code(
     .execute(&state.db)
     .await?;
 
-    db::enforce_refresh_token_limit(&state.db, &user_id, db::MAX_REFRESH_TOKENS_PER_USER).await;
+    db::enforce_refresh_token_limit(&state.db, &user_id, security_config.max_sessions_per_user as i64).await;
 
     let mut headers = HeaderMap::new();
     append_refresh_cookie_headers(
@@ -724,7 +724,7 @@ async fn handle_refresh(
 
     tx.commit().await?;
 
-    db::enforce_refresh_token_limit(&state.db, &user_id, db::MAX_REFRESH_TOKENS_PER_USER).await;
+    db::enforce_refresh_token_limit(&state.db, &user_id, security_config.max_sessions_per_user as i64).await;
 
     if state.config.compliance.audit_log_enabled {
         audit::log_audit(

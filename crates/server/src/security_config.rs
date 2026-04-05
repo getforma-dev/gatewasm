@@ -13,6 +13,8 @@ pub struct TenantSecurityConfig {
     pub csp_enabled: bool,
     #[serde(default = "default_true")]
     pub client_fingerprint: bool,
+    #[serde(default = "default_max_sessions")]
+    pub max_sessions_per_user: u32,
 
     // ── Pro (default OFF) ───────────────────────────────────────────
     #[serde(default)]
@@ -55,6 +57,9 @@ fn default_attestation() -> String {
 fn default_travel_speed() -> u32 {
     800
 }
+fn default_max_sessions() -> u32 {
+    10
+}
 
 impl Default for TenantSecurityConfig {
     fn default() -> Self {
@@ -63,6 +68,7 @@ impl Default for TenantSecurityConfig {
             host_prefix_cookies: true,
             csp_enabled: true,
             client_fingerprint: true,
+            max_sessions_per_user: 10,
             webauthn_enabled: false,
             webauthn_attestation: "none".to_string(),
             webauthn_require_device_bound: false,
@@ -255,6 +261,26 @@ mod tests {
         for plan in &["trial", "foundation", "pro", "enterprise", "compliance"] {
             assert!(config.validate_for_plan(plan).is_empty());
         }
+    }
+
+    #[test]
+    fn default_max_sessions_is_ten() {
+        let config = TenantSecurityConfig::default();
+        assert_eq!(config.max_sessions_per_user, 10);
+    }
+
+    #[test]
+    fn from_json_custom_max_sessions() {
+        let val = serde_json::json!({ "max_sessions_per_user": 5 });
+        let config = TenantSecurityConfig::from_json(&val);
+        assert_eq!(config.max_sessions_per_user, 5);
+    }
+
+    #[test]
+    fn from_json_missing_max_sessions_uses_default() {
+        let val = serde_json::json!({});
+        let config = TenantSecurityConfig::from_json(&val);
+        assert_eq!(config.max_sessions_per_user, 10);
     }
 
     #[test]

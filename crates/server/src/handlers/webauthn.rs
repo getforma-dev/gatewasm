@@ -1341,7 +1341,7 @@ pub async fn login_complete(
     .execute(&state.db)
     .await?;
 
-    crate::db::enforce_refresh_token_limit(&state.db, &db_user_id, crate::db::MAX_REFRESH_TOKENS_PER_USER)
+    crate::db::enforce_refresh_token_limit(&state.db, &db_user_id, tenant.security_config.max_sessions_per_user as i64)
         .await;
 
     tracing::info!(
