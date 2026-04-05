@@ -373,6 +373,14 @@ pub async fn assign_role(
     .execute(&state.db)
     .await?;
 
+    // Revoke sessions so the user gets fresh tokens with updated role claims
+    sqlx::query("UPDATE refresh_tokens SET revoked = TRUE WHERE user_id = $1 AND tenant_id = $2 AND revoked = FALSE")
+        .bind(&user_id)
+        .bind(&tenant.tenant_id)
+        .execute(&state.db)
+        .await
+        .ok();
+
     // Dispatch webhook event
     super::webhook_engine::dispatch_event(
         &state.db,
@@ -421,6 +429,14 @@ pub async fn remove_role(
             message: "User does not have this role".into(),
         });
     }
+
+    // Revoke sessions so the user gets fresh tokens with updated role claims
+    sqlx::query("UPDATE refresh_tokens SET revoked = TRUE WHERE user_id = $1 AND tenant_id = $2 AND revoked = FALSE")
+        .bind(&user_id)
+        .bind(&tenant.tenant_id)
+        .execute(&state.db)
+        .await
+        .ok();
 
     // Dispatch webhook event
     super::webhook_engine::dispatch_event(
