@@ -287,6 +287,7 @@ mod tests {
     fn serialization_roundtrip() {
         let config = TenantSecurityConfig {
             idle_timeout_minutes: 15,
+            max_sessions_per_user: 5,
             webauthn_enabled: true,
             dpop_required: true,
             ..Default::default()
@@ -294,6 +295,7 @@ mod tests {
         let json = serde_json::to_value(&config).unwrap();
         let parsed = TenantSecurityConfig::from_json(&json);
         assert_eq!(parsed.idle_timeout_minutes, 15);
+        assert_eq!(parsed.max_sessions_per_user, 5);
         assert!(parsed.webauthn_enabled);
         assert!(parsed.dpop_required);
         assert!(parsed.host_prefix_cookies); // default preserved
