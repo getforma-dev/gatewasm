@@ -1,12 +1,5 @@
-import { h, createSignal, createShow } from 'formajs';
-import {
-  selectedTenant,
-  introspectData,
-  introspectToken,
-  introspectUnavailable,
-} from '../store';
-import { UserProfile, SessionInfo } from '../../../core/components/domain/AuthDataCards';
-import { JwtViewer } from '../../../core/components/domain/JwtViewer';
+import { h, createSignal } from 'formajs';
+import { selectedTenant } from '../store';
 import { CopyButton } from '../../../core/components/ui/CopyButton';
 
 export function SessionInspectorPanel() {
@@ -14,7 +7,6 @@ export function SessionInspectorPanel() {
   const serverUrl: string = (window as any).__FORMA_SERVER_URL__ || window.location.origin;
   const tenantState = () => selectedTenant() || tenant;
   const slug = () => tenantState().slug;
-  const loginUrl = () => serverUrl + '/t/' + slug() + '/login?redirect=/t/' + slug() + '/site';
 
   return h('div', { class: 'stack-sm' },
     // ── Header ──────────────────────────────────────────────────────
@@ -44,43 +36,6 @@ export function SessionInspectorPanel() {
       UserObjectReference(),
       TokenFormatReference(),
       AuthEndpointsReference({ slug, serverUrl }),
-    ),
-
-    // ── Live preview (if a session exists in this browser) ──────────
-    createShow(
-      () => introspectData() != null && introspectToken() != null,
-      () => {
-        const data = introspectData()!;
-        const token = introspectToken()!;
-        return h('div', { class: 'auth-ref-live-section' },
-          h('div', { class: 'auth-ref-live-banner' },
-            h('span', { class: 'auth-ref-live-dot' }),
-            h('span', null, 'Live session detected \u2014 showing real data from ', h('strong', null, data.user.email)),
-          ),
-          h('div', { class: 'integration-ref-content' },
-            UserProfile(data),
-            SessionInfo(data),
-            JwtViewer({ token, slug: slug(), serverUrl }),
-          ),
-        );
-      },
-    ),
-    createShow(
-      () => introspectUnavailable(),
-      () => h('div', { class: 'console-card auth-ref-hint' },
-        h('div', { class: 'card-label' }, 'Live Preview'),
-        h('p', { class: 'card-copy' },
-          'Sign into the tenant from any browser tab to see a live preview with real session data here. This is optional \u2014 the reference above is always available.',
-        ),
-        h('div', { class: 'card-actions auth-ref-hint-actions' },
-          h('a', {
-            href: loginUrl,
-            target: '_blank',
-            class: 'btn btn-sm btn-ghost',
-          }, () => 'Start tenant sign-in for ' + (tenantState().name || slug())),
-          CopyButton({ text: loginUrl, label: 'Copy sign-in URL' }),
-        ),
-      ),
     ),
   );
 }
