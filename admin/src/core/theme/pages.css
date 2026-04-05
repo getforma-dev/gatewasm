@@ -2396,6 +2396,26 @@
   border-bottom: 1px solid var(--border);
 }
 
+.session-card-expiry {
+  font-variant-numeric: tabular-nums;
+  color: var(--accent);
+}
+
+.user-detail-dev-ref {
+  border-top: 1px dashed var(--border);
+  padding-top: var(--space-sm);
+  display: grid;
+  gap: var(--space-xs);
+}
+
+.user-detail-dev-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  padding-top: var(--space-xs);
+}
+
 .detail-grid {
   display: flex;
   flex-direction: column;

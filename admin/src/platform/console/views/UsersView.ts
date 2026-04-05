@@ -1,9 +1,11 @@
 import { h, createSignal, createShow } from 'formajs';
 import { Skeleton } from '../../../core/components/ui/Skeleton';
+import { CopyButton } from '../../../core/components/ui/CopyButton';
 import {
   selectedTenant, users, usersLoading,
   blockUser, unblockUser, revokeUserSessions,
   loadUserSessions, userSessions, userSessionsLoading, setUserSessions,
+  openSessionInspector,
   type UserSession,
 } from '../store';
 
@@ -178,6 +180,22 @@ export function UsersView() {
                     () => !userSessionsLoading() && userSessions().length === 0 && user.active_sessions === 0,
                     () => h('div', { class: 'user-sessions-empty text-muted' }, 'No active sessions'),
                   ),
+                  h('div', { class: 'user-detail-dev-ref' },
+                    h('div', { class: 'card-label' }, 'Developer Reference'),
+                    h('div', { class: 'detail-grid' },
+                      DetailRow('Algorithm', 'EdDSA'),
+                      DetailRow('Issuer', 'gatewasm'),
+                      DetailRow('Audience', 'gatewasm-app'),
+                    ),
+                    h('div', { class: 'user-detail-dev-actions' },
+                      CopyButton({ text: user.id, label: 'Copy user ID' }),
+                      h('button', {
+                        type: 'button',
+                        class: 'btn btn-sm btn-ghost',
+                        onClick: openSessionInspector,
+                      }, 'View Auth Reference'),
+                    ),
+                  ),
                   h('div', { class: 'user-actions' },
                     user.is_locked
                       ? h('button', { class: 'btn btn-sm btn-ghost', onClick: () => unblockUser(tenantState().id, user.id) }, 'Unblock')
@@ -227,6 +245,18 @@ function DetailRow(label: string, value: string) {
 }
 
 function SessionCard(s: UserSession) {
+  const expiresMs = Date.parse(s.expires_at);
+  const [timeLeft, setTimeLeft] = createSignal(formatTimeLeft(expiresMs));
+  const timer = setInterval(() => setTimeLeft(formatTimeLeft(expiresMs)), 1000);
+  setTimeout(() => {
+    const check = setInterval(() => {
+      if (!document.querySelector('.session-card-expiry-' + s.id.slice(0, 8))) {
+        clearInterval(timer);
+        clearInterval(check);
+      }
+    }, 5000);
+  }, 0);
+
   return h('div', { class: 'session-card' },
     h('div', { class: 'session-card-row' },
       h('span', { class: 'detail-label' }, 'Session'),
@@ -244,6 +274,10 @@ function SessionCard(s: UserSession) {
       h('span', { class: 'detail-label' }, 'Expires'),
       h('span', { class: 'detail-value' }, new Date(s.expires_at).toLocaleString()),
     ),
+    h('div', { class: 'session-card-row' },
+      h('span', { class: 'detail-label' }, 'Time Remaining'),
+      h('span', { class: 'detail-value session-card-expiry session-card-expiry-' + s.id.slice(0, 8) }, timeLeft),
+    ),
     s.last_activity_at
       ? h('div', { class: 'session-card-row' },
           h('span', { class: 'detail-label' }, 'Last Active'),
@@ -257,4 +291,16 @@ function SessionCard(s: UserSession) {
         )
       : null,
   );
+}
+
+function formatTimeLeft(expiresMs: number): string {
+  const diff = expiresMs - Date.now();
+  if (diff <= 0) return 'Expired';
+  const days = Math.floor(diff / 86400000);
+  const hours = Math.floor((diff % 86400000) / 3600000);
+  const mins = Math.floor((diff % 3600000) / 60000);
+  if (days > 0) return days + 'd ' + hours + 'h';
+  if (hours > 0) return hours + 'h ' + mins + 'm';
+  const secs = Math.floor((diff % 60000) / 1000);
+  return mins + 'm ' + secs + 's';
 }
