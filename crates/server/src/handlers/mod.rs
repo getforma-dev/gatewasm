@@ -394,6 +394,10 @@ fn create_router_inner(state: AppState, rate_limit_enabled: bool) -> Router {
             post(onboarding::revoke_tenant_user_sessions),
         )
         .route(
+            "/platform/self-serve/tenants/{id}/users/{user_id}/sessions",
+            get(onboarding::list_tenant_user_sessions),
+        )
+        .route(
             "/platform/self-serve/tenants/{id}/hosted-page",
             get(onboarding::get_hosted_page).put(onboarding::update_hosted_page),
         )
