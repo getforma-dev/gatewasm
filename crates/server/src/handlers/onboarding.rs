@@ -1294,7 +1294,8 @@ pub async fn list_tenant_users(
         "SELECT u.id, u.email, u.name, u.email_verified, u.created_at, u.updated_at, \
          COALESCE(u.locked_until > NOW(), FALSE) AS is_locked, \
          (SELECT array_agg(r.name) FROM user_roles ur JOIN roles r ON r.id = ur.role_id WHERE ur.user_id = u.id AND ur.tenant_id = $1) AS roles, \
-         (SELECT c.provider FROM credentials c WHERE c.user_id = u.id AND c.tenant_id = $1 LIMIT 1) AS provider \
+         (SELECT c.provider FROM credentials c WHERE c.user_id = u.id AND c.tenant_id = $1 LIMIT 1) AS provider, \
+         (SELECT COUNT(*)::BIGINT FROM refresh_tokens rt WHERE rt.user_id = u.id AND rt.tenant_id = $1 AND rt.revoked = FALSE AND rt.expires_at > NOW()) AS active_sessions \
          FROM users u WHERE u.tenant_id = $1 \
          ORDER BY u.created_at DESC LIMIT 100",
     )
@@ -1314,6 +1315,7 @@ pub async fn list_tenant_users(
                 "is_locked": r.get::<bool, _>("is_locked"),
                 "provider": r.get::<Option<String>, _>("provider"),
                 "roles": roles.unwrap_or_default(),
+                "active_sessions": r.get::<i64, _>("active_sessions"),
                 "created_at": r.get::<chrono::DateTime<Utc>, _>("created_at").to_rfc3339(),
             })
         })
