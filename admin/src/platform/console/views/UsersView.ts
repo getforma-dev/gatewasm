@@ -3,6 +3,8 @@ import { Skeleton } from '../../../core/components/ui/Skeleton';
 import {
   selectedTenant, users, usersLoading,
   blockUser, unblockUser, revokeUserSessions,
+  loadUserSessions, userSessions, userSessionsLoading, setUserSessions,
+  type UserSession,
 } from '../store';
 
 export function UsersView() {
@@ -125,7 +127,15 @@ export function UsersView() {
             },
               h('div', {
                 class: 'user-row-summary',
-                onClick: () => setExpandedId(expandedId() === user.id ? null : user.id),
+                onClick: () => {
+                  const nextId = expandedId() === user.id ? null : user.id;
+                  setExpandedId(nextId);
+                  if (nextId) {
+                    void loadUserSessions(tenantState().id, user.id);
+                  } else {
+                    setUserSessions([]);
+                  }
+                },
               },
                 h('div', { class: 'user-row-main' },
                   h('div', { class: 'user-email' },
@@ -133,7 +143,10 @@ export function UsersView() {
                     user.is_locked ? h('span', { class: 'badge badge-danger' }, 'Blocked') : null,
                   ),
                   h('div', { class: 'user-meta text-muted' },
-                    (user.provider || 'email') + ' - ' + new Date(user.created_at).toLocaleDateString(),
+                    (user.provider || 'email') + ' \u00b7 ' + new Date(user.created_at).toLocaleDateString(),
+                    user.active_sessions > 0
+                      ? h('span', { class: 'badge badge-subtle' }, user.active_sessions + ' active ' + (user.active_sessions === 1 ? 'session' : 'sessions'))
+                      : null,
                   ),
                 ),
                 h('div', { class: 'user-row-chevron' }, expandedId() === user.id ? 'Hide' : 'Inspect'),
@@ -147,11 +160,35 @@ export function UsersView() {
                     DetailRow('Verified', user.email_verified ? 'Yes' : 'No'),
                     DetailRow('Roles', user.roles.join(', ') || 'none'),
                   ),
+                  createShow(
+                    () => userSessionsLoading(),
+                    () => h('div', { class: 'user-sessions-loading' },
+                      Skeleton({ width: '100%', height: '12px' }),
+                      Skeleton({ width: '80%', height: '12px' }),
+                    ),
+                  ),
+                  createShow(
+                    () => !userSessionsLoading() && userSessions().length > 0,
+                    () => h('div', { class: 'user-sessions-list' },
+                      h('div', { class: 'card-label' }, 'Active Sessions'),
+                      () => userSessions().map((s: UserSession) => SessionCard(s)),
+                    ),
+                  ),
+                  createShow(
+                    () => !userSessionsLoading() && userSessions().length === 0 && user.active_sessions === 0,
+                    () => h('div', { class: 'user-sessions-empty text-muted' }, 'No active sessions'),
+                  ),
                   h('div', { class: 'user-actions' },
                     user.is_locked
                       ? h('button', { class: 'btn btn-sm btn-ghost', onClick: () => unblockUser(tenantState().id, user.id) }, 'Unblock')
                       : h('button', { class: 'btn btn-sm btn-ghost', onClick: () => blockUser(tenantState().id, user.id) }, 'Block'),
-                    h('button', { class: 'btn btn-sm btn-ghost', onClick: () => revokeUserSessions(tenantState().id, user.id) }, 'Revoke Sessions'),
+                    h('button', {
+                      class: 'btn btn-sm btn-ghost',
+                      disabled: () => user.active_sessions === 0,
+                      onClick: () => revokeUserSessions(tenantState().id, user.id),
+                    }, () => user.active_sessions > 0
+                      ? 'Revoke ' + user.active_sessions + ' ' + (user.active_sessions === 1 ? 'Session' : 'Sessions')
+                      : 'No Sessions'),
                   ),
                 ),
               ),
@@ -186,5 +223,38 @@ function DetailRow(label: string, value: string) {
   return h('div', { class: 'detail-row' },
     h('span', { class: 'detail-label' }, label),
     h('span', { class: 'detail-value' }, value),
+  );
+}
+
+function SessionCard(s: UserSession) {
+  return h('div', { class: 'session-card' },
+    h('div', { class: 'session-card-row' },
+      h('span', { class: 'detail-label' }, 'Session'),
+      h('code', { class: 'detail-value' }, s.id.slice(0, 16) + '...'),
+    ),
+    h('div', { class: 'session-card-row' },
+      h('span', { class: 'detail-label' }, 'Method'),
+      h('span', { class: 'detail-value' }, (s.auth_provider || s.auth_method) + (s.mfa_verified ? ' + MFA' : '')),
+    ),
+    h('div', { class: 'session-card-row' },
+      h('span', { class: 'detail-label' }, 'Created'),
+      h('span', { class: 'detail-value' }, new Date(s.created_at).toLocaleString()),
+    ),
+    h('div', { class: 'session-card-row' },
+      h('span', { class: 'detail-label' }, 'Expires'),
+      h('span', { class: 'detail-value' }, new Date(s.expires_at).toLocaleString()),
+    ),
+    s.last_activity_at
+      ? h('div', { class: 'session-card-row' },
+          h('span', { class: 'detail-label' }, 'Last Active'),
+          h('span', { class: 'detail-value' }, new Date(s.last_activity_at).toLocaleString()),
+        )
+      : null,
+    s.login_ip
+      ? h('div', { class: 'session-card-row' },
+          h('span', { class: 'detail-label' }, 'IP'),
+          h('code', { class: 'detail-value' }, s.login_ip),
+        )
+      : null,
   );
 }
