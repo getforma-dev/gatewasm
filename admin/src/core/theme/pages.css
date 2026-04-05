@@ -997,7 +997,7 @@
 
 
 /* ==========================================================================
-   Session Inspector Components
+   Auth Reference / Session Components
    Shared styles for callback preview, user/session cards, and JWT viewer.
    ========================================================================== */
 
@@ -2347,6 +2347,55 @@
   gap: var(--space-sm);
 }
 
+/* ── User Session Cards ───────────────────────────────────────────── */
+
+.badge-subtle {
+  font-size: 0.6rem;
+  padding: 0.1rem 0.4rem;
+  border-radius: var(--radius-sm);
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+
+.user-sessions-list {
+  display: grid;
+  gap: var(--space-sm);
+}
+
+.user-sessions-loading {
+  display: grid;
+  gap: var(--space-xs);
+  padding: var(--space-sm) 0;
+}
+
+.user-sessions-empty {
+  font-size: 0.78rem;
+  padding: var(--space-sm) 0;
+}
+
+.session-card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: var(--space-sm) var(--space-md);
+  background: var(--surface);
+  display: grid;
+  gap: 0;
+}
+
+.session-card-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  padding: 0.25rem 0;
+  gap: 0.5rem;
+}
+
+.session-card-row:not(:last-child) {
+  border-bottom: 1px solid var(--border);
+}
+
 .detail-grid {
   display: flex;
   flex-direction: column;
@@ -2550,6 +2599,75 @@
 
 .inspector-side-note {
   justify-content: center;
+}
+
+/* ── Auth Reference ──────────────────────────────────────────────── */
+
+.auth-ref-field {
+  font-family: 'DM Mono', monospace;
+  font-size: 0.72rem;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.auth-ref-type {
+  font-size: 0.68rem;
+  color: var(--text-muted);
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.auth-ref-endpoint {
+  font-size: 0.68rem;
+  word-break: break-all;
+}
+
+.auth-ref-jwt-preview {
+  margin-top: 0.75rem;
+  display: grid;
+  gap: 0.5rem;
+}
+
+.auth-ref-live-section {
+  display: grid;
+  gap: var(--space-md);
+}
+
+.auth-ref-live-banner {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--border-accent);
+  border-radius: var(--radius-md);
+  background: var(--surface-raised);
+  font-size: 0.78rem;
+  color: var(--text-dim);
+}
+
+.auth-ref-live-dot {
+  width: 0.45rem;
+  height: 0.45rem;
+  border-radius: 999px;
+  background: #4ade80;
+  flex-shrink: 0;
+  animation: auth-ref-pulse 2s ease-in-out infinite;
+}
+
+@keyframes auth-ref-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+.auth-ref-hint {
+  border-style: dashed;
+}
+
+.auth-ref-hint-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
 }
 
 .info-list {
