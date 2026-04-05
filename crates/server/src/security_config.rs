@@ -129,6 +129,11 @@ impl TenantSecurityConfig {
             violations.push("impossible_travel_enabled requires compliance plan".to_string());
         }
 
+        // Range validation
+        if self.max_sessions_per_user < 1 || self.max_sessions_per_user > 100 {
+            violations.push("max_sessions_per_user must be between 1 and 100".to_string());
+        }
+
         violations
     }
 }

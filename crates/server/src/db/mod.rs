@@ -1,9 +1,5 @@
 use sqlx::postgres::{PgPool, PgPoolOptions};
 
-/// Maximum number of active refresh tokens per user.
-/// Used by all handlers that issue refresh tokens.
-pub const MAX_REFRESH_TOKENS_PER_USER: i64 = 10;
-
 pub async fn create_pool(database_url: &str) -> Result<PgPool, sqlx::Error> {
     let max_conns: u32 = std::env::var("DB_MAX_CONNECTIONS")
         .ok()
