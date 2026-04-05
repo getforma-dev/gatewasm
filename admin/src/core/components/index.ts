@@ -27,5 +27,4 @@ export { Topbar } from './ui/Topbar';
 
 // Domain components
 export { UserProfile, SessionInfo } from './domain/AuthDataCards';
-export { CallbackPreview } from './domain/CallbackPreview';
 export { JwtViewer } from './domain/JwtViewer';
