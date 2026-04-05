@@ -9,10 +9,11 @@ import { ToastView } from '../../core/components/ui/Toast';
 import { Header } from '../../core/components/ui/Header';
 import { Badge } from '../../core/components/ui/Badge';
 import { CodeBlock } from '../../core/components/ui/CodeBlock';
+import { CopyButton } from '../../core/components/ui/CopyButton';
 import { DataTable } from '../../core/components/ui/DataTable';
 import { Panel } from '../../core/components/ui/Panel';
 import { Field } from '../../core/components/ui/Field';
-import { fmtDate, copyText } from '../../core/utils';
+import { fmtDate } from '../../core/utils';
 import type { TenantDashboardStore, LoginHistoryEntry } from './store';
 import type { ToastController } from '../../core/hooks/createToast';
 import type { TenantDashboardView } from '../../core/types';
@@ -230,18 +231,14 @@ function IntegrationView() {
             h('span', { class: 'detail-label' }, 'CDN'),
             h('div', { class: 'detail-value flex items-center gap-sm' },
               h('code', { class: 'mono text-xs break-all' }, cdnUrl),
-              h('button', { class: 'btn small', onClick: () => {
-                copyText(cdnUrl).then(() => {}).catch(() => {});
-              } }, 'Copy'),
+              CopyButton({ text: cdnUrl, class: 'btn small', label: 'Copy', copiedLabel: 'Copied' }),
             ),
           ),
           h('div', { class: 'detail-row' },
             h('span', { class: 'detail-label' }, 'Direct'),
             h('div', { class: 'detail-value flex items-center gap-sm' },
               h('code', { class: 'mono text-xs break-all' }, directUrl),
-              h('button', { class: 'btn small', onClick: () => {
-                copyText(directUrl).then(() => {}).catch(() => {});
-              } }, 'Copy'),
+              CopyButton({ text: directUrl, class: 'btn small', label: 'Copy', copiedLabel: 'Copied' }),
             ),
           ),
           h('div', { class: 'detail-row' },

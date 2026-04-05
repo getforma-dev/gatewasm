@@ -88,6 +88,9 @@ export function Sidebar(props: SidebarProps): HTMLElement {
         h('nav', { class: 'nav sidebar-footer' },
           ...props.footer.map((item) => NavItem(item)),
         ),
+        props.account ? h('div', { class: 'sidebar-account-slot' },
+          () => props.account ? props.account() : null,
+        ) : null,
       ),
     ) as HTMLElement
   );

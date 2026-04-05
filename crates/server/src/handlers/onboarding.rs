@@ -1638,8 +1638,8 @@ pub async fn get_started_page(State(state): State<AppState>) -> impl IntoRespons
 }
 
 /// GET /platform/login — Returning platform users sign in here.
-/// If authenticated and they have tenants, redirect to /platform/console.
-/// If authenticated but no tenants, redirect to /platform/onboarding.
+/// After authentication they always land in /platform/console, where
+/// tenant creation and setup now live.
 pub async fn platform_login_page(State(state): State<AppState>) -> impl IntoResponse {
     if let Err(e) = ensure_platform_oauth_clients(&state).await {
         tracing::warn!(error = ?e, "Failed to ensure platform OAuth clients for login");

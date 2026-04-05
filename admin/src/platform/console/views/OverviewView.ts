@@ -1,5 +1,6 @@
 import { h, createSignal } from 'formajs';
 import { Skeleton } from '../../../core/components/ui/Skeleton';
+import { CopyButton } from '../../../core/components/ui/CopyButton';
 import {
   selectedTenant,
   selectedTenantStats,
@@ -379,7 +380,10 @@ function latestUserCard(stats: () => TenantStats | null, isBootstrapping: () => 
 
   const latestUser = stats()?.latest_user;
   return h('div', { class: 'console-card' },
-    h('div', { class: 'card-label' }, 'Latest User'),
+    h('div', { class: 'overview-card-head' },
+      h('div', { class: 'card-label' }, 'Latest User'),
+      latestUser ? CopyButton({ text: latestUser.email, iconOnly: true, title: 'Copy latest user email' }) : null,
+    ),
     latestUser
       ? h('div', { class: 'stack-sm' },
           h('div', { class: 'card-value card-value-strong' }, latestUser.email),
@@ -476,16 +480,19 @@ function OverviewDetailRow(label: string, value: string) {
 }
 
 function QuickLink(title: string, description: string, href: () => string, actionLabel: string) {
-  return h('a', {
-    href,
-    target: '_blank',
-    class: 'quick-link-card',
-  },
+  return h('div', { class: 'quick-link-card quick-link-card-static' },
     h('span', { class: 'quick-link-copy' },
       h('span', { class: 'quick-link-title' }, title),
       h('span', { class: 'quick-link-description' }, description),
     ),
-    h('span', { class: 'quick-link-footer' }, actionLabel),
+    h('div', { class: 'quick-link-actions' },
+      h('a', {
+        href,
+        target: '_blank',
+        class: 'btn btn-sm btn-ghost',
+      }, actionLabel),
+      CopyButton({ text: href, iconOnly: true, title: 'Copy ' + title.toLowerCase() + ' URL' }),
+    ),
   );
 }
 

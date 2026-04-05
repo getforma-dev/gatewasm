@@ -1,5 +1,6 @@
 import { h, createEffect, createSignal } from 'formajs';
 import { Field } from '../../../core/components/ui/Field';
+import { CopyButton } from '../../../core/components/ui/CopyButton';
 import { selectedTenant, updateTenant, deleteTenant, toast, backToTenants, loadTenants } from '../store';
 import { normalizeTenantSlugInput } from '../../tenantSlug';
 
@@ -18,6 +19,7 @@ export function SettingsView() {
   const [syncedName, setSyncedName] = createSignal(tenant.name || '');
   const [syncedSlug, setSyncedSlug] = createSignal(tenant.slug || '');
   const [syncedColor, setSyncedColor] = createSignal(tenant.primary_color || '#6366f1');
+  const isDirty = () => appName() !== syncedName() || slug() !== syncedSlug() || color() !== syncedColor();
 
   createEffect(() => {
     const currentTenant = tenantState();
@@ -40,6 +42,12 @@ export function SettingsView() {
     setSyncedSlug(nextSlug);
     setSyncedColor(nextColor);
   });
+
+  function resetDraft() {
+    setAppName(syncedName());
+    setSlug(syncedSlug());
+    setColor(syncedColor());
+  }
 
   async function saveBranding() {
     const nextName = appName().trim();
@@ -80,9 +88,9 @@ export function SettingsView() {
     h('div', { class: 'settings-layout' },
       h('div', { class: 'settings-main' },
         h('div', { class: 'console-card' },
-          h('div', { class: 'card-label' }, 'Identity & Branding'),
-          h('p', { class: 'card-copy' }, 'Set the app name, tenant URL, and primary accent used across the hosted tenant experience.' ),
-          h('div', { class: 'form-stack' },
+        h('div', { class: 'card-label' }, 'Identity & Branding'),
+        h('p', { class: 'card-copy' }, 'Set the app name, tenant URL, and primary accent used across the hosted tenant experience.' ),
+        h('div', { class: 'form-stack' },
             Field({
               label: 'App Name',
               name: 'app-name',
@@ -101,8 +109,14 @@ export function SettingsView() {
             }),
             h('div', { class: 'tenant-create-preview' },
               h('span', { class: 'detail-label' }, 'Tenant URL'),
-              h('code', { class: 'code-block code-inline-block break-all' },
-                () => slug() ? '/t/' + slug() : '/t/your-slug',
+              h('div', { class: 'inline-copy-row' },
+                h('code', { class: 'code-block code-inline-block break-all' },
+                  () => slug() ? '/t/' + slug() : '/t/your-slug',
+                ),
+                CopyButton({
+                  text: () => slug() ? '/t/' + slug() : '/t/your-slug',
+                  label: 'Copy URL',
+                }),
               ),
             ),
             h('div', { class: 'field' },
@@ -123,12 +137,25 @@ export function SettingsView() {
               ),
             ),
           ),
-          h('div', { class: 'card-actions' },
-            h('button', {
-              class: 'btn btn-primary btn-sm',
-              disabled: saving,
-              onClick: saveBranding,
-            }, () => saving() ? 'Saving...' : 'Save Settings'),
+          h('div', { class: () => 'editor-dirty-bar' + (isDirty() ? ' active' : '') },
+            h('div', { class: 'editor-dirty-copy' },
+              h('span', { class: 'editor-dirty-label' }, 'Unsaved changes'),
+              h('span', { class: 'editor-dirty-description' }, 'Save the tenant identity update before sharing the new URL with anyone else.'),
+            ),
+            h('div', { class: 'editor-dirty-actions' },
+              h('button', {
+                type: 'button',
+                class: 'btn btn-sm btn-ghost',
+                disabled: () => saving() || !isDirty(),
+                onClick: resetDraft,
+              }, 'Reset'),
+              h('button', {
+                type: 'button',
+                class: 'btn btn-primary btn-sm',
+                disabled: () => saving() || !isDirty(),
+                onClick: saveBranding,
+              }, () => saving() ? 'Saving...' : 'Save'),
+            ),
           ),
         ),
         h('div', { class: 'console-card danger-zone' },
@@ -187,11 +214,14 @@ function SettingsLinkRow(label: string, href: string) {
       h('span', { class: 'detail-label' }, label),
       h('code', { class: 'surface-link-value' }, href),
     ),
-    h('a', {
-      href,
-      target: '_blank',
-      class: 'btn btn-sm btn-ghost',
-    }, 'Open'),
+    h('div', { class: 'surface-link-actions' },
+      h('a', {
+        href,
+        target: '_blank',
+        class: 'btn btn-sm btn-ghost',
+      }, 'Open'),
+      CopyButton({ text: href, iconOnly: true, title: 'Copy ' + label.toLowerCase() }),
+    ),
   );
 }
 

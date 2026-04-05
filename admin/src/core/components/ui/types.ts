@@ -17,6 +17,7 @@ export interface SidebarProps {
   onNavigate: (view: string) => void;
   env?: string;
   context?: () => HTMLElement | null;
+  account?: () => HTMLElement | null;
 }
 
 export interface NavItem {

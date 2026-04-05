@@ -7,29 +7,29 @@ import {
   expectNoLayoutOverflow,
 } from './helpers';
 
-// --- SSR Correctness ---
+// --- Boot Shell Correctness ---
 
-test('SSR renders static shell with island containers (JS disabled)', async ({ browser }) => {
+test('benchmark page serves the boot shell with data/config scripts when JS is disabled', async ({ browser }) => {
   const context = await browser.newContext({ javaScriptEnabled: false });
   const page = await context.newPage();
   await page.goto('/platform/benchmark');
 
-  // Static shell elements are SSR-rendered
-  await expect(page.locator('.brand-header')).toBeVisible();
-  await expect(page.locator('.benchmark-layout')).toBeVisible();
-  await expect(page.locator('.page-footer')).toBeVisible();
-
-  // Island containers exist with correct attributes (3 main + sub-islands)
-  const islands = await page.locator('[data-forma-island]').count();
-  expect(islands).toBeGreaterThanOrEqual(3);
-
-  // Named islands: FilterBar, PerfPanel, BenchmarkDataTable
-  const names = await page.locator('[data-forma-component]').evaluateAll(
-    els => els.map(e => e.getAttribute('data-forma-component'))
-  );
-  expect(names).toContain('FilterBar');
-  expect(names).toContain('PerfPanel');
-  expect(names).toContain('BenchmarkDataTable');
+  const shell = await page.evaluate(() => ({
+    hasAppRoot: document.getElementById('app') !== null,
+    hasStylesheet: document.querySelector('link[rel="stylesheet"][href*="forma-platform"]') !== null,
+    hasModuleEntry: document.querySelector('script[type="module"][src*="platform-benchmark"]') !== null,
+    hasBenchmarkConfig: Array.from(document.scripts).some((script) =>
+      (script.textContent || '').includes('__BENCHMARK_CONFIG__')
+    ),
+    hasBenchmarkData: Array.from(document.scripts).some((script) =>
+      (script.textContent || '').includes('__BENCHMARK_DATA__')
+    ),
+  }));
+  expect(shell.hasAppRoot).toBe(true);
+  expect(shell.hasStylesheet).toBe(true);
+  expect(shell.hasModuleEntry).toBe(true);
+  expect(shell.hasBenchmarkConfig).toBe(true);
+  expect(shell.hasBenchmarkData).toBe(true);
 
   await context.close();
 });
@@ -65,13 +65,15 @@ test('initial hydration: 1000 rows visible after JS loads', async ({ page }) => 
 
 // --- Island activation ---
 
-test('three islands reach status="active"', async ({ page }) => {
+test('benchmark shell hydrates exactly one interactive layout', async ({ page }) => {
   await page.goto('/platform/benchmark');
   await page.waitForTimeout(2000);
-  const active = await page.locator('[data-forma-status="active"]').count();
-  expect(active).toBeGreaterThanOrEqual(3);
-  const pending = await page.locator('[data-forma-status="pending"]').count();
-  expect(pending).toBe(0);
+  const filterBars = await page.locator('.benchmark-filter-bar').count();
+  const dataTables = await page.locator('.benchmark-data-table').count();
+  const perfPanels = await page.locator('.benchmark-perf-panel').count();
+  expect(filterBars).toBe(1);
+  expect(dataTables).toBe(1);
+  expect(perfPanels).toBe(1);
 });
 
 // --- FilterBar interactions (client-side, no server fetch) ---
@@ -195,7 +197,6 @@ test('no DOM doubling after hydration', async ({ page }) => {
   expect(dataTables).toBe(1);
   expect(perfPanels).toBe(1);
 
-  // Each island container appears exactly once (3 main + sub-islands)
-  const islands = await page.locator('[data-forma-island]').count();
-  expect(islands).toBeGreaterThanOrEqual(3);
+  const rows = await page.locator('tbody tr').count();
+  expect(rows).toBeGreaterThan(0);
 });

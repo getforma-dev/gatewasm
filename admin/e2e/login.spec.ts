@@ -1,7 +1,7 @@
 /**
  * Platform Login Page — E2E Tests
  *
- * Tests cover SSR correctness, hydration integrity, interactive behavior,
+ * Tests cover boot-shell correctness, hydration integrity, interactive behavior,
  * and layout stability. Auth flow (actual login, MFA, OAuth) is NOT tested
  * here since it requires seeded credentials and external services.
  */
@@ -14,39 +14,33 @@ import {
   expectNoLayoutOverflow,
 } from './helpers';
 
-// --- SSR Correctness (JS disabled) ---
+// --- Boot Shell Correctness (JS disabled) ---
 
-test('SSR renders login form with JS disabled', async ({ browser }) => {
+test('login page serves the boot shell with JS disabled', async ({ browser }) => {
   const context = await browser.newContext({ javaScriptEnabled: false });
   const page = await context.newPage();
   await page.goto('/platform/login');
 
-  // #app should have real children (not empty shell)
-  const childCount = await page.evaluate(() =>
-    document.getElementById('app')?.children.length ?? 0
-  );
-  expect(childCount).toBeGreaterThan(0);
-
-  // Hero section visible
-  const hero = await page.locator('.hero').count();
-  expect(hero).toBe(1);
-
-  // Auth card visible
-  const card = await page.locator('.card').count();
-  expect(card).toBe(1);
+  const shell = await page.evaluate(() => ({
+    hasAppRoot: document.getElementById('app') !== null,
+    hasStylesheet: document.querySelector('link[rel="stylesheet"][href*="forma-platform"]') !== null,
+    hasModuleEntry: document.querySelector('script[type="module"][src*="platform-login"]') !== null,
+    hasPlatformConfig: Array.from(document.scripts).some((script) =>
+      (script.textContent || '').includes('__PLATFORM_CONFIG__')
+    ),
+  }));
+  expect(shell.hasAppRoot).toBe(true);
+  expect(shell.hasStylesheet).toBe(true);
+  expect(shell.hasModuleEntry).toBe(true);
+  expect(shell.hasPlatformConfig).toBe(true);
 
   await context.close();
 });
 
-test('SSR: password field has type="password" (no leak)', async ({ browser }) => {
-  const context = await browser.newContext({ javaScriptEnabled: false });
-  const page = await context.newPage();
+test('password field is masked once the login UI hydrates', async ({ page }) => {
   await page.goto('/platform/login');
-
   const passwordType = await page.locator('#password').getAttribute('type');
   expect(passwordType).toBe('password');
-
-  await context.close();
 });
 
 // --- Hydration Integrity ---
@@ -137,18 +131,9 @@ test('no layout overflow', async ({ page }) => {
 });
 
 test('no DOM doubling after hydration', async ({ browser, page }) => {
-  // Count SSR elements
-  const ssrCtx = await browser.newContext({ javaScriptEnabled: false });
-  const ssrPage = await ssrCtx.newPage();
-  await ssrPage.goto('/platform/login');
-  const ssrCount = await ssrPage.evaluate(() => document.querySelectorAll('*').length);
-  await ssrCtx.close();
-
-  // Count after JS hydration
   await page.goto('/platform/login');
   await page.waitForTimeout(2000);
-  const jsCount = await page.evaluate(() => document.querySelectorAll('*').length);
-
-  // JS count should not be more than 2x SSR count
-  expect(jsCount).toBeLessThan(ssrCount * 2);
+  await expect(page.locator('#email')).toHaveCount(1);
+  await expect(page.locator('#password')).toHaveCount(1);
+  await expect(page.locator('.card')).toHaveCount(1);
 });

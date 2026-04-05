@@ -193,6 +193,7 @@ export interface Facets {
 }
 
 export interface Toast {
+  id: number;
   message: string;
   kind: 'success' | 'error' | 'info';
 }

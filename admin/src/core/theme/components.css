@@ -412,21 +412,31 @@
    Toast
    ========================================================================== */
 
-.toast {
+.toast-stack {
   position: fixed;
   right: 1.25rem;
   bottom: 1.25rem;
-  min-width: 260px;
-  max-width: 400px;
+  width: min(400px, calc(100vw - 2rem));
+  display: grid;
+  gap: 0.6rem;
+  z-index: 200;
+}
+
+.toast {
+  min-width: 0;
   border: 1px solid var(--border);
   background: var(--surface-raised);
-  padding: 0.75rem 1rem;
+  padding: 0.8rem 0.9rem;
   font-size: 0.82rem;
   font-weight: 400;
   border-radius: var(--radius-sm);
   box-shadow: var(--shadow-md);
   animation: toast-in 0.3s var(--ease);
-  z-index: 200;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+  cursor: pointer;
 }
 
 .toast.success {
@@ -435,6 +445,36 @@
 
 .toast.error {
   border-color: var(--danger-border);
+}
+
+.toast.info {
+  border-color: var(--info);
+}
+
+.toast-message {
+  flex: 1 1 auto;
+  min-width: 0;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.toast-close {
+  width: 24px;
+  height: 24px;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+  border-radius: 999px;
+}
+
+.toast-close:hover {
+  color: var(--text);
+  background: var(--surface-overlay);
 }
 
 @keyframes toast-in {
@@ -813,11 +853,6 @@
   to   { opacity: 0; transform: translateX(100%); }
 }
 
-@keyframes dropdown-in {
-  from { opacity: 0; transform: scaleY(0.95); transform-origin: top; }
-  to   { opacity: 1; transform: scaleY(1); }
-}
-
 @keyframes skeleton-pulse {
   0%, 100% { opacity: 0.4; }
   50%      { opacity: 1; }
@@ -997,9 +1032,16 @@
 }
 
 .sidebar-context-slot,
-.sidebar-groups {
+.sidebar-groups,
+.sidebar-account-slot {
   display: grid;
   gap: 0.5rem;
+}
+
+.sidebar-account-slot {
+  margin-top: 0.2rem;
+  padding-top: 0.85rem;
+  border-top: 1px solid var(--border);
 }
 
 .sidebar-group + .sidebar-group {
@@ -1140,6 +1182,162 @@
   background: var(--surface-overlay);
 }
 
+.sidebar-account {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.8rem 0.9rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface-raised);
+  min-width: 0;
+}
+
+.sidebar-account-shell {
+  position: relative;
+}
+
+.sidebar-account-trigger {
+  width: 100%;
+  font: inherit;
+  text-align: left;
+  appearance: none;
+  cursor: pointer;
+}
+
+.sidebar-account-trigger:hover {
+  border-color: var(--border-strong);
+  background: var(--surface-overlay);
+}
+
+.sidebar-account-avatar {
+  width: 38px;
+  height: 38px;
+  border-radius: 999px;
+  border: 1px solid var(--border-accent);
+  background: linear-gradient(135deg, rgba(196, 162, 101, 0.18), rgba(16, 185, 129, 0.12));
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.sidebar-account-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.sidebar-account-initials {
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--text);
+  text-transform: uppercase;
+}
+
+.sidebar-account-copy {
+  min-width: 0;
+  display: grid;
+  gap: 0.18rem;
+}
+
+.sidebar-account-name,
+.sidebar-account-email {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sidebar-account-name {
+  font-size: 0.82rem;
+  font-weight: 500;
+  color: var(--text);
+}
+
+.sidebar-account-email {
+  font-size: 0.7rem;
+  color: var(--text-dim);
+}
+
+.sidebar-account-caret {
+  margin-left: auto;
+  color: var(--text-muted);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.sidebar-account-menu {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 0.6rem);
+  width: min(260px, calc(100vw - 2rem));
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  box-shadow: var(--shadow-md);
+  padding: 0.4rem;
+  display: grid;
+  gap: 0.4rem;
+  z-index: 60;
+}
+
+.sidebar-account-menu-header {
+  padding: 0.55rem 0.65rem 0.45rem;
+  border-bottom: 1px solid var(--border);
+  display: grid;
+  gap: 0.15rem;
+}
+
+.sidebar-account-menu-title {
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--text);
+}
+
+.sidebar-account-menu-meta {
+  font-size: 0.68rem;
+  color: var(--text-dim);
+  overflow-wrap: anywhere;
+}
+
+.sidebar-account-menu-actions {
+  display: grid;
+  gap: 0.15rem;
+}
+
+.sidebar-account-menu-item {
+  width: 100%;
+  border: none;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 0.76rem;
+  padding: 0.55rem 0.65rem;
+  border-radius: var(--radius-sm);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+  text-align: left;
+}
+
+.sidebar-account-menu-item:hover {
+  background: var(--surface-raised);
+}
+
+.sidebar-account-menu-item.danger {
+  color: var(--danger);
+}
+
+.sidebar-account-menu-item.danger:hover {
+  background: var(--danger-dim);
+}
+
 /* ── Sidebar Footer ───────────────────────────────────────────────────── */
 
 .sidebar-footer {
@@ -1253,11 +1451,13 @@
 .shell--collapsed .brand small,
 .shell--collapsed .sidebar-group-label,
 .shell--collapsed .sidebar-context-card,
+.shell--collapsed .sidebar-account-copy,
 .shell--collapsed .nav-label-text,
 .sidebar.collapsed .brand-text,
 .sidebar.collapsed .brand small,
 .sidebar.collapsed .sidebar-group-label,
 .sidebar.collapsed .sidebar-context-card,
+.sidebar.collapsed .sidebar-account-copy,
 .sidebar.collapsed .nav-label-text {
   display: none;
 }
@@ -1280,6 +1480,24 @@
 .sidebar.collapsed .sidebar-footer button {
   justify-content: center;
   padding: 0.45rem;
+}
+
+.shell--collapsed .sidebar-account,
+.sidebar.collapsed .sidebar-account {
+  justify-content: center;
+  padding: 0.5rem;
+}
+
+.shell--collapsed .sidebar-account-caret,
+.sidebar.collapsed .sidebar-account-caret {
+  display: none;
+}
+
+.shell--collapsed .sidebar-account-menu,
+.sidebar.collapsed .sidebar-account-menu {
+  left: calc(100% + 0.75rem);
+  right: auto;
+  bottom: 0;
 }
 
 .shell--collapsed .sidebar-env,
@@ -1887,40 +2105,6 @@
   font-size: 0.68rem;
 }
 
-/* ── Dropdown ────────────────────────────────────────────────────────── */
-
-.dropdown { position: relative; display: inline-flex; }
-.dropdown-trigger { cursor: pointer; }
-
-.dropdown-menu {
-  position: absolute;
-  top: calc(100% + 4px);
-  right: 0;
-  min-width: 160px;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  box-shadow: var(--shadow-md);
-  z-index: 40;
-  padding: 4px 0;
-  animation: dropdown-in var(--duration-fast, 120ms) var(--ease-out, cubic-bezier(0.4, 0, 0.2, 1));
-}
-.dropdown-item {
-  display: block;
-  width: 100%;
-  text-align: left;
-  padding: 6px 12px;
-  font-size: var(--text-base, 13px);
-  color: var(--text);
-  background: none;
-  border: none;
-  cursor: pointer;
-  transition: background var(--duration-fast, 120ms) ease;
-}
-.dropdown-item:hover { background: var(--surface-raised); }
-.dropdown-item.danger { color: var(--danger); }
-.dropdown-item.danger:hover { background: var(--danger-dim); }
-
 /* ── Topbar ──────────────────────────────────────────────────────────── */
 
 .topbar {
@@ -1987,6 +2171,21 @@
   flex-shrink: 0;
 }
 
+.copy-btn {
+  min-height: 32px;
+}
+
+.copy-btn-icon-only {
+  min-width: 32px;
+  padding: 0.35rem;
+}
+
+.copy-btn-icon {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+}
+
 .topbar-chip-command {
   gap: 0.55rem;
 }
@@ -2000,6 +2199,25 @@
   font-family: 'DM Mono', monospace;
   font-size: 0.62rem;
   letter-spacing: 0.04em;
+}
+
+.topbar-chip-status {
+  gap: 0.45rem;
+}
+
+.topbar-chip-status-active {
+  border-color: rgba(74, 222, 128, 0.35);
+  color: #86efac;
+}
+
+.topbar-chip-status-missing {
+  border-color: rgba(248, 113, 113, 0.3);
+  color: rgba(248, 113, 113, 0.86);
+}
+
+.topbar-chip-status-pending {
+  border-color: var(--border-accent);
+  color: var(--text-muted);
 }
 
 /* ── Breadcrumb ──────────────────────────────────────────────────────── */

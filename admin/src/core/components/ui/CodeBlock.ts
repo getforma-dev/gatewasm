@@ -1,13 +1,14 @@
-import { copyText } from '../../utils';
-
 import { h } from 'formajs';
+import { CopyButton } from './CopyButton';
 
 export function CodeBlock(code: string) {
   return h('div', { class: 'relative' },
     h('pre', { class: 'code-block' }, code),
-    h('button', {
+    CopyButton({
+      text: code,
       class: 'btn small code-block-copy',
-      onClick: () => copyText(code),
-    }, 'Copy'),
+      label: 'Copy',
+      copiedLabel: 'Copied',
+    }),
   );
 }

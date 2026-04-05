@@ -5,6 +5,7 @@
 
 import { h, createSignal, createShow } from 'formajs';
 import type { IntrospectData } from '../../types';
+import { CopyButton } from '../ui/CopyButton';
 
 function fmtDate(iso: string): string {
   return new Date(iso).toLocaleString();
@@ -23,14 +24,8 @@ export function UserProfile(d: IntrospectData) {
   return h('div', { class: 'sandbox-section' },
     h('div', { class: 'sandbox-section-title' }, 'User Profile'),
     h('div', null,
-      h('div', { class: 'sandbox-detail-row' },
-        h('span', { class: 'sandbox-detail-label' }, 'User ID'),
-        h('code', { class: 'sandbox-detail-value' }, d.user.id),
-      ),
-      h('div', { class: 'sandbox-detail-row' },
-        h('span', { class: 'sandbox-detail-label' }, 'Email'),
-        h('span', { class: 'sandbox-detail-value' }, d.user.email),
-      ),
+      CopyableSandboxRow('User ID', d.user.id, true),
+      CopyableSandboxRow('Email', d.user.email),
       h('div', { class: 'sandbox-detail-row' },
         h('span', { class: 'sandbox-detail-label' }, 'Name'),
         h('span', { class: 'sandbox-detail-value' }, d.user.name || '(not set)'),
@@ -73,10 +68,7 @@ export function SessionInfo(d: IntrospectData) {
       createShow(
         () => d.session != null,
         () => h('div', null,
-          h('div', { class: 'sandbox-detail-row' },
-            h('span', { class: 'sandbox-detail-label' }, 'Session ID'),
-            h('code', { class: 'sandbox-detail-value' }, d.session!.id),
-          ),
+          CopyableSandboxRow('Session ID', d.session!.id, true),
           h('div', { class: 'sandbox-detail-row' },
             h('span', { class: 'sandbox-detail-label' }, 'Created'),
             h('span', { class: 'sandbox-detail-value' }, fmtDate(d.session!.created_at)),
@@ -98,11 +90,23 @@ export function SessionInfo(d: IntrospectData) {
       h('div', { class: 'sandbox-detail-row' },
         h('span', { class: 'sandbox-detail-label' }, 'Issuer'),
         h('span', { class: 'sandbox-detail-value' }, d.token.issuer),
+        CopyButton({ text: d.token.issuer, iconOnly: true, title: 'Copy issuer' }),
       ),
       h('div', { class: 'sandbox-detail-row' },
         h('span', { class: 'sandbox-detail-label' }, 'Audience'),
         h('span', { class: 'sandbox-detail-value' }, d.token.audience),
+        CopyButton({ text: d.token.audience, iconOnly: true, title: 'Copy audience' }),
       ),
     ),
+  );
+}
+
+function CopyableSandboxRow(label: string, value: string, monospace = false) {
+  return h('div', { class: 'sandbox-detail-row' },
+    h('span', { class: 'sandbox-detail-label' }, label),
+    monospace
+      ? h('code', { class: 'sandbox-detail-value' }, value)
+      : h('span', { class: 'sandbox-detail-value' }, value),
+    CopyButton({ text: value, iconOnly: true, title: 'Copy ' + label.toLowerCase() }),
   );
 }

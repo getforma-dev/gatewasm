@@ -1,6 +1,7 @@
 import { h, createEffect, createSignal } from 'formajs';
 import { Field } from '../../../core/components/ui/Field';
-import { selectedTenant, hostedPage, saveHostedPage, toast } from '../store';
+import { CopyButton } from '../../../core/components/ui/CopyButton';
+import { selectedTenant, hostedPage, saveHostedPage } from '../store';
 
 export function HostedPageView() {
   const tenant = selectedTenant()!;
@@ -13,42 +14,62 @@ export function HostedPageView() {
   const [ctaText, setCtaText] = createSignal('');
   const [ctaLink, setCtaLink] = createSignal('');
   const [saving, setSaving] = createSignal(false);
-  const [initialized, setInitialized] = createSignal(false);
-  const [initializedTenantId, setInitializedTenantId] = createSignal<string | null>(null);
+  const [syncedTenantId, setSyncedTenantId] = createSignal<string | null>(null);
+  const [syncedHeadline, setSyncedHeadline] = createSignal('Welcome');
+  const [syncedBody, setSyncedBody] = createSignal('');
+  const [syncedCtaText, setSyncedCtaText] = createSignal('');
+  const [syncedCtaLink, setSyncedCtaLink] = createSignal('');
 
   createEffect(() => {
     const currentTenantId = tenantState().id;
-    if (initializedTenantId() !== currentTenantId) {
-      setHeadline('');
-      setBody('');
-      setCtaText('');
-      setCtaLink('');
-      setInitialized(false);
-      setInitializedTenantId(currentTenantId);
+    const page = hostedPage();
+    const nextHeadline = page?.headline || 'Welcome';
+    const nextBody = page?.body || '';
+    const nextCtaText = page?.cta_text || '';
+    const nextCtaLink = page?.cta_link || '';
+    const tenantChanged = syncedTenantId() !== currentTenantId;
+    const pristine = !isDirty();
+
+    if (tenantChanged || pristine) {
+      setHeadline(nextHeadline);
+      setBody(nextBody);
+      setCtaText(nextCtaText);
+      setCtaLink(nextCtaLink);
     }
 
-    const page = hostedPage();
-    if (page && !initialized()) {
-      setHeadline(page.headline || 'Welcome');
-      setBody(page.body || '');
-      setCtaText(page.cta_text || '');
-      setCtaLink(page.cta_link || '');
-      setInitialized(true);
-    }
+    setSyncedTenantId(currentTenantId);
+    setSyncedHeadline(nextHeadline);
+    setSyncedBody(nextBody);
+    setSyncedCtaText(nextCtaText);
+    setSyncedCtaLink(nextCtaLink);
   });
 
+  function isDirty() {
+    return headline() !== syncedHeadline()
+      || body() !== syncedBody()
+      || ctaText() !== syncedCtaText()
+      || ctaLink() !== syncedCtaLink();
+  }
+
+  function resetDraft() {
+    setHeadline(syncedHeadline());
+    setBody(syncedBody());
+    setCtaText(syncedCtaText());
+    setCtaLink(syncedCtaLink());
+  }
+
   async function save() {
+    if (!isDirty()) {
+      return;
+    }
     setSaving(true);
     try {
-      const saved = await saveHostedPage(tenantState().id, {
+      await saveHostedPage(tenantState().id, {
         headline: headline(),
         body: body(),
         cta_text: ctaText(),
         cta_link: ctaLink(),
       });
-      if (saved) {
-        setInitialized(false);
-      }
     } finally {
       setSaving(false);
     }
@@ -68,17 +89,16 @@ export function HostedPageView() {
     h('div', { class: 'hosted-layout' },
       h('aside', { class: 'hosted-summary-rail' },
         h('div', { class: 'console-card hosted-summary-card' },
-          h('div', { class: 'card-label' }, 'Published URL'),
+        h('div', { class: 'card-label' }, 'Published URL'),
+        h('div', { class: 'inline-copy-row' },
           h('code', { class: 'code-block code-inline-block break-all' }, siteUrl),
-          h('div', { class: 'card-actions card-actions-vertical' },
-            h('a', { href: siteUrl, target: '_blank', class: 'btn btn-sm btn-ghost' }, 'Preview page'),
-            h('button', {
-              class: 'btn btn-sm btn-ghost',
-              onClick: () => { navigator.clipboard.writeText(siteUrl()); toast.show('Copied', 'success'); },
-            }, 'Copy URL'),
-          ),
-          h('div', { class: 'detail-grid hosted-summary-list' },
-            DetailRow('Headline', hostedPage()?.headline || 'Welcome'),
+          CopyButton({ text: siteUrl, label: 'Copy URL' }),
+        ),
+        h('div', { class: 'card-actions card-actions-vertical' },
+          h('a', { href: siteUrl, target: '_blank', class: 'btn btn-sm btn-ghost' }, 'Preview page'),
+        ),
+        h('div', { class: 'detail-grid hosted-summary-list' },
+          DetailRow('Headline', hostedPage()?.headline || 'Welcome'),
             DetailRow('CTA', hostedPage()?.cta_text || '(not set)'),
             DetailRow('Updated', hostedPage()?.updated_at ? new Date(hostedPage()!.updated_at!).toLocaleString() : 'Draft'),
           ),
@@ -132,12 +152,25 @@ export function HostedPageView() {
             }),
           ),
         ),
-        h('div', { class: 'card-actions' },
-          h('button', {
-            class: 'btn btn-primary btn-sm',
-            disabled: saving,
-            onClick: save,
-          }, () => saving() ? 'Saving...' : 'Save Page'),
+        h('div', { class: () => 'editor-dirty-bar' + (isDirty() ? ' active' : '') },
+          h('div', { class: 'editor-dirty-copy' },
+            h('span', { class: 'editor-dirty-label' }, 'Unsaved changes'),
+            h('span', { class: 'editor-dirty-description' }, 'Review the hosted page draft before publishing it live.'),
+          ),
+          h('div', { class: 'editor-dirty-actions' },
+            h('button', {
+              type: 'button',
+              class: 'btn btn-sm btn-ghost',
+              disabled: () => saving() || !isDirty(),
+              onClick: resetDraft,
+            }, 'Reset'),
+            h('button', {
+              type: 'button',
+              class: 'btn btn-primary btn-sm',
+              disabled: () => saving() || !isDirty(),
+              onClick: save,
+            }, () => saving() ? 'Saving...' : 'Save'),
+          ),
         ),
       ),
     ),
@@ -150,11 +183,14 @@ function SurfaceLinkRow(label: string, href: string, actionLabel: string) {
       h('span', { class: 'detail-label' }, label),
       h('code', { class: 'surface-link-value' }, href),
     ),
-    h('a', {
-      href,
-      target: '_blank',
-      class: 'btn btn-sm btn-ghost',
-    }, actionLabel),
+    h('div', { class: 'surface-link-actions' },
+      h('a', {
+        href,
+        target: '_blank',
+        class: 'btn btn-sm btn-ghost',
+      }, actionLabel),
+      CopyButton({ text: href, iconOnly: true, title: 'Copy ' + label.toLowerCase() }),
+    ),
   );
 }
 

@@ -9,10 +9,10 @@ import {
 
 // All routes that return HTML pages (no auth required for initial load)
 const PUBLIC_ROUTES = [
-  { path: '/platform/benchmark', name: 'benchmark', ssr: true },
-  { path: '/platform/login', name: 'platform-login', ssr: true },
-  { path: '/platform/onboarding', name: 'onboarding', ssr: true },
-  { path: '/t/platform/login', name: 'tenant-login', ssr: false },
+  { path: '/platform/benchmark', name: 'benchmark' },
+  { path: '/platform/login', name: 'platform-login' },
+  { path: '/platform/onboarding', name: 'onboarding' },
+  { path: '/t/platform/login', name: 'tenant-login' },
 ];
 
 // Routes that require auth — platform routes redirect via server-side check,
@@ -32,16 +32,24 @@ for (const route of PUBLIC_ROUTES) {
   });
 }
 
-// Category 2: SSR pages render real content with JS disabled
-for (const route of PUBLIC_ROUTES.filter(r => r.ssr)) {
-  test(`${route.name}: SSR renders content without JS`, async ({ browser }) => {
+// Category 2: Public pages ship a boot shell with assets/config even before JS runs
+for (const route of PUBLIC_ROUTES) {
+  test(`${route.name}: serves the boot shell without JS`, async ({ browser }) => {
     const ctx = await browser.newContext({ javaScriptEnabled: false });
     const page = await ctx.newPage();
     await page.goto(route.path);
-    const childCount = await page.evaluate(() =>
-      document.getElementById('app')?.children.length ?? 0
-    );
-    expect(childCount).toBeGreaterThan(0);
+    const shell = await page.evaluate(() => ({
+      hasAppRoot: document.getElementById('app') !== null,
+      hasStylesheet: document.querySelector('link[rel="stylesheet"][href*="/_assets/"]') !== null,
+      hasModuleEntry: document.querySelector('script[type="module"][src*="/_assets/"]') !== null,
+      hasInlineConfig: Array.from(document.scripts).some((script) =>
+        (script.textContent || '').includes('window.__')
+      ),
+    }));
+    expect(shell.hasAppRoot).toBe(true);
+    expect(shell.hasStylesheet).toBe(true);
+    expect(shell.hasModuleEntry).toBe(true);
+    expect(shell.hasInlineConfig).toBe(true);
     await ctx.close();
   });
 }
@@ -75,13 +83,22 @@ for (const route of AUTH_ROUTES) {
   });
 }
 
-// Category 6: Service worker registers on first public page
-test('service worker registers', async ({ page }) => {
+// Category 6: Debug builds should not emit or keep a service worker registration
+test('debug build does not register a service worker', async ({ page }) => {
   await page.goto('/platform/benchmark');
   await page.waitForTimeout(2000);
-  const swRegistered = await page.evaluate(() =>
-    navigator.serviceWorker?.controller !== null ||
-    navigator.serviceWorker?.ready !== undefined
+  const hasRegistrationScript = await page.evaluate(() =>
+    Array.from(document.scripts).some((script) =>
+      (script.textContent || '').includes('serviceWorker.register')
+    )
   );
-  expect(swRegistered).toBe(true);
+  const registrationCount = await page.evaluate(async () => {
+    if (!('serviceWorker' in navigator)) {
+      return 0;
+    }
+    const registrations = await navigator.serviceWorker.getRegistrations();
+    return registrations.length;
+  });
+  expect(hasRegistrationScript).toBe(false);
+  expect(registrationCount).toBe(0);
 });

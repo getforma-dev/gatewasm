@@ -1,7 +1,7 @@
 /**
  * Platform Onboarding Page — E2E Tests
  *
- * Tests cover SSR correctness, hydration integrity, form interactions,
+ * Tests cover boot-shell correctness, hydration integrity, form interactions,
  * and layout stability. Actual registration (POST /auth/register) is NOT
  * tested here — it requires seeded credentials.
  */
@@ -14,37 +14,30 @@ import {
   expectNoLayoutOverflow,
 } from './helpers';
 
-// --- SSR Correctness (JS disabled) ---
+// --- Boot Shell Correctness (JS disabled) ---
 
-test('SSR renders onboarding page with JS disabled', async ({ browser }) => {
+test('onboarding page serves the boot shell with JS disabled', async ({ browser }) => {
   const context = await browser.newContext({ javaScriptEnabled: false });
   const page = await context.newPage();
   await page.goto('/platform/onboarding');
 
-  // Brand header
-  await expect(page.locator('.brand-header')).toBeVisible();
-
-  // Hero section
-  await expect(page.locator('.hero-section')).toBeVisible();
-  const h1 = await page.locator('.hero-heading').textContent();
-  expect(h1).toContain('Auth infrastructure');
-
-  // Capabilities grid — 4 cards
-  const capCards = await page.locator('.cap-card').count();
-  expect(capCards).toBe(4);
-
-  // Auth card with heading
-  await expect(page.locator('.card-heading')).toBeVisible();
-
-  // Footer
-  await expect(page.locator('.page-footer')).toBeVisible();
+  const shell = await page.evaluate(() => ({
+    hasAppRoot: document.getElementById('app') !== null,
+    hasStylesheet: document.querySelector('link[rel="stylesheet"][href*="forma-platform"]') !== null,
+    hasModuleEntry: document.querySelector('script[type="module"][src*="platform-onboarding"]') !== null,
+    hasPlatformConfig: Array.from(document.scripts).some((script) =>
+      (script.textContent || '').includes('__PLATFORM_CONFIG__')
+    ),
+  }));
+  expect(shell.hasAppRoot).toBe(true);
+  expect(shell.hasStylesheet).toBe(true);
+  expect(shell.hasModuleEntry).toBe(true);
+  expect(shell.hasPlatformConfig).toBe(true);
 
   await context.close();
 });
 
-test('SSR: password fields have type="password" (no leak)', async ({ browser }) => {
-  const context = await browser.newContext({ javaScriptEnabled: false });
-  const page = await context.newPage();
+test('password fields stay masked after the onboarding UI hydrates', async ({ page }) => {
   await page.goto('/platform/onboarding');
 
   const pwType = await page.locator('#reg-password').getAttribute('type');
@@ -52,8 +45,6 @@ test('SSR: password fields have type="password" (no leak)', async ({ browser }) 
 
   const confirmType = await page.locator('#reg-confirm').getAttribute('type');
   expect(confirmType).toBe('password');
-
-  await context.close();
 });
 
 // --- Hydration Integrity ---
@@ -183,15 +174,9 @@ test('no layout overflow', async ({ page }) => {
 });
 
 test('no DOM doubling after hydration', async ({ browser, page }) => {
-  const ssrCtx = await browser.newContext({ javaScriptEnabled: false });
-  const ssrPage = await ssrCtx.newPage();
-  await ssrPage.goto('/platform/onboarding');
-  const ssrCount = await ssrPage.evaluate(() => document.querySelectorAll('*').length);
-  await ssrCtx.close();
-
   await page.goto('/platform/onboarding');
   await page.waitForTimeout(2000);
-  const jsCount = await page.evaluate(() => document.querySelectorAll('*').length);
-
-  expect(jsCount).toBeLessThan(ssrCount * 2);
+  await expect(page.locator('#reg-email')).toHaveCount(1);
+  await expect(page.locator('#reg-password')).toHaveCount(1);
+  await expect(page.locator('#reg-confirm')).toHaveCount(1);
 });

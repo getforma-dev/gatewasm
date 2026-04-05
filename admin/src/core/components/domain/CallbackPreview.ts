@@ -5,6 +5,7 @@
 
 import { h, createSignal } from 'formajs';
 import type { IntrospectData } from '../../types';
+import { CopyButton } from '../ui/CopyButton';
 
 interface CallbackPreviewProps {
   data: IntrospectData;
@@ -62,20 +63,25 @@ bridge.onStateChange(({ state, user }: AuthState) => {
   }
 
   return h('div', { class: 'sandbox-section' },
-    h('div', { class: 'sandbox-section-title' }, 'Your app receives this'),
-    h('div', { class: 'sandbox-tabs' },
-      h('button', {
-        class: () => 'sandbox-tab' + (lang() === 'js' ? ' active' : ''),
-        onClick: () => setLang('js'),
-      }, 'JavaScript'),
-      h('button', {
-        class: () => 'sandbox-tab' + (lang() === 'ts' ? ' active' : ''),
-        onClick: () => setLang('ts'),
-      }, 'TypeScript'),
-      h('button', {
-        class: () => 'sandbox-tab' + (lang() === 'curl' ? ' active' : ''),
-        onClick: () => setLang('curl'),
-      }, 'curl'),
+    h('div', { class: 'sandbox-section-head' },
+      h('div', { class: 'sandbox-section-title' }, 'Your app receives this'),
+      CopyButton({ text: codeForLang, label: 'Copy snippet' }),
+    ),
+    h('div', { class: 'sandbox-tabs-row' },
+      h('div', { class: 'sandbox-tabs' },
+        h('button', {
+          class: () => 'sandbox-tab' + (lang() === 'js' ? ' active' : ''),
+          onClick: () => setLang('js'),
+        }, 'JavaScript'),
+        h('button', {
+          class: () => 'sandbox-tab' + (lang() === 'ts' ? ' active' : ''),
+          onClick: () => setLang('ts'),
+        }, 'TypeScript'),
+        h('button', {
+          class: () => 'sandbox-tab' + (lang() === 'curl' ? ' active' : ''),
+          onClick: () => setLang('curl'),
+        }, 'curl'),
+      ),
     ),
     h('pre', { class: 'sandbox-code' }, () => codeForLang()),
   );

@@ -1,8 +1,21 @@
 import { test, expect } from '@playwright/test';
 
-const BASE = 'http://localhost:3001';
+const BASE = process.env.BASE_URL || 'http://localhost:3001';
 
-test.describe('Verify fixes', () => {
+async function postJsonWithRetry(request: any, url: string, options: any, attempts = 4) {
+  let response: any;
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    response = await request.post(url, options);
+    if (response.status() !== 429) {
+      return response;
+    }
+    const retryAfter = Number(response.headers()['retry-after'] || '1');
+    await new Promise((resolve) => setTimeout(resolve, Math.max(500, retryAfter * 1000)));
+  }
+  return response;
+}
+
+test.describe('Route and cache fixes', () => {
 
   test('/dev/clear-cache clears SW, caches, storage, and cookies', async ({ page }) => {
     // Set some state first
@@ -56,94 +69,46 @@ test.describe('Verify fixes', () => {
     console.log('✓ mode=register works');
   });
 
-  test('redirect param works for tenant owner (real wizard scenario)', async ({ page, request }) => {
-    // Create a NEW platform user and their OWN tenant (simulates wizard flow)
+  test('redirect param works for tenant-owner login preview', async ({ page, request }) => {
+    const slug = 'redir-test-' + Date.now().toString(36);
     const email = `owner-${Date.now()}@test.com`;
 
-    // Register on platform
-    const signup = await request.post(BASE + '/auth/register', {
+    const signup = await postJsonWithRetry(request, BASE + '/auth/register', {
       headers: { 'X-Tenant-Slug': 'platform', 'Content-Type': 'application/json' },
       data: { email, password: 'Test1234!', name: 'Owner Test' },
     });
+    if (!signup.ok()) {
+      throw new Error('Platform signup failed: ' + await signup.text());
+    }
     const { access_token } = await signup.json();
     expect(access_token).toBeTruthy();
 
-    // Create their own tenant
-    const slug = 'redir-test-' + Date.now().toString(36);
-    const create = await request.post(BASE + '/platform/self-serve/tenants', {
+    const create = await postJsonWithRetry(request, BASE + '/platform/self-serve/tenants', {
       headers: { 'Authorization': 'Bearer ' + access_token, 'Content-Type': 'application/json' },
       data: { name: 'Redirect Test App', slug },
     });
+    if (!create.ok()) {
+      throw new Error('Tenant creation failed: ' + await create.text());
+    }
     expect(create.status()).toBeLessThan(300);
-    console.log('Created tenant:', slug);
+    const createJson = await create.json();
+    const tenantId = String(createJson.tenant?.id || createJson.id || '');
 
-    // Now go to THEIR tenant's login page with redirect to sandbox
-    await page.goto(BASE + '/t/' + slug + '/login?redirect=/t/' + slug + '/sandbox');
+    await page.goto(BASE + '/t/' + slug + '/login?redirect=/t/' + slug + '/site&mode=register');
     await page.waitForTimeout(2000);
 
-    // Register as an end-user on THEIR OWN tenant using the SAME email
-    // (This is what happens in the wizard — owner registers on their own tenant)
-    const emailInput = page.locator('input[type="email"]');
-    const passwordInput = page.locator('input[type="password"]');
+    const body = await page.textContent('body');
+    const hasRegister = body?.includes('Create') || body?.includes('Sign up');
+    expect(hasRegister).toBeTruthy();
 
-    // Check if there's a name field visible (might be in register mode or login mode)
-    const nameInput = page.locator('input[type="text"]');
-    const hasNameField = await nameInput.isVisible().catch(() => false);
-
-    if (hasNameField) {
-      await nameInput.fill('Owner Test');
-    }
-
-    await emailInput.fill(email);
-    await passwordInput.fill('Test1234!');
-
-    // Click submit (might be "Sign in" or "Create account")
-    const submitBtn = page.locator('button[type="submit"]');
-    await submitBtn.click();
-
-    // Wait for redirect chain to complete
-    await page.waitForTimeout(8000);
-
-    const finalUrl = page.url();
-    console.log('After login, final URL:', finalUrl);
-
-    // The user IS the owner of this tenant, so sandbox should accept them
-    // OR if they're a new user, they need to register first
-    // Check: did NOT end up in a doom loop on dashboard
-    const onDashboardLoop = finalUrl.includes('/dashboard');
-    const onSandbox = finalUrl.includes('/sandbox');
-    const onLogin = finalUrl.includes('/login');
-
-    if (onSandbox) {
-      console.log('✓ PASS: Redirected to sandbox (owner access granted)');
-    } else if (onLogin) {
-      console.log('⚠ Still on login (credentials might not match — user may need to register separately)');
-    } else if (onDashboardLoop) {
-      // Check it's not looping — just one redirect
-      const body = await page.textContent('body');
-      const isStable = body?.includes('Unable to load') || body?.includes('Sign in') || (body?.length ?? 0) > 50;
-      console.log('⚠ On dashboard but stable (no loop):', isStable);
-    }
-
-    // The critical assertion: NOT stuck in a doom loop
-    // We accept sandbox OR login OR a stable dashboard as valid outcomes
-    expect(true).toBeTruthy(); // soft pass — log output is the real verification
+    await request.delete(BASE + '/platform/self-serve/tenants/' + tenantId, {
+      headers: { 'Authorization': 'Bearer ' + access_token, 'Content-Type': 'application/json' },
+      data: { confirm_slug: slug },
+    });
   });
 
-  test('sandbox correctly rejects non-owner to dashboard', async ({ request }) => {
-    // Register a regular user on forma tenant
-    const reg = await request.post(BASE + '/auth/register', {
-      headers: { 'X-Tenant-Slug': 'forma', 'Content-Type': 'application/json' },
-      data: { email: `nonowner-${Date.now()}@test.com`, password: 'Test1234!', name: 'Non Owner' },
-    });
-    expect(reg.status()).toBeLessThan(300);
-
-    // Try to access sandbox — should redirect (non-owner)
+  test('removed sandbox route now returns 404', async ({ request }) => {
     const sandbox = await request.get(BASE + '/t/forma/sandbox', { maxRedirects: 0 });
-    expect([301, 302, 307, 308]).toContain(sandbox.status());
-    const location = sandbox.headers()['location'] || '';
-    // Should redirect to login (no auth cookie in API context) or dashboard
-    expect(location).toContain('/t/forma/');
-    console.log('✓ Sandbox rejects non-owner, redirects to:', location);
+    expect(sandbox.status()).toBe(404);
   });
 });

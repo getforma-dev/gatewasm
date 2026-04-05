@@ -16,6 +16,7 @@ pub mod jwks;
 pub mod management;
 pub mod mfa;
 pub mod mtls;
+pub mod not_found;
 pub mod oauth;
 pub mod onboarding;
 pub mod organizations;
@@ -52,7 +53,6 @@ use axum::{
     Json, Router,
 };
 use tower::ServiceExt as _;
-use tower_http::services::ServeDir;
 
 pub fn create_router(state: AppState) -> Router {
     create_router_inner(state, true)
@@ -552,7 +552,8 @@ fn create_router_inner(state: AppState, rate_limit_enabled: bool) -> Router {
         .route("/platform/admin/dashboard", get(owner::dashboard_page))
         .route("/sw.js", get(crate::assets::serve_sw))
         .route("/_assets/{filename}", get(crate::assets::serve_asset))
-        .with_state(state);
+        .fallback(not_found::not_found_page)
+        .with_state(state.clone());
 
     // ── Slug-in-URL routing (/t/{slug}/...) ──────────────────────
     // When a request comes in for /t/{slug}/auth/login, Axum's Router::nest strips
@@ -560,8 +561,10 @@ fn create_router_inner(state: AppState, rate_limit_enabled: bool) -> Router {
     // the remaining path (/{slug}/auth/login), strips it, injects PathSlug into
     // extensions, and dispatches the rewritten request (/auth/login) to main_router.
     let main_for_slug = main_router.clone();
+    let state_for_slug = state.clone();
     let slug_handler = Router::new().fallback(move |mut req: Request| {
         let router = main_for_slug.clone();
+        let state = state_for_slug.clone();
         async move {
             let path = req.uri().path().to_string();
             // After nest("/t") strips the prefix, path is "/{slug}/auth/login"
@@ -588,14 +591,12 @@ fn create_router_inner(state: AppState, rate_limit_enabled: bool) -> Router {
                 }
                 router.oneshot(req).await.into_response()
             } else {
-                axum::http::StatusCode::NOT_FOUND.into_response()
+                not_found::page_response(&state, &format!("/t{}", path))
             }
         }
     });
 
-    main_router
-        .nest("/t", slug_handler)
-        .fallback_service(ServeDir::new("demo"))
+    main_router.nest("/t", slug_handler)
 }
 
 /// Serves the GateWASM bridge.js client library (~3.4KB minified).

@@ -10,15 +10,39 @@ export function UsersView() {
   const tenantState = () => selectedTenant() || tenant;
   const [search, setSearch] = createSignal('');
   const [expandedId, setExpandedId] = createSignal<string | null>(null);
+  const [statusFilter, setStatusFilter] = createSignal<'all' | 'verified' | 'unverified' | 'blocked'>('all');
+  const [providerFilter, setProviderFilter] = createSignal<'all' | 'google' | 'github' | 'email'>('all');
+  const [sortOrder, setSortOrder] = createSignal<'newest' | 'oldest' | 'email'>('newest');
   const blockedCount = () => users().filter((user) => user.is_locked).length;
   const verifiedCount = () => users().filter((user) => user.email_verified).length;
 
   const filteredUsers = () => {
     const q = search().toLowerCase();
-    if (!q) return users();
-    return users().filter((user) =>
+    let nextUsers = users().filter((user) =>
       user.email.toLowerCase().includes(q) || (user.name || '').toLowerCase().includes(q),
     );
+
+    if (statusFilter() === 'verified') {
+      nextUsers = nextUsers.filter((user) => user.email_verified);
+    } else if (statusFilter() === 'unverified') {
+      nextUsers = nextUsers.filter((user) => !user.email_verified);
+    } else if (statusFilter() === 'blocked') {
+      nextUsers = nextUsers.filter((user) => user.is_locked);
+    }
+
+    if (providerFilter() !== 'all') {
+      nextUsers = nextUsers.filter((user) => (user.provider || 'email') === providerFilter());
+    }
+
+    if (sortOrder() === 'oldest') {
+      nextUsers = [...nextUsers].sort((a, b) => Date.parse(a.created_at) - Date.parse(b.created_at));
+    } else if (sortOrder() === 'email') {
+      nextUsers = [...nextUsers].sort((a, b) => a.email.localeCompare(b.email));
+    } else {
+      nextUsers = [...nextUsers].sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at));
+    }
+
+    return nextUsers;
   };
 
   return h('div', { class: 'console-view' },
@@ -34,7 +58,7 @@ export function UsersView() {
       ),
     ),
     h('section', { class: 'console-card list-shell' },
-      h('div', { class: 'list-shell-head' },
+      h('div', { class: 'list-shell-head list-shell-head-users' },
         h('div', { class: 'section-copy' },
           h('div', { class: 'card-label' }, 'Recent Users'),
           h('p', { class: 'card-copy' }, () => filteredUsers().length + ' matching records'),
@@ -47,6 +71,29 @@ export function UsersView() {
             value: search,
             onInput: (e: Event) => setSearch((e.target as HTMLInputElement).value),
           }),
+          h('div', { class: 'users-filter-groups' },
+            h('div', { class: 'users-filter-group' },
+              FilterChip('All', () => statusFilter() === 'all', () => setStatusFilter('all')),
+              FilterChip('Verified', () => statusFilter() === 'verified', () => setStatusFilter('verified')),
+              FilterChip('Unverified', () => statusFilter() === 'unverified', () => setStatusFilter('unverified')),
+              FilterChip('Blocked', () => statusFilter() === 'blocked', () => setStatusFilter('blocked')),
+            ),
+            h('div', { class: 'users-filter-group' },
+              FilterChip('Any Provider', () => providerFilter() === 'all', () => setProviderFilter('all')),
+              FilterChip('Google', () => providerFilter() === 'google', () => setProviderFilter('google')),
+              FilterChip('GitHub', () => providerFilter() === 'github', () => setProviderFilter('github')),
+              FilterChip('Email', () => providerFilter() === 'email', () => setProviderFilter('email')),
+            ),
+            h('select', {
+              class: 'filter-select users-sort-select',
+              value: sortOrder,
+              onChange: (e: Event) => setSortOrder((e.target as HTMLSelectElement).value as 'newest' | 'oldest' | 'email'),
+            },
+              h('option', { value: 'newest' }, 'Newest first'),
+              h('option', { value: 'oldest' }, 'Oldest first'),
+              h('option', { value: 'email' }, 'Email A-Z'),
+            ),
+          ),
         ),
       ),
       createShow(
@@ -118,6 +165,14 @@ export function UsersView() {
       ),
     ),
   );
+}
+
+function FilterChip(label: string, active: () => boolean, onClick: () => void) {
+  return h('button', {
+    type: 'button',
+    class: () => 'list-filter-chip' + (active() ? ' active' : ''),
+    onClick,
+  }, label);
 }
 
 function MetricCard(label: string, value: () => string) {

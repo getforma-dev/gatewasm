@@ -1,4 +1,4 @@
-import { h, createSignal, createSwitch } from 'formajs';
+import { h, createSignal, createSwitch, createShow, onCleanup } from 'formajs';
 import { Field } from '../../core/components/ui/Field';
 import { Sidebar } from '../../core/components/ui/Sidebar';
 import { LoadingBar } from '../../core/components/ui/LoadingBar';
@@ -17,13 +17,43 @@ import { HostedPageView } from './views/HostedPageView';
 import { SettingsView } from './views/SettingsView';
 import {
   view, loading, toast, backToTenants, signout,
-  selectedTenant, tenants, selectTenant, createTenant,
+  selectedTenant, tenants, selectTenant, createTenant, currentUser,
   navigateTenantView, refreshCurrentView, openIntegrateGuide, openSessionInspector,
+  introspectData, introspectUnavailable,
   type TenantWorkspaceView,
 } from './store';
 
 function iconSvg(name: string, size = 18): string {
   return Icon({ name, size }).outerHTML;
+}
+
+function userDisplayName(name: string | null | undefined, email: string): string {
+  const nextName = (name || '').trim();
+  if (nextName) {
+    return nextName;
+  }
+
+  const local = email.split('@')[0] || email;
+  return local.replace(/[._-]+/g, ' ');
+}
+
+function userInitials(name: string | null | undefined, email: string): string {
+  const source = userDisplayName(name, email)
+    .split(/\s+/)
+    .map((part) => part.trim())
+    .filter(Boolean);
+
+  if (source.length === 0) {
+    return email.slice(0, 2).toUpperCase();
+  }
+
+  const initials = source
+    .slice(0, 2)
+    .map((part) => part[0] || '')
+    .join('')
+    .toUpperCase();
+
+  return initials || email.slice(0, 2).toUpperCase();
 }
 
 const FORMAJS_MARK = '<svg width="64" height="64" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">' + ICONS['formajs-mark'] + '</svg>';
@@ -108,19 +138,6 @@ function TenantMeta(label: string, value: string) {
   );
 }
 
-function ThemeToggle(themeMode: () => ThemeMode, onToggle: () => void) {
-  return h('button', {
-    type: 'button',
-    class: 'topbar-chip topbar-chip-button',
-    onClick: onToggle,
-    title: () => themeMode() === 'dark' ? 'Switch to light mode' : 'Switch to dark mode',
-    'aria-label': () => themeMode() === 'dark' ? 'Switch to light mode' : 'Switch to dark mode',
-  }, () => [
-    Icon({ name: themeMode() === 'dark' ? 'sun' : 'moon', size: 14, class: 'topbar-chip-icon' }),
-    themeMode() === 'dark' ? 'Light mode' : 'Dark mode',
-  ]);
-}
-
 function QuickSwitchTrigger(shortcutLabel: string, onOpen: () => void) {
   return h('button', {
     type: 'button',
@@ -136,8 +153,7 @@ function QuickSwitchTrigger(shortcutLabel: string, onOpen: () => void) {
 }
 
 function TopbarActions(
-  themeMode: () => ThemeMode,
-  onToggle: () => void,
+  serverUrl: string,
   onOpenPalette: () => void,
   shortcutLabel: string,
 ) {
@@ -145,7 +161,7 @@ function TopbarActions(
 
   return h('div', { class: 'topbar-context' },
     QuickSwitchTrigger(shortcutLabel, onOpenPalette),
-    ThemeToggle(themeMode, onToggle),
+    SessionStatusChip(serverUrl),
     () => tenant()
       ? [
           h('span', { class: 'topbar-chip topbar-chip-mono' }, '/t/' + (tenant()?.slug || '')),
@@ -154,6 +170,142 @@ function TopbarActions(
         ]
       : null,
   );
+}
+
+function SessionStatusChip(serverUrl: string) {
+  const tenant = () => selectedTenant();
+  const active = () => introspectData() != null;
+  const unavailable = () => introspectUnavailable();
+
+  return () => {
+    const currentTenant = tenant();
+    if (!currentTenant) {
+      return null;
+    }
+
+    if (active()) {
+      return h('button', {
+        type: 'button',
+        class: 'topbar-chip topbar-chip-button topbar-chip-status topbar-chip-status-active',
+        onClick: openSessionInspector,
+        title: 'Open Session Inspector',
+        'aria-label': 'Open Session Inspector',
+      },
+        Icon({ name: 'check-circle', size: 14, class: 'topbar-chip-icon' }),
+        'Tenant Session Active',
+      );
+    }
+
+    if (unavailable()) {
+      return h('button', {
+        type: 'button',
+        class: 'topbar-chip topbar-chip-button topbar-chip-status topbar-chip-status-missing',
+        onClick: () => {
+          window.open(
+            serverUrl + '/t/' + currentTenant.slug + '/login?redirect=/t/' + currentTenant.slug + '/site',
+            '_blank',
+            'noopener',
+          );
+        },
+        title: 'Start a tenant sign-in in a new tab',
+        'aria-label': 'Start a tenant sign-in in a new tab',
+      },
+        Icon({ name: 'alert-circle', size: 14, class: 'topbar-chip-icon' }),
+        'No Tenant Session',
+      );
+    }
+
+    return h('span', {
+      class: 'topbar-chip topbar-chip-status topbar-chip-status-pending',
+      title: 'Checking whether this browser already has a tenant session',
+    },
+      Icon({ name: 'clock', size: 14, class: 'topbar-chip-icon' }),
+      'Checking Session',
+    );
+  };
+}
+
+function SidebarAccountMenu(themeMode: () => ThemeMode, onToggleTheme: () => void) {
+  const user = () => currentUser();
+  if (!user()) {
+    return null;
+  }
+
+  const [open, setOpen] = createSignal(false);
+  const handleDocumentClick = (event: Event) => {
+    const target = event.target as Node;
+    if (container && !container.contains(target)) {
+      setOpen(false);
+    }
+  };
+
+  if (typeof document !== 'undefined') {
+    document.addEventListener('click', handleDocumentClick);
+    onCleanup(() => document.removeEventListener('click', handleDocumentClick));
+  }
+
+  const container = h('div', { class: 'sidebar-account-shell' },
+    h('button', {
+      type: 'button',
+      class: 'sidebar-account sidebar-account-trigger',
+      'aria-haspopup': 'menu',
+      'aria-expanded': () => String(open()),
+      onClick: () => setOpen((value: boolean) => !value),
+    },
+      h('div', { class: 'sidebar-account-avatar', 'aria-hidden': 'true' },
+        () => user()?.avatar
+          ? h('img', {
+              class: 'sidebar-account-image',
+              src: user()!.avatar!,
+              alt: '',
+              referrerPolicy: 'no-referrer',
+            })
+          : h('span', { class: 'sidebar-account-initials' }, () => userInitials(user()?.name, user()?.email || '')),
+      ),
+      h('div', { class: 'sidebar-account-copy' },
+        h('div', { class: 'sidebar-account-name' }, () => userDisplayName(user()?.name, user()?.email || '')),
+        h('div', { class: 'sidebar-account-email' }, () => user()?.email || ''),
+      ),
+      h('span', { class: 'sidebar-account-caret', 'aria-hidden': 'true' }, Icon({ name: 'chevron-down', size: 14 })),
+    ),
+    createShow(
+      open,
+      () => h('div', { class: 'sidebar-account-menu', role: 'menu' },
+        h('div', { class: 'sidebar-account-menu-header' },
+          h('div', { class: 'sidebar-account-menu-title' }, userDisplayName(user()?.name, user()?.email || '')),
+          h('div', { class: 'sidebar-account-menu-meta' }, user()?.email || ''),
+        ),
+        h('div', { class: 'sidebar-account-menu-actions' },
+          h('button', {
+            type: 'button',
+            class: 'sidebar-account-menu-item',
+            role: 'menuitem',
+            onClick: () => {
+              onToggleTheme();
+              setOpen(false);
+            },
+          },
+            Icon({ name: themeMode() === 'dark' ? 'sun' : 'moon', size: 14 }),
+            themeMode() === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode',
+          ),
+          h('button', {
+            type: 'button',
+            class: 'sidebar-account-menu-item danger',
+            role: 'menuitem',
+            onClick: () => {
+              setOpen(false);
+              signout();
+            },
+          },
+            Icon({ name: 'signout', size: 14 }),
+            'Sign Out',
+          ),
+        ),
+      ),
+    ),
+  ) as HTMLElement;
+
+  return container;
 }
 
 function TenantCreatePanel() {
@@ -475,18 +627,20 @@ export function ConsoleApp() {
     );
   };
 
+  const sidebarAccount = () => {
+    return SidebarAccountMenu(themeMode, handleThemeToggle);
+  };
+
   return h('div', { class: 'shell' },
     Sidebar({
       brand: { name: 'FormaJS', mark: FORMAJS_MARK, subtitle: 'GATEWASM CONSOLE' },
       groups: sidebarGroups,
       footer: [
         { id: 'reload-data', label: 'Reload Data', icon: iconSvg('refresh-stroke') },
-        { id: 'signout', label: 'Sign Out', icon: iconSvg('signout'), danger: true },
       ],
       activeView: () => view(),
       onNavigate: (id: string) => {
         if (id === 'reload-data') { void refreshCurrentView(); return; }
-        if (id === 'signout') { signout(); return; }
         if (id === 'tenants') { backToTenants(); return; }
         if (id === 'integrate') { openIntegrateGuide(); return; }
         if (['overview', 'users', 'hosted-page', 'settings'].includes(id)) {
@@ -496,6 +650,7 @@ export function ConsoleApp() {
       },
       env: detectEnv(),
       context: sidebarContext,
+      account: sidebarAccount,
     }),
     h('div', { class: 'shell-stage' },
       Topbar({
@@ -521,7 +676,7 @@ export function ConsoleApp() {
           }
           return crumbs;
         },
-        actions: () => TopbarActions(themeMode, handleThemeToggle, openCommandPalette, shortcutLabel),
+        actions: () => TopbarActions(serverUrl, openCommandPalette, shortcutLabel),
       }),
       h('main', { class: 'main page-enter' },
         LoadingBar(() => loading()),

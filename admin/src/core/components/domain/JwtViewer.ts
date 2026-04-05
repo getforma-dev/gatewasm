@@ -4,6 +4,7 @@
 // ---------------------------------------------------------------------------
 
 import { h, createSignal, createShow } from 'formajs';
+import { CopyButton } from '../ui/CopyButton';
 
 /** Decode a base64url string to a UTF-8 string. */
 function b64decode(str: string): string {
@@ -44,10 +45,13 @@ export function JwtViewer({ token, slug, serverUrl }: JwtViewerProps) {
   return h('div', { class: 'sandbox-section' },
     h('div', { class: 'sandbox-toggle-row' },
       h('div', { class: 'sandbox-section-title mb-0' }, 'JWT Access Token'),
-      h('button', {
-        class: 'sandbox-toggle-btn',
-        onClick: () => setShowRaw(!showRaw()),
-      }, () => showRaw() ? 'Decoded' : 'Raw'),
+      h('div', { class: 'sandbox-toggle-actions' },
+        CopyButton({ text: token, label: 'Copy token', class: 'btn btn-sm btn-ghost copy-btn' }),
+        h('button', {
+          class: 'sandbox-toggle-btn',
+          onClick: () => setShowRaw(!showRaw()),
+        }, () => showRaw() ? 'Decoded' : 'Raw'),
+      ),
     ),
     createShow(
       () => !showRaw() && decoded != null,
@@ -81,6 +85,16 @@ export function JwtViewer({ token, slug, serverUrl }: JwtViewerProps) {
           h('p', { class: 'text-xs text-muted mb-sm' },
             'Refresh tokens are httpOnly cookies. They are not visible to JavaScript. Your server exchanges them silently via POST /auth/token.',
           ),
+          CopyButton({
+            text: 'POST ' + serverUrl + '/t/' + slug + '/auth/token\n'
+              + 'Content-Type: application/json\n'
+              + '{ "grant_type": "refresh_token" }\n'
+              + '\n'
+              + '// Cookie is sent automatically.\n'
+              + '// Response: { "access_token": "eyJ..." }',
+            label: 'Copy request',
+            class: 'btn btn-sm btn-ghost copy-btn',
+          }),
           h('pre', { class: 'sandbox-code' },
             'POST ' + serverUrl + '/t/' + slug + '/auth/token\n'
             + 'Content-Type: application/json\n'

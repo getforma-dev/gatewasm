@@ -462,27 +462,10 @@ function routeAfterAuth() {
     return;
   }
 
-  // Regular platform user -> console or onboarding
-  // Post-auth: checks tenant list to decide routing destination.
-  // Uses raw fetch because this store has no createAuth/createApi — it
-  // manages its own token as the auth orchestrator for the login page.
-  fetch(serverUrl + '/platform/self-serve/tenants', {
-    headers: { Authorization: 'Bearer ' + accessToken },
-  })
-    .then((response) => {
-      if (!response.ok) throw new Error('tenant_list_failed');
-      return response.json();
-    })
-    .then((data: any) => {
-      if (data?.tenants?.length > 0) {
-        window.location.href = '/platform/console';
-      } else {
-        window.location.href = '/platform/onboarding';
-      }
-    })
-    .catch(() => {
-      window.location.href = '/platform/onboarding';
-    });
+  // Regular platform users always land in the console now.
+  // Tenant creation happens inside the console instead of routing
+  // signed-in users back through the onboarding/register surface.
+  window.location.href = '/platform/console';
 }
 
 // ── OAuth ─────────────────────────────────────────────────────────────

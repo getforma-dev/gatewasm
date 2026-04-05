@@ -1,4 +1,4 @@
-import { h } from 'formajs';
+import { h, createEffect } from 'formajs';
 
 export function Field(props: {
   label: string;
@@ -37,6 +37,32 @@ export function Field(props: {
         readOnly: props.readonly,
         onInput: (e: Event) => props.onChange?.((e.target as HTMLInputElement).value),
       });
+
+  if (props.value) {
+    createEffect(() => {
+      const nextValue = props.value ? props.value() : '';
+      if (props.type === 'select') {
+        const select = input as HTMLSelectElement;
+        if (select.value !== nextValue) {
+          select.value = nextValue;
+        }
+        return;
+      }
+
+      if (props.type === 'textarea') {
+        const textarea = input as HTMLTextAreaElement;
+        if (textarea.value !== nextValue) {
+          textarea.value = nextValue;
+        }
+        return;
+      }
+
+      const textInput = input as HTMLInputElement;
+      if (textInput.value !== nextValue) {
+        textInput.value = nextValue;
+      }
+    });
+  }
 
   return h('div', { class: 'field' },
     h('label', { for: inputId }, props.label),

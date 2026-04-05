@@ -1675,21 +1675,21 @@ pub async fn me(
     .await
     .unwrap_or_default();
 
-    let (mfa_enabled, email_verified): (bool, bool) = sqlx::query_as(
-        "SELECT COALESCE(mfa_enabled, FALSE), COALESCE(email_verified, FALSE) FROM users WHERE id = $1",
+    let (name, avatar, mfa_enabled, email_verified): (Option<String>, Option<String>, bool, bool) = sqlx::query_as(
+        "SELECT name, avatar, COALESCE(mfa_enabled, FALSE), COALESCE(email_verified, FALSE) FROM users WHERE id = $1",
     )
             .bind(&claims.sub)
             .fetch_optional(&state.db)
             .await
             .ok()
             .flatten()
-            .unwrap_or((false, false));
+            .unwrap_or((claims.name.clone(), None, false, false));
 
     Ok(Json(serde_json::json!({
         "id": claims.sub,
         "email": claims.email,
-        "name": claims.name,
-        "avatar": null,
+        "name": name,
+        "avatar": avatar,
         "email_verified": email_verified,
         "roles": roles,
         "permissions": permissions,

@@ -22,7 +22,6 @@ export { Skeleton, SkeletonTable, SkeletonStats } from './ui/Skeleton';
 export { Tooltip } from './ui/Tooltip';
 export { EmptyState } from './ui/EmptyState';
 export { Modal } from './ui/Modal';
-export { Dropdown } from './ui/Dropdown';
 export { Breadcrumb } from './ui/Breadcrumb';
 export { Topbar } from './ui/Topbar';
 

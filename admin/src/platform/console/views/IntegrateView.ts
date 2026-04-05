@@ -1,12 +1,12 @@
 import { h, createShow, createSignal, createSwitch } from 'formajs';
 import {
   selectedTenant,
-  toast,
   integrateSection,
   setIntegrateSection,
   type IntegrateSection,
 } from '../store';
 import { SessionInspectorPanel } from './SessionInspectorPanel';
+import { CopyButton } from '../../../core/components/ui/CopyButton';
 
 export function IntegrateView() {
   const tenant = selectedTenant()!;
@@ -111,22 +111,18 @@ function GuidePanel({
         h('p', { class: 'card-copy' }, 'Drop this snippet into your app shell so you can observe auth state changes and access the signed-in user payload.'),
         h('pre', { class: 'code-block' }, bridgeSnippet),
         h('div', { class: 'card-actions' },
-          h('button', {
-            class: 'btn btn-sm btn-ghost',
-            onClick: () => { navigator.clipboard.writeText(bridgeSnippet()); toast.show('Copied', 'success'); },
-          }, 'Copy snippet'),
+          CopyButton({ text: bridgeSnippet, label: 'Copy snippet' }),
         ),
       ),
       h('div', { class: 'console-card integrate-card' },
         h('div', { class: 'step-label' }, 'Step 2'),
         h('h3', { class: 'section-title' }, 'Redirect to your login page'),
         h('p', { class: 'card-copy' }, 'Use this URL whenever a user needs to authenticate before returning to your app.'),
-        h('code', { class: 'code-block code-inline-block' }, loginUrl),
+        h('div', { class: 'inline-copy-row' },
+          h('code', { class: 'code-block code-inline-block' }, loginUrl),
+          CopyButton({ text: loginUrl, label: 'Copy URL' }),
+        ),
         h('div', { class: 'card-actions' },
-          h('button', {
-            class: 'btn btn-sm btn-ghost',
-            onClick: () => { navigator.clipboard.writeText(loginUrl()); toast.show('Copied', 'success'); },
-          }, 'Copy URL'),
           h('a', {
             class: 'btn btn-sm btn-ghost',
             href: previewLoginUrl,
@@ -144,8 +140,8 @@ function GuidePanel({
         ),
         h('div', { class: 'surface-link-list' },
           EndpointRow('Login URL', loginUrl(), {
-            label: 'Copy',
-            onClick: () => { navigator.clipboard.writeText(loginUrl()); toast.show('Copied', 'success'); },
+            label: 'Open',
+            href: loginUrl(),
           }),
           EndpointRow('Login Preview', previewLoginUrl(), {
             label: 'Open',
@@ -193,17 +189,20 @@ function EndpointRow(
       h('span', { class: 'detail-label' }, label),
       h('code', { class: 'surface-link-value' }, value),
     ),
-    action.href
-      ? h('a', {
-          href: action.href,
-          target: '_blank',
-          class: 'btn btn-sm btn-ghost',
-        }, action.label)
-      : h('button', {
-          type: 'button',
-          class: 'btn btn-sm btn-ghost',
-          onClick: action.onClick,
-        }, action.label),
+    h('div', { class: 'surface-link-actions' },
+      action.href
+        ? h('a', {
+            href: action.href,
+            target: '_blank',
+            class: 'btn btn-sm btn-ghost',
+          }, action.label)
+        : h('button', {
+            type: 'button',
+            class: 'btn btn-sm btn-ghost',
+            onClick: action.onClick,
+          }, action.label),
+      CopyButton({ text: value, iconOnly: true, title: 'Copy ' + label.toLowerCase() }),
+    ),
   );
 }
 
@@ -222,10 +221,7 @@ function ManagementKeyCard(key: string) {
         },
       }, () => reveal() ? 'Hide key' : 'Reveal key'),
       () => reveal()
-        ? h('button', {
-            class: 'btn btn-sm btn-ghost',
-            onClick: () => { navigator.clipboard.writeText(key); toast.show('Copied', 'success'); },
-          }, 'Copy key')
+        ? CopyButton({ text: key, label: 'Copy key' })
         : null,
     ),
   );

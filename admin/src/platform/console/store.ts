@@ -79,6 +79,18 @@ export interface HostedPageData {
   updated_at: string | null;
 }
 
+export interface PlatformUser {
+  id: string;
+  email: string;
+  name: string | null;
+  avatar: string | null;
+  email_verified: boolean;
+  roles: string[];
+  auth_method: string;
+  mfa_verified: boolean;
+  mfa_enabled: boolean;
+}
+
 export type ConsoleView =
   | 'tenants'
   | 'overview'
@@ -90,6 +102,12 @@ export type ConsoleView =
 export type TenantWorkspaceView = Exclude<ConsoleView, 'tenants'>;
 export type IntegrateSection = 'guide' | 'session-inspector';
 export type OverviewWindow = '24h' | '7d' | '30d';
+
+interface PersistedConsoleWorkspace {
+  tenantId: string | null;
+  view: ConsoleView;
+  integrateSection: IntegrateSection;
+}
 
 // ── State ───────────────────────────────────────────────────────────────
 
@@ -106,12 +124,14 @@ export const [introspectToken, setIntrospectToken] = createSignal<string | null>
 export const [introspectUnavailable, setIntrospectUnavailable] = createSignal(false);
 export const [integrateSection, setIntegrateSectionSignal] = createSignal<IntegrateSection>('guide');
 export const [overviewWindow, setOverviewWindowSignal] = createSignal<OverviewWindow>('7d');
+export const [currentUser, setCurrentUser] = createSignal<PlatformUser | null>(null);
 
 let tenantDetailRequestSeq = 0;
 let usersRequestSeq = 0;
 let hostedPageRequestSeq = 0;
 let introspectRequestSeq = 0;
 let stopOverviewRefresh: (() => void) | null = null;
+const WORKSPACE_STORAGE_PREFIX = 'forma-console-workspace:';
 
 function withTransientTenantFields(nextTenant: Tenant, existingTenant?: Tenant | null): Tenant {
   if (nextTenant.management_api_key || !existingTenant?.management_api_key) {
@@ -144,6 +164,88 @@ function resetTenantScopedState(): void {
   });
 }
 
+function workspaceStorageKey(): string | null {
+  const user = currentUser();
+  if (!user || typeof window === 'undefined') {
+    return null;
+  }
+  return WORKSPACE_STORAGE_PREFIX + user.id;
+}
+
+function readWorkspaceState(): PersistedConsoleWorkspace | null {
+  const storageKey = workspaceStorageKey();
+  if (!storageKey) {
+    return null;
+  }
+
+  try {
+    const raw = window.localStorage.getItem(storageKey);
+    if (!raw) {
+      return null;
+    }
+    const parsed = JSON.parse(raw) as Partial<PersistedConsoleWorkspace>;
+    const nextView = parsed.view;
+    const nextSection = parsed.integrateSection;
+    if (
+      typeof nextView !== 'string' ||
+      !['tenants', 'overview', 'users', 'hosted-page', 'integrate', 'settings'].includes(nextView)
+    ) {
+      return null;
+    }
+    return {
+      tenantId: typeof parsed.tenantId === 'string' ? parsed.tenantId : null,
+      view: nextView as ConsoleView,
+      integrateSection: nextSection === 'session-inspector' ? 'session-inspector' : 'guide',
+    };
+  } catch {
+    return null;
+  }
+}
+
+function persistWorkspaceState(): void {
+  const storageKey = workspaceStorageKey();
+  if (!storageKey) {
+    return;
+  }
+
+  try {
+    const snapshot: PersistedConsoleWorkspace = {
+      tenantId: selectedTenant()?.id || null,
+      view: view(),
+      integrateSection: integrateSection(),
+    };
+    window.localStorage.setItem(storageKey, JSON.stringify(snapshot));
+  } catch {
+    // Ignore storage failures.
+  }
+}
+
+async function restoreWorkspaceState(): Promise<void> {
+  const snapshot = readWorkspaceState();
+  if (!snapshot || !snapshot.tenantId || snapshot.view === 'tenants') {
+    persistWorkspaceState();
+    return;
+  }
+
+  const tenant = tenants().find((item) => item.id === snapshot.tenantId);
+  if (!tenant) {
+    persistWorkspaceState();
+    return;
+  }
+
+  const restoredView = snapshot.view as TenantWorkspaceView;
+
+  batch(() => {
+    setSelectedTenant(tenant);
+    resetTenantScopedState();
+    setIntegrateSectionSignal(snapshot.integrateSection);
+    setView(restoredView);
+  });
+
+  persistWorkspaceState();
+  await hydrateTenantView(restoredView, tenant);
+}
+
 // ── API Functions ───────────────────────────────────────────────────────
 
 export async function loadTenants(): Promise<void> {
@@ -158,6 +260,16 @@ export async function loadTenants(): Promise<void> {
     toast.show(e instanceof Error ? e.message : 'Failed to load tenants', 'error');
   } finally {
     setLoading(false);
+  }
+}
+
+export async function loadCurrentUser(): Promise<void> {
+  try {
+    const data = await api.get<PlatformUser>('/auth/me');
+    setCurrentUser(data);
+  } catch (e) {
+    setCurrentUser(null);
+    toast.show(e instanceof Error ? e.message : 'Failed to load account profile', 'error');
   }
 }
 
@@ -439,23 +551,12 @@ function preferredTenantView(tenant: Tenant): TenantWorkspaceView {
 }
 
 async function hydrateTenantView(nextView: TenantWorkspaceView, tenant: Tenant): Promise<void> {
-  const tasks: Promise<void>[] = [loadTenantDetail(tenant.id, overviewWindow())];
+  const tasks: Promise<void>[] = [
+    loadTenantDetail(tenant.id, overviewWindow()),
+    loadIntrospect(tenant.slug),
+  ];
 
-  if (nextView === 'overview') {
-    tasks.push(loadIntrospect(tenant.slug));
-    syncIntrospectRefresh(tenant.slug);
-    await Promise.all(tasks);
-    return;
-  }
-
-  if (nextView === 'integrate' && integrateSection() === 'session-inspector') {
-    tasks.push(loadIntrospect(tenant.slug));
-    syncIntrospectRefresh(tenant.slug);
-    await Promise.all(tasks);
-    return;
-  }
-
-  clearOverviewRefresh();
+  syncIntrospectRefresh(tenant.slug);
 
   if (nextView === 'users') {
     tasks.push(loadUsers(tenant.id));
@@ -471,6 +572,7 @@ export function navigateTenantView(nextView: TenantWorkspaceView): void {
   if (!tenant) return;
 
   setView(nextView);
+  persistWorkspaceState();
   void hydrateTenantView(nextView, tenant);
 }
 
@@ -491,6 +593,7 @@ export function changeOverviewWindow(nextWindow: OverviewWindow): void {
 
 export function openIntegrateGuide(): void {
   setIntegrateSectionSignal('guide');
+  persistWorkspaceState();
   navigateTenantView('integrate');
 }
 
@@ -498,6 +601,7 @@ export function openSessionInspector(): void {
   const tenant = selectedTenant();
 
   setIntegrateSectionSignal('session-inspector');
+  persistWorkspaceState();
 
   if (!tenant) return;
 
@@ -515,6 +619,7 @@ export function setIntegrateSection(nextSection: IntegrateSection): void {
   }
 
   setIntegrateSectionSignal(nextSection);
+  persistWorkspaceState();
 
   const tenant = selectedTenant();
   if (!tenant || view() !== 'integrate') {
@@ -523,10 +628,7 @@ export function setIntegrateSection(nextSection: IntegrateSection): void {
 
   if (nextSection === 'session-inspector') {
     void hydrateTenantView('integrate', tenant);
-    return;
   }
-
-  clearOverviewRefresh();
 }
 
 export async function refreshCurrentView(): Promise<void> {
@@ -534,12 +636,13 @@ export async function refreshCurrentView(): Promise<void> {
   const tenant = selectedTenant();
 
   if (currentView === 'tenants' || !tenant) {
-    await loadTenants();
+    await Promise.all([loadTenants(), loadCurrentUser()]);
     return;
   }
 
   await Promise.all([
     loadTenants(),
+    loadCurrentUser(),
     hydrateTenantView(currentView, tenant),
   ]);
 }
@@ -555,6 +658,7 @@ export function selectTenant(tenant: Tenant): void {
     setView(nextView);
   });
 
+  persistWorkspaceState();
   void hydrateTenantView(nextView, tenant);
 }
 
@@ -571,6 +675,7 @@ export function backToTenants(): void {
     resetTenantScopedState();
     setView('tenants');
   });
+  persistWorkspaceState();
 }
 
 // ── Lifecycle ───────────────────────────────────────────────────────────
@@ -578,7 +683,8 @@ export function backToTenants(): void {
 export async function init(): Promise<void> {
   try {
     await auth.silentRefresh();
-    await loadTenants();
+    await Promise.all([loadTenants(), loadCurrentUser()]);
+    await restoreWorkspaceState();
     auth.startAutoRefresh();
   } catch {
     window.location.href = '/platform/login';
@@ -589,6 +695,7 @@ export async function init(): Promise<void> {
 export async function signout(): Promise<void> {
   clearOverviewRefresh();
   auth.stopAutoRefresh();
+  setCurrentUser(null);
   await auth.logout();
   window.location.href = '/platform/login';
 }
