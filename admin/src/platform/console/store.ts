@@ -67,7 +67,19 @@ export interface TenantUser {
   is_locked: boolean;
   provider: string | null;
   roles: string[];
+  active_sessions: number;
   created_at: string;
+}
+
+export interface UserSession {
+  id: string;
+  created_at: string;
+  expires_at: string;
+  auth_method: string;
+  auth_provider: string | null;
+  last_activity_at: string | null;
+  login_ip: string | null;
+  mfa_verified: boolean;
 }
 
 export interface HostedPageData {
@@ -122,6 +134,8 @@ export const [hostedPage, setHostedPage] = createSignal<HostedPageData | null>(n
 export const [introspectData, setIntrospectData] = createSignal<IntrospectData | null>(null);
 export const [introspectToken, setIntrospectToken] = createSignal<string | null>(null);
 export const [introspectUnavailable, setIntrospectUnavailable] = createSignal(false);
+export const [userSessions, setUserSessions] = createSignal<UserSession[]>([]);
+export const [userSessionsLoading, setUserSessionsLoading] = createSignal(false);
 export const [integrateSection, setIntegrateSectionSignal] = createSignal<IntegrateSection>('guide');
 export const [overviewWindow, setOverviewWindowSignal] = createSignal<OverviewWindow>('7d');
 export const [currentUser, setCurrentUser] = createSignal<PlatformUser | null>(null);
@@ -400,9 +414,27 @@ export async function revokeUserSessions(tenantId: string, userId: string): Prom
   try {
     await api.post('/platform/self-serve/tenants/' + encodeURIComponent(tenantId) + '/users/' + encodeURIComponent(userId) + '/revoke-sessions', {});
     toast.show('Sessions revoked', 'success');
+    setUserSessions([]);
     await loadUsers(tenantId);
   } catch (e) {
     toast.show(e instanceof Error ? e.message : 'Failed to revoke sessions', 'error');
+  }
+}
+
+export async function loadUserSessions(tenantId: string, userId: string): Promise<void> {
+  setUserSessionsLoading(true);
+  try {
+    const data = await api.get<{ sessions: UserSession[] }>(
+      '/platform/self-serve/tenants/' + encodeURIComponent(tenantId) + '/users/' + encodeURIComponent(userId) + '/sessions',
+    );
+    if (selectedTenant()?.id !== tenantId) {
+      return;
+    }
+    setUserSessions(data.sessions || []);
+  } catch (e) {
+    toast.show(e instanceof Error ? e.message : 'Failed to load sessions', 'error');
+  } finally {
+    setUserSessionsLoading(false);
   }
 }
 
