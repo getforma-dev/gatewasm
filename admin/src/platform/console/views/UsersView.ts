@@ -156,57 +156,68 @@ export function UsersView() {
               createShow(
                 () => expandedId() === user.id,
                 () => h('div', { class: 'user-detail' },
-                  h('div', { class: 'detail-grid' },
-                    DetailRow('User ID', user.id),
-                    DetailRow('Name', user.name || '(not set)'),
-                    DetailRow('Verified', user.email_verified ? 'Yes' : 'No'),
-                    DetailRow('Roles', user.roles.join(', ') || 'none'),
-                  ),
-                  createShow(
-                    () => userSessionsLoading(),
-                    () => h('div', { class: 'user-sessions-loading' },
-                      Skeleton({ width: '100%', height: '12px' }),
-                      Skeleton({ width: '80%', height: '12px' }),
+                  // ── Two-column layout: profile + sessions ──────────
+                  h('div', { class: 'user-detail-columns' },
+                    // Left: profile
+                    h('div', { class: 'user-detail-profile' },
+                      h('div', { class: 'card-label' }, 'Profile'),
+                      h('div', { class: 'detail-grid' },
+                        DetailRow('User ID', user.id),
+                        DetailRow('Name', user.name || '(not set)'),
+                        DetailRow('Verified', user.email_verified ? 'Yes' : 'No'),
+                        DetailRow('Roles', user.roles.join(', ') || 'none'),
+                      ),
+                    ),
+                    // Right: sessions
+                    h('div', { class: 'user-detail-sessions' },
+                      h('div', { class: 'card-label' },
+                        () => user.active_sessions > 0
+                          ? 'Active Sessions (' + user.active_sessions + ')'
+                          : 'Sessions',
+                      ),
+                      createShow(
+                        () => userSessionsLoading(),
+                        () => h('div', { class: 'user-sessions-loading' },
+                          Skeleton({ width: '100%', height: '12px' }),
+                          Skeleton({ width: '80%', height: '12px' }),
+                        ),
+                      ),
+                      createShow(
+                        () => !userSessionsLoading() && userSessions().length > 0,
+                        () => h('div', { class: 'user-sessions-list' },
+                          () => userSessions().map((s: UserSession) => SessionCard(s)),
+                        ),
+                      ),
+                      createShow(
+                        () => !userSessionsLoading() && userSessions().length === 0 && user.active_sessions === 0,
+                        () => h('div', { class: 'user-sessions-empty text-muted' }, 'No active sessions'),
+                      ),
                     ),
                   ),
-                  createShow(
-                    () => !userSessionsLoading() && userSessions().length > 0,
-                    () => h('div', { class: 'user-sessions-list' },
-                      h('div', { class: 'card-label' }, 'Active Sessions'),
-                      () => userSessions().map((s: UserSession) => SessionCard(s)),
+                  // ── Footer: meta + actions in one bar ──────────────
+                  h('div', { class: 'user-detail-footer' },
+                    h('div', { class: 'user-detail-meta text-muted' },
+                      'EdDSA \u00b7 gatewasm \u00b7 gatewasm-app',
                     ),
-                  ),
-                  createShow(
-                    () => !userSessionsLoading() && userSessions().length === 0 && user.active_sessions === 0,
-                    () => h('div', { class: 'user-sessions-empty text-muted' }, 'No active sessions'),
-                  ),
-                  h('div', { class: 'user-detail-dev-ref' },
-                    h('div', { class: 'card-label' }, 'Developer Reference'),
-                    h('div', { class: 'detail-grid' },
-                      DetailRow('Algorithm', 'EdDSA'),
-                      DetailRow('Issuer', 'gatewasm'),
-                      DetailRow('Audience', 'gatewasm-app'),
-                    ),
-                    h('div', { class: 'user-detail-dev-actions' },
+                    h('div', { class: 'user-detail-toolbar' },
                       CopyButton({ text: user.id, label: 'Copy user ID' }),
                       h('button', {
                         type: 'button',
                         class: 'btn btn-sm btn-ghost',
                         onClick: openSessionInspector,
-                      }, 'View Auth Reference'),
+                      }, 'Auth Reference'),
+                      h('div', { class: 'user-detail-toolbar-sep' }),
+                      user.is_locked
+                        ? h('button', { class: 'btn btn-sm btn-ghost', onClick: () => unblockUser(tenantState().id, user.id) }, 'Unblock')
+                        : h('button', { class: 'btn btn-sm btn-ghost', onClick: () => blockUser(tenantState().id, user.id) }, 'Block'),
+                      h('button', {
+                        class: 'btn btn-sm btn-ghost',
+                        disabled: () => user.active_sessions === 0,
+                        onClick: () => revokeUserSessions(tenantState().id, user.id),
+                      }, () => user.active_sessions > 0
+                        ? 'Revoke ' + user.active_sessions + ' ' + (user.active_sessions === 1 ? 'Session' : 'Sessions')
+                        : 'No Sessions'),
                     ),
-                  ),
-                  h('div', { class: 'user-actions' },
-                    user.is_locked
-                      ? h('button', { class: 'btn btn-sm btn-ghost', onClick: () => unblockUser(tenantState().id, user.id) }, 'Unblock')
-                      : h('button', { class: 'btn btn-sm btn-ghost', onClick: () => blockUser(tenantState().id, user.id) }, 'Block'),
-                    h('button', {
-                      class: 'btn btn-sm btn-ghost',
-                      disabled: () => user.active_sessions === 0,
-                      onClick: () => revokeUserSessions(tenantState().id, user.id),
-                    }, () => user.active_sessions > 0
-                      ? 'Revoke ' + user.active_sessions + ' ' + (user.active_sessions === 1 ? 'Session' : 'Sessions')
-                      : 'No Sessions'),
                   ),
                 ),
               ),
@@ -258,38 +269,28 @@ function SessionCard(s: UserSession) {
   }, 0);
 
   return h('div', { class: 'session-card' },
-    h('div', { class: 'session-card-row' },
-      h('span', { class: 'detail-label' }, 'Session'),
-      h('code', { class: 'detail-value' }, s.id.slice(0, 16) + '...'),
+    h('div', { class: 'session-card-head' },
+      h('code', { class: 'session-card-id' }, s.id.slice(0, 20) + '...'),
+      h('span', { class: 'session-card-expiry session-card-expiry-' + s.id.slice(0, 8) }, timeLeft),
     ),
-    h('div', { class: 'session-card-row' },
-      h('span', { class: 'detail-label' }, 'Method'),
-      h('span', { class: 'detail-value' }, (s.auth_provider || s.auth_method) + (s.mfa_verified ? ' + MFA' : '')),
+    h('div', { class: 'session-card-body' },
+      SessionMeta('Method', (s.auth_provider || s.auth_method) + (s.mfa_verified ? ' + MFA' : '')),
+      SessionMeta('Created', new Date(s.created_at).toLocaleString()),
+      SessionMeta('Expires', new Date(s.expires_at).toLocaleString()),
+      s.last_activity_at
+        ? SessionMeta('Last active', new Date(s.last_activity_at).toLocaleString())
+        : null,
+      s.login_ip
+        ? SessionMeta('IP', s.login_ip)
+        : null,
     ),
-    h('div', { class: 'session-card-row' },
-      h('span', { class: 'detail-label' }, 'Created'),
-      h('span', { class: 'detail-value' }, new Date(s.created_at).toLocaleString()),
-    ),
-    h('div', { class: 'session-card-row' },
-      h('span', { class: 'detail-label' }, 'Expires'),
-      h('span', { class: 'detail-value' }, new Date(s.expires_at).toLocaleString()),
-    ),
-    h('div', { class: 'session-card-row' },
-      h('span', { class: 'detail-label' }, 'Time Remaining'),
-      h('span', { class: 'detail-value session-card-expiry session-card-expiry-' + s.id.slice(0, 8) }, timeLeft),
-    ),
-    s.last_activity_at
-      ? h('div', { class: 'session-card-row' },
-          h('span', { class: 'detail-label' }, 'Last Active'),
-          h('span', { class: 'detail-value' }, new Date(s.last_activity_at).toLocaleString()),
-        )
-      : null,
-    s.login_ip
-      ? h('div', { class: 'session-card-row' },
-          h('span', { class: 'detail-label' }, 'IP'),
-          h('code', { class: 'detail-value' }, s.login_ip),
-        )
-      : null,
+  );
+}
+
+function SessionMeta(label: string, value: string) {
+  return h('div', { class: 'session-meta-row' },
+    h('span', { class: 'session-meta-label' }, label),
+    h('span', { class: 'session-meta-value' }, value),
   );
 }
 
