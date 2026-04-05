@@ -193,6 +193,7 @@ async fn main() {
                 middleware::dpop::cleanup_expired_jti(&retry_pool).await;
                 handlers::par::cleanup_expired_par(&retry_pool).await;
                 bg_tenant_cache.evict_expired();
+                db::cleanup_stale_refresh_tokens(&retry_pool).await;
             }
         }
     });

@@ -139,6 +139,23 @@ pub async fn cleanup_expired(pool: &PgPool) {
         _ => {}
     }
 
+    // Clean expired (but never revoked) refresh tokens older than 24 hours past expiry
+    let day_ago = chrono::Utc::now() - chrono::Duration::days(1);
+    match sqlx::query("DELETE FROM refresh_tokens WHERE revoked = FALSE AND expires_at < $1")
+        .bind(day_ago)
+        .execute(pool)
+        .await
+    {
+        Ok(r) if r.rows_affected() > 0 => {
+            tracing::info!(
+                count = r.rows_affected(),
+                "Cleaned expired (unrevoked) refresh_tokens"
+            );
+        }
+        Err(e) => tracing::warn!(error = %e, "Failed to clean expired refresh_tokens"),
+        _ => {}
+    }
+
     let ninety_days_ago = chrono::Utc::now() - chrono::Duration::days(90);
     match sqlx::query("DELETE FROM login_attempts WHERE created_at < $1")
         .bind(ninety_days_ago)
@@ -262,6 +279,39 @@ pub async fn enforce_refresh_token_limit(pool: &PgPool, user_id: &str, max_token
                 revoked = r.rows_affected(),
                 "Enforced refresh token limit"
             );
+        }
+    }
+}
+
+/// Periodic cleanup of stale refresh tokens. Called from the background loop.
+pub async fn cleanup_stale_refresh_tokens(pool: &PgPool) {
+    let day_ago = chrono::Utc::now() - chrono::Duration::days(1);
+
+    // Delete revoked tokens older than 7 days
+    let revoked = sqlx::query(
+        "DELETE FROM refresh_tokens WHERE revoked = TRUE AND created_at < $1",
+    )
+    .bind(chrono::Utc::now() - chrono::Duration::days(7))
+    .execute(pool)
+    .await;
+
+    if let Ok(r) = &revoked {
+        if r.rows_affected() > 0 {
+            tracing::debug!(count = r.rows_affected(), "Cleaned old revoked refresh_tokens");
+        }
+    }
+
+    // Delete expired (unrevoked) tokens past 24h grace period
+    let expired = sqlx::query(
+        "DELETE FROM refresh_tokens WHERE revoked = FALSE AND expires_at < $1",
+    )
+    .bind(day_ago)
+    .execute(pool)
+    .await;
+
+    if let Ok(r) = &expired {
+        if r.rows_affected() > 0 {
+            tracing::debug!(count = r.rows_affected(), "Cleaned expired refresh_tokens");
         }
     }
 }
