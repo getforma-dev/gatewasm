@@ -425,6 +425,14 @@ fn create_router_inner(state: AppState, rate_limit_enabled: bool) -> Router {
             "/platform/self-serve/tenants/{id}/hosted-page",
             get(onboarding::get_hosted_page).put(onboarding::update_hosted_page),
         )
+        .route(
+            "/platform/self-serve/tenants/{id}/invites",
+            get(onboarding::list_tenant_invites_selfserve).post(onboarding::create_tenant_invite_selfserve),
+        )
+        .route(
+            "/platform/self-serve/tenants/{id}/invites/{invite_id}/revoke",
+            post(onboarding::revoke_tenant_invite_selfserve),
+        )
         .layer(middleware::from_fn_with_state(
             state.clone(),
             require_platform_user,

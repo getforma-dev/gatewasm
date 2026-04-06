@@ -6,7 +6,8 @@ import {
   blockUser, unblockUser, revokeUserSessions,
   loadUserSessions, userSessions, userSessionsLoading, setUserSessions,
   openSessionInspector,
-  type UserSession,
+  invites, invitesLoading, sendInvite, revokeInvite,
+  type UserSession, type TenantInvite,
 } from '../store';
 
 export function UsersView() {
@@ -61,6 +62,7 @@ export function UsersView() {
         MetricCard('Blocked', () => String(blockedCount())),
       ),
     ),
+    InvitesPanel(tenantState().id),
     h('section', { class: 'console-card list-shell' },
       h('div', { class: 'list-shell-head list-shell-head-users' },
         h('div', { class: 'section-copy' },
@@ -228,6 +230,128 @@ export function UsersView() {
       createShow(
         () => users().length >= 100,
         () => h('div', { class: 'list-truncated' }, '100 most recent users shown'),
+      ),
+    ),
+  );
+}
+
+function InvitesPanel(tenantId: string) {
+  const [open, setOpen] = createSignal(true);
+  const [inviteEmail, setInviteEmail] = createSignal('');
+  const [inviteRole, setInviteRole] = createSignal('role_admin');
+  const [sending, setSending] = createSignal(false);
+
+  const pendingInvites = () => invites().filter((i) => i.status === 'pending');
+  const pendingCount = () => pendingInvites().length;
+
+  async function handleSend() {
+    const email = inviteEmail().trim();
+    if (!email) return;
+    setSending(true);
+    const ok = await sendInvite(tenantId, email, inviteRole());
+    if (ok) {
+      setInviteEmail('');
+      setInviteRole('role_admin');
+    }
+    setSending(false);
+  }
+
+  return h('section', { class: 'console-card invites-panel' },
+    h('div', {
+      class: 'invites-panel-head',
+      onClick: () => setOpen(!open()),
+    },
+      h('div', { class: 'section-copy' },
+        h('div', { class: 'card-label' }, 'Pending Invites'),
+        h('p', { class: 'card-copy text-muted' },
+          () => invitesLoading()
+            ? 'Loading...'
+            : pendingCount() + (pendingCount() === 1 ? ' pending invite' : ' pending invites'),
+        ),
+      ),
+      h('button', {
+        type: 'button',
+        class: 'btn btn-ghost btn-sm invites-toggle',
+        'aria-label': 'Toggle invites panel',
+      }, () => open() ? 'Collapse' : 'Expand'),
+    ),
+    createShow(
+      () => open(),
+      () => h('div', { class: 'invites-panel-body' },
+        // Send invite form
+        h('div', { class: 'invite-form' },
+          h('div', { class: 'card-label' }, 'Send Invite'),
+          h('div', { class: 'invite-form-row' },
+            h('input', {
+              type: 'email',
+              class: 'search-input invite-email-input',
+              placeholder: 'colleague@example.com',
+              value: inviteEmail,
+              onInput: (e: Event) => setInviteEmail((e.target as HTMLInputElement).value),
+              onKeyDown: (e: KeyboardEvent) => { if (e.key === 'Enter') void handleSend(); },
+            }),
+            h('select', {
+              class: 'filter-select invite-role-select',
+              value: inviteRole,
+              onChange: (e: Event) => setInviteRole((e.target as HTMLSelectElement).value),
+            },
+              h('option', { value: 'role_admin' }, 'Admin'),
+              h('option', { value: 'role_member' }, 'Member'),
+              h('option', { value: 'role_viewer' }, 'Viewer'),
+            ),
+            h('button', {
+              type: 'button',
+              class: 'btn btn-primary btn-sm',
+              disabled: () => sending() || !inviteEmail().trim(),
+              onClick: () => void handleSend(),
+            }, () => sending() ? 'Sending...' : 'Send Invite'),
+          ),
+        ),
+        // Invite list
+        createShow(
+          () => invitesLoading(),
+          () => h('div', { class: 'list-empty-state list-empty-state-loading' },
+            Skeleton({ width: '60%', height: '12px' }),
+            Skeleton({ width: '80%', height: '12px' }),
+          ),
+        ),
+        createShow(
+          () => !invitesLoading() && invites().length === 0,
+          () => h('div', { class: 'list-empty-state' },
+            h('div', { class: 'card-label' }, 'No Invites'),
+            h('p', { class: 'card-copy' }, 'Use the form above to invite someone to this tenant.'),
+          ),
+        ),
+        createShow(
+          () => !invitesLoading() && invites().length > 0,
+          () => h('div', { class: 'invite-list' },
+            () => invites().map((invite: TenantInvite) =>
+              h('div', { class: 'invite-row', key: invite.id },
+                h('div', { class: 'invite-row-main' },
+                  h('span', { class: 'invite-email' }, invite.email),
+                  h('span', { class: 'badge badge-subtle invite-role-badge' }, invite.role_name || invite.role_id),
+                  h('span', {
+                    class: () => 'badge invite-status-badge' + (
+                      invite.status === 'pending' ? ' badge-success' :
+                      invite.status === 'expired' ? ' badge-warning' :
+                      ' badge-danger'
+                    ),
+                  }, invite.status),
+                ),
+                h('div', { class: 'invite-row-meta text-muted' },
+                  'Expires ' + new Date(invite.expires_at).toLocaleDateString(),
+                ),
+                invite.status === 'pending'
+                  ? h('button', {
+                      type: 'button',
+                      class: 'btn btn-sm btn-ghost invite-revoke-btn',
+                      onClick: () => void revokeInvite(tenantId, invite.id),
+                    }, 'Revoke')
+                  : null,
+              ),
+            ),
+          ),
+        ),
       ),
     ),
   );

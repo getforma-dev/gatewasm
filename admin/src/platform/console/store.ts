@@ -155,6 +155,16 @@ export interface SecurityConfig {
   impossible_travel_speed_threshold_kmh: number;
 }
 
+export interface TenantInvite {
+  id: string;
+  email: string;
+  role_id: string;
+  role_name: string | null;
+  status: string;
+  expires_at: string;
+  created_at: string;
+}
+
 export interface PlatformUser {
   id: string;
   email: string;
@@ -268,6 +278,8 @@ export const [accountTab, setAccountTab] = createSignal<AccountTab>('tenants');
 export const [securityConfig, setSecurityConfig] = createSignal<SecurityConfig | null>(null);
 export const [securityConfigLoading, setSecurityConfigLoading] = createSignal(false);
 export const [tenantPlan, setTenantPlan] = createSignal<string>('trial');
+export const [invites, setInvites] = createSignal<TenantInvite[]>([]);
+export const [invitesLoading, setInvitesLoading] = createSignal(false);
 
 let tenantDetailRequestSeq = 0;
 let usersRequestSeq = 0;
@@ -317,6 +329,8 @@ function resetTenantScopedState(): void {
     setSecurityConfig(null);
     setSecurityConfigLoading(false);
     setTenantPlan('trial');
+    setInvites([]);
+    setInvitesLoading(false);
     setIntegrateSectionSignal('guide');
     setOverviewWindowSignal('7d');
   });
@@ -628,6 +642,43 @@ export async function loadUsers(tenantId: string): Promise<void> {
     if (requestSeq === usersRequestSeq) {
       setUsersLoading(false);
     }
+  }
+}
+
+export async function loadInvites(tenantId: string): Promise<void> {
+  setInvitesLoading(true);
+  try {
+    const data = await api.get<{ invites: TenantInvite[] }>(
+      '/platform/self-serve/tenants/' + encodeURIComponent(tenantId) + '/invites',
+    );
+    if (selectedTenant()?.id !== tenantId) return;
+    setInvites(data.invites || []);
+  } catch (e) {
+    toast.show(e instanceof Error ? e.message : 'Failed to load invites', 'error');
+  } finally {
+    setInvitesLoading(false);
+  }
+}
+
+export async function sendInvite(tenantId: string, email: string, role: string): Promise<boolean> {
+  try {
+    await api.post('/platform/self-serve/tenants/' + encodeURIComponent(tenantId) + '/invites', { email, role });
+    toast.show('Invite sent to ' + email, 'success');
+    await loadInvites(tenantId);
+    return true;
+  } catch (e) {
+    toast.show(e instanceof Error ? e.message : 'Failed to send invite', 'error');
+    return false;
+  }
+}
+
+export async function revokeInvite(tenantId: string, inviteId: string): Promise<void> {
+  try {
+    await api.post('/platform/self-serve/tenants/' + encodeURIComponent(tenantId) + '/invites/' + encodeURIComponent(inviteId) + '/revoke', {});
+    toast.show('Invite revoked', 'success');
+    await loadInvites(tenantId);
+  } catch (e) {
+    toast.show(e instanceof Error ? e.message : 'Failed to revoke invite', 'error');
   }
 }
 
@@ -959,6 +1010,7 @@ async function hydrateTenantView(nextView: TenantWorkspaceView, tenant: Tenant):
 
   if (nextView === 'members') {
     tasks.push(loadUsers(tenant.id));
+    tasks.push(loadInvites(tenant.id));
   } else if (nextView === 'security') {
     tasks.push(loadSecurityConfig(tenant.id));
   } else if (nextView === 'hosted-page') {

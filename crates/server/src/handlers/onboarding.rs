@@ -2297,6 +2297,135 @@ pub async fn update_tenant_security_config(
     })))
 }
 
+// ── Tenant Invite Proxy Endpoints ───────────────────────────────────────
+
+/// GET /platform/self-serve/tenants/{id}/invites
+pub async fn list_tenant_invites_selfserve(
+    State(state): State<AppState>,
+    Path(tenant_id): Path<String>,
+    req: axum::extract::Request,
+) -> Result<impl IntoResponse, AppError> {
+    let platform_user = req.extensions().get::<PlatformUser>().cloned()
+        .ok_or(AppError::Unauthorized { error: "unauthorized", message: "Not authenticated".into() })?;
+
+    sqlx::query_scalar::<_, String>(
+        "SELECT id FROM tenants WHERE id = $1 AND owner_user_id = $2 AND status != 'deleted'",
+    ).bind(&tenant_id).bind(&platform_user.user_id)
+    .fetch_optional(&state.db).await?
+    .ok_or(AppError::NotFound { error: "tenant_not_found", message: "Tenant not found".into() })?;
+
+    // Auto-expire stale invites
+    sqlx::query(
+        "UPDATE tenant_user_invites SET status = 'expired', updated_at = NOW() \
+         WHERE tenant_id = $1 AND status = 'pending' AND expires_at < NOW()",
+    ).bind(&tenant_id).execute(&state.db).await.ok();
+
+    let rows = sqlx::query(
+        "SELECT tui.id, tui.email, tui.role_id, r.name AS role_name, tui.status, \
+         tui.expires_at, tui.created_at \
+         FROM tenant_user_invites tui \
+         LEFT JOIN roles r ON r.id = tui.role_id \
+         WHERE tui.tenant_id = $1 \
+         ORDER BY tui.created_at DESC LIMIT 50",
+    ).bind(&tenant_id).fetch_all(&state.db).await?;
+
+    let invites: Vec<serde_json::Value> = rows.iter().map(|r| {
+        serde_json::json!({
+            "id": r.get::<String, _>("id"),
+            "email": r.get::<String, _>("email"),
+            "role_id": r.get::<String, _>("role_id"),
+            "role_name": r.get::<Option<String>, _>("role_name"),
+            "status": r.get::<String, _>("status"),
+            "expires_at": r.get::<chrono::DateTime<Utc>, _>("expires_at").to_rfc3339(),
+            "created_at": r.get::<chrono::DateTime<Utc>, _>("created_at").to_rfc3339(),
+        })
+    }).collect();
+
+    Ok(Json(serde_json::json!({ "invites": invites })))
+}
+
+/// POST /platform/self-serve/tenants/{id}/invites
+pub async fn create_tenant_invite_selfserve(
+    State(state): State<AppState>,
+    Path(tenant_id): Path<String>,
+    req: axum::extract::Request,
+) -> Result<impl IntoResponse, AppError> {
+    let platform_user = req.extensions().get::<PlatformUser>().cloned()
+        .ok_or(AppError::Unauthorized { error: "unauthorized", message: "Not authenticated".into() })?;
+
+    sqlx::query_scalar::<_, String>(
+        "SELECT id FROM tenants WHERE id = $1 AND owner_user_id = $2 AND status != 'deleted'",
+    ).bind(&tenant_id).bind(&platform_user.user_id)
+    .fetch_optional(&state.db).await?
+    .ok_or(AppError::NotFound { error: "tenant_not_found", message: "Tenant not found".into() })?;
+
+    let body: serde_json::Value = axum::Json::from_request(req, &state)
+        .await.map_err(|_| AppError::BadRequest { error: "invalid_body", message: "Invalid JSON".into() })?.0;
+
+    let email = body["email"].as_str().ok_or(AppError::BadRequest {
+        error: "missing_email", message: "Email is required".into(),
+    })?.to_lowercase().trim().to_string();
+
+    let role_id = body["role"].as_str().unwrap_or("role_admin").to_string();
+    let invite_id = format!("tinv_{}", uuid::Uuid::new_v4());
+
+    // Revoke previous pending invites for same email
+    sqlx::query(
+        "UPDATE tenant_user_invites SET status = 'revoked', updated_at = NOW() \
+         WHERE tenant_id = $1 AND lower(email) = lower($2) AND status = 'pending'",
+    ).bind(&tenant_id).bind(&email).execute(&state.db).await.ok();
+
+    let expires_at = Utc::now() + chrono::Duration::hours(72);
+
+    sqlx::query(
+        "INSERT INTO tenant_user_invites \
+         (id, tenant_id, email, role_id, token_hash, status, invited_by_user_id, expires_at, created_at, updated_at) \
+         VALUES ($1, $2, $3, $4, $5, 'pending', $6, $7, NOW(), NOW())",
+    )
+    .bind(&invite_id)
+    .bind(&tenant_id)
+    .bind(&email)
+    .bind(&role_id)
+    .bind(&format!("hash_{}", uuid::Uuid::new_v4())) // placeholder hash
+    .bind(&platform_user.user_id)
+    .bind(expires_at)
+    .execute(&state.db).await?;
+
+    Ok((
+        axum::http::StatusCode::CREATED,
+        Json(serde_json::json!({
+            "invite": { "id": invite_id, "email": email, "role_id": role_id, "status": "pending", "expires_at": expires_at.to_rfc3339() },
+        })),
+    ))
+}
+
+/// POST /platform/self-serve/tenants/{id}/invites/{invite_id}/revoke
+pub async fn revoke_tenant_invite_selfserve(
+    State(state): State<AppState>,
+    Path((tenant_id, invite_id)): Path<(String, String)>,
+    req: axum::extract::Request,
+) -> Result<impl IntoResponse, AppError> {
+    let platform_user = req.extensions().get::<PlatformUser>().cloned()
+        .ok_or(AppError::Unauthorized { error: "unauthorized", message: "Not authenticated".into() })?;
+
+    sqlx::query_scalar::<_, String>(
+        "SELECT id FROM tenants WHERE id = $1 AND owner_user_id = $2 AND status != 'deleted'",
+    ).bind(&tenant_id).bind(&platform_user.user_id)
+    .fetch_optional(&state.db).await?
+    .ok_or(AppError::NotFound { error: "tenant_not_found", message: "Tenant not found".into() })?;
+
+    let result = sqlx::query(
+        "UPDATE tenant_user_invites SET status = 'revoked', updated_at = NOW() \
+         WHERE id = $1 AND tenant_id = $2 AND status = 'pending'",
+    ).bind(&invite_id).bind(&tenant_id).execute(&state.db).await?;
+
+    if result.rows_affected() == 0 {
+        return Err(AppError::NotFound { error: "invite_not_found", message: "Invite not found or not pending".into() });
+    }
+
+    Ok(Json(serde_json::json!({ "success": true, "invite_id": invite_id })))
+}
+
 // ── Get Started Page ────────────────────────────────────────────────────
 
 /// GET /get-started — Self-serve onboarding page.
