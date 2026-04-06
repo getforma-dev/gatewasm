@@ -40,6 +40,9 @@ use crate::middleware::entitlements::{
 };
 use crate::middleware::management_auth::{require_management_auth, require_platform_admin};
 use crate::middleware::platform_owner::require_platform_owner;
+use crate::middleware::platform_team::{
+    require_tenant_access, require_write_access, resolve_platform_member,
+};
 use crate::middleware::platform_user::require_platform_user;
 use crate::middleware::rate_limit;
 use crate::middleware::tenant::{extract_tenant, PathSlug};
@@ -473,6 +476,15 @@ fn create_router_inner(state: AppState, rate_limit_enabled: bool) -> Router {
             "/platform/self-serve/tenants/{id}/webhooks/{webhook_id}/test",
             post(onboarding::test_tenant_webhook),
         )
+        .layer(middleware::from_fn(require_write_access))
+        .layer(middleware::from_fn_with_state(
+            state.clone(),
+            require_tenant_access,
+        ))
+        .layer(middleware::from_fn_with_state(
+            state.clone(),
+            resolve_platform_member,
+        ))
         .layer(middleware::from_fn_with_state(
             state.clone(),
             require_platform_user,
