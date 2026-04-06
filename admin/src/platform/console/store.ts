@@ -261,7 +261,23 @@ export type OverviewWindow = '24h' | '7d' | '30d';
 export type Plane = 'operator' | 'organization' | 'enduser';
 
 export type AppMode = 'account' | 'workspace';
-export type AccountTab = 'tenants' | 'api-keys' | 'account-settings';
+export type AccountTab = 'tenants' | 'team' | 'api-keys' | 'account-settings';
+
+export interface PlatformMember {
+  id: string;
+  user_id: string;
+  role: 'owner' | 'admin' | 'editor' | 'viewer';
+  status: 'active' | 'suspended';
+  invited_by_user_id: string | null;
+  email: string;
+  name: string;
+  last_login_at: string | null;
+  created_at: string;
+  tenant_count: number;
+  tenants?: { id: string; name: string; slug: string }[];
+}
+
+export type PlatformRole = 'owner' | 'admin' | 'editor' | 'viewer';
 
 interface PlaneTab {
   id: string;
@@ -376,6 +392,12 @@ const [webhooks, setWebhooks] = createSignal<Webhook[]>([]);
 export { webhooks };
 const [webhooksLoading, setWebhooksLoading] = createSignal(false);
 export { webhooksLoading };
+const [platformRole, setPlatformRole] = createSignal<PlatformRole | null>(null);
+export { platformRole };
+const [teamMembers, setTeamMembers] = createSignal<PlatformMember[]>([]);
+export { teamMembers };
+const [teamLoading, setTeamLoading] = createSignal(false);
+export { teamLoading };
 
 let tenantDetailRequestSeq = 0;
 let usersRequestSeq = 0;
@@ -489,11 +511,13 @@ export async function rotateTenantKey(tenantId: string): Promise<string | null> 
 
 async function loadCurrentUser(): Promise<void> {
   try {
-    const data = await api.get<PlatformUser>('/auth/me');
+    const data = await api.get<PlatformUser & { platform_role?: PlatformRole }>('/auth/me');
     setCurrentUser(data);
-  } catch (e) {
+    if (data.platform_role) {
+      setPlatformRole(data.platform_role);
+    }
+  } catch {
     setCurrentUser(null);
-    toast.show(e instanceof Error ? e.message : 'Failed to load account profile', 'error');
   }
 }
 
@@ -1388,4 +1412,110 @@ export async function signout(): Promise<void> {
   setCurrentUser(null);
   await auth.logout();
   window.location.href = '/platform/login';
+}
+
+// ── Team API Functions ──────────────────────────────────────────────────
+
+export async function loadTeamMembers(): Promise<void> {
+  setTeamLoading(true);
+  try {
+    const data = await api.get<{ members: PlatformMember[] }>('/platform/admin/team');
+    setTeamMembers(data.members);
+  } catch {
+    setTeamMembers([]);
+  } finally {
+    setTeamLoading(false);
+  }
+}
+
+export async function loadTeamMemberDetail(memberId: string): Promise<PlatformMember | null> {
+  try {
+    const data = await api.get<{ member: PlatformMember }>('/platform/admin/team/' + encodeURIComponent(memberId));
+    return data.member;
+  } catch {
+    return null;
+  }
+}
+
+export async function updateTeamMember(memberId: string, fields: { role?: string; status?: string }): Promise<boolean> {
+  try {
+    await api.request('/platform/admin/team/' + encodeURIComponent(memberId), { method: 'PATCH', body: fields });
+    toast.show('Member updated', 'success');
+    await loadTeamMembers();
+    return true;
+  } catch (e) {
+    toast.show(e instanceof Error ? e.message : 'Failed to update member', 'error');
+    return false;
+  }
+}
+
+export async function removeTeamMember(memberId: string): Promise<boolean> {
+  try {
+    await api.del('/platform/admin/team/' + encodeURIComponent(memberId));
+    toast.show('Member removed', 'success');
+    await loadTeamMembers();
+    return true;
+  } catch (e) {
+    toast.show(e instanceof Error ? e.message : 'Failed to remove member', 'error');
+    return false;
+  }
+}
+
+export async function setMemberTenants(memberId: string, tenantIds: string[]): Promise<boolean> {
+  try {
+    await api.request('/platform/admin/team/' + encodeURIComponent(memberId) + '/tenants', {
+      method: 'PUT',
+      body: { tenant_ids: tenantIds },
+    });
+    toast.show('Tenant access updated', 'success');
+    return true;
+  } catch (e) {
+    toast.show(e instanceof Error ? e.message : 'Failed to update tenant access', 'error');
+    return false;
+  }
+}
+
+export async function sendTeamInvite(email: string, role: string, tenantIds: string[]): Promise<{ invite_url: string } | null> {
+  try {
+    const data = await api.post<{ invite_url: string }>('/platform/admin/invites', {
+      email,
+      role,
+      tenant_ids: tenantIds.length > 0 ? tenantIds : undefined,
+    });
+    toast.show('Invite sent to ' + email, 'success');
+    await loadTeamMembers();
+    return data;
+  } catch (e) {
+    toast.show(e instanceof Error ? e.message : 'Failed to send invite', 'error');
+    return null;
+  }
+}
+
+export async function revokeTeamInvite(inviteId: string): Promise<boolean> {
+  try {
+    await api.post('/platform/admin/invites/' + encodeURIComponent(inviteId) + '/revoke', {});
+    toast.show('Invite revoked', 'success');
+    return true;
+  } catch (e) {
+    toast.show(e instanceof Error ? e.message : 'Failed to revoke invite', 'error');
+    return false;
+  }
+}
+
+export async function loadTeamInvites(): Promise<any[]> {
+  try {
+    const data = await api.get<{ invites: any[] }>('/platform/admin/invites');
+    return data.invites;
+  } catch {
+    return [];
+  }
+}
+
+export function canEdit(): boolean {
+  const role = platformRole();
+  return role === 'owner' || role === 'admin' || role === 'editor';
+}
+
+export function isOwner(): boolean {
+  return platformRole() === 'owner';
 }
