@@ -142,32 +142,38 @@ function CreateTenantModal(onClose: () => void) {
   const [slugEdited, setSlugEdited] = createSignal(false);
   const [saving, setSaving] = createSignal(false);
   const [slugStatus, setSlugStatus] = createSignal<'idle' | 'checking' | 'available' | 'taken' | 'invalid'>('idle');
-  const [slugHint, setSlugHint] = createSignal('');
+  const [slugWarn, setSlugWarn] = createSignal('');
+  const [slugError, setSlugError] = createSignal('');
   let checkTimer: ReturnType<typeof setTimeout> | undefined;
 
   function validateAndCheckSlug(raw: string, normalized: string) {
     clearTimeout(checkTimer);
+    setSlugWarn('');
+    setSlugError('');
 
-    // Detect stripped characters
+    // Detect stripped characters — yellow warning only
     if (raw !== normalized && raw.length > 0) {
-      const stripped = raw.replace(new RegExp('[a-z0-9-]', 'g'), '');
+      const stripped = raw.replace(/[a-z0-9-]/g, '');
       if (stripped.length > 0) {
-        setSlugHint('Removed invalid characters: ' + stripped.slice(0, 20));
+        setSlugWarn('Invalid characters removed');
       }
-    } else {
-      setSlugHint('');
     }
 
     // Validate the normalized slug
-    if (!normalized || normalized.length < 2) {
-      setSlugStatus(normalized.length === 1 ? 'invalid' : 'idle');
-      if (normalized.length === 1) setSlugHint('Slug must be at least 2 characters');
+    if (!normalized) {
+      setSlugStatus('idle');
+      return;
+    }
+
+    if (normalized.length < 2) {
+      setSlugStatus('invalid');
+      setSlugError('Slug must be at least 2 characters');
       return;
     }
 
     if (normalized.length > 63) {
       setSlugStatus('invalid');
-      setSlugHint('Slug must be 63 characters or fewer');
+      setSlugError('Slug must be 63 characters or fewer');
       return;
     }
 
@@ -177,13 +183,12 @@ function CreateTenantModal(onClose: () => void) {
       'get-started', 'bridge', 'openapi', 't', 'static', 'assets'];
     if (reserved.includes(normalized)) {
       setSlugStatus('invalid');
-      setSlugHint('"' + normalized + '" is reserved — choose a different slug');
+      setSlugError('\u201C' + normalized + '\u201D is reserved');
       return;
     }
 
     // All local checks pass — check availability
     setSlugStatus('checking');
-    setSlugHint('');
     checkTimer = setTimeout(async () => {
       const available = await checkSlugAvailability(normalized);
       if (slug() === normalized) {
@@ -202,12 +207,17 @@ function CreateTenantModal(onClose: () => void) {
     }
   }
 
-  function handleSlugChange(value: string) {
+  function handleSlugInput(e: Event) {
     setSlugEdited(true);
-    const raw = value.trim().toLowerCase();
-    const normalized = normalizeTenantSlugInput(value);
+    const input = e.target as HTMLInputElement;
+    const raw = input.value;
+    const normalized = normalizeTenantSlugInput(raw);
+    // Force the DOM input to show the normalized value (strips invalid chars in real-time)
+    if (input.value !== normalized) {
+      input.value = normalized;
+    }
     setSlug(normalized);
-    validateAndCheckSlug(raw, normalized);
+    validateAndCheckSlug(raw.trim().toLowerCase(), normalized);
   }
 
   async function handleSubmit(event: Event) {
@@ -250,21 +260,24 @@ function CreateTenantModal(onClose: () => void) {
           hint: 'This appears in the console and the hosted tenant experience.',
           required: true,
         }),
-        Field({
-          label: 'Tenant Slug',
-          name: 'tenant-slug',
-          value: slug,
-          onChange: handleSlugChange,
-          placeholder: 'acme-workspace',
-          hint: 'Lowercase letters, numbers, and hyphens only.',
-          required: true,
-        }),
+        h('div', { class: 'field' },
+          h('label', { class: 'field-label', for: 'field-tenant-slug' }, 'Tenant Slug'),
+          h('input', {
+            id: 'field-tenant-slug',
+            type: 'text',
+            name: 'tenant-slug',
+            value: slug,
+            placeholder: 'acme-workspace',
+            required: true,
+            onInput: handleSlugInput,
+          }),
+          h('div', { class: 'field-hint' }, 'Lowercase letters, numbers, and hyphens only.'),
+        ),
         // Slug validation + availability indicator
         h('div', { class: 'slug-status' },
-          // Hint for stripped characters or validation issues
           createShow(
-            () => slugHint().length > 0 && slugStatus() !== 'available',
-            () => h('span', { class: 'slug-status-hint' }, slugHint),
+            () => slugWarn().length > 0,
+            () => h('span', { class: 'slug-status-hint' }, slugWarn),
           ),
           createShow(
             () => slugStatus() === 'checking',
@@ -272,11 +285,11 @@ function CreateTenantModal(onClose: () => void) {
           ),
           createShow(
             () => slugStatus() === 'available',
-            () => h('span', { class: 'slug-status-available' }, '\u2713 ' + slug() + ' is available'),
+            () => h('span', { class: 'slug-status-available' }, () => '\u2713 ' + slug() + ' is available'),
           ),
           createShow(
             () => slugStatus() === 'invalid',
-            () => h('span', { class: 'slug-status-invalid' }, () => '\u2717 ' + slugHint()),
+            () => h('span', { class: 'slug-status-invalid' }, () => '\u2717 ' + slugError()),
           ),
           createShow(
             () => slugStatus() === 'taken',
@@ -288,6 +301,8 @@ function CreateTenantModal(onClose: () => void) {
                   type: 'button',
                   class: 'slug-suggestion',
                   onClick: () => {
+                    const input = document.getElementById('field-tenant-slug') as HTMLInputElement;
+                    if (input) input.value = suggestion;
                     setSlug(suggestion);
                     setSlugEdited(true);
                     validateAndCheckSlug(suggestion, suggestion);
