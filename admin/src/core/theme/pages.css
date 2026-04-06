@@ -3098,6 +3098,18 @@
   color: var(--success);
 }
 
+.slug-status-hint {
+  font-family: 'DM Mono', monospace;
+  font-size: 0.65rem;
+  color: var(--warning);
+}
+
+.slug-status-invalid {
+  font-family: 'DM Mono', monospace;
+  font-size: 0.68rem;
+  color: var(--danger);
+}
+
 .slug-status-taken {
   display: flex;
   align-items: center;
