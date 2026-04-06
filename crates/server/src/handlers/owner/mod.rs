@@ -3,12 +3,14 @@ mod billing;
 mod customers;
 mod dashboard;
 mod invites;
+mod team;
 
 pub use analytics::*;
 pub use billing::*;
 pub use customers::*;
 pub use dashboard::*;
 pub use invites::*;
+pub use team::*;
 
 use chrono::{DateTime, Utc};
 use serde::Deserialize;
