@@ -1302,6 +1302,16 @@ pub async fn login(
         );
     }
 
+    // Update last_login_at for platform members (best-effort, never fails the login)
+    if tenant_id.as_deref() == Some("ten_platform") {
+        let _ = sqlx::query(
+            "UPDATE platform_members SET last_login_at = NOW(), updated_at = NOW() WHERE user_id = $1"
+        )
+        .bind(&user_id)
+        .execute(&state.db)
+        .await;
+    }
+
     if let Some(token) = invite_token.as_deref() {
         let tid = tenant_id.as_deref().ok_or(AppError::BadRequest {
             error: "invalid_invite_token",

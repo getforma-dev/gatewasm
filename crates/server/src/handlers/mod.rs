@@ -540,6 +540,26 @@ fn create_router_inner(state: AppState, rate_limit_enabled: bool) -> Router {
         .layer(middleware::from_fn_with_state(state.clone(), require_platform_owner))
         .layer(middleware::from_fn_with_state(state.clone(), require_auth));
 
+    // ── Platform Team API (JWT + platform member, admin required for mutations) ──
+    let team_routes = Router::new()
+        .route("/", axum::routing::get(owner::list_team_members))
+        .route("/{id}", axum::routing::get(owner::get_team_member))
+        .route("/{id}", axum::routing::patch(owner::update_team_member))
+        .route("/{id}", axum::routing::delete(owner::remove_team_member))
+        .route("/{id}/tenants", axum::routing::put(owner::set_member_tenants))
+        .layer(axum::middleware::from_fn_with_state(
+            state.clone(),
+            crate::middleware::platform_team::require_platform_team_admin,
+        ))
+        .layer(axum::middleware::from_fn_with_state(
+            state.clone(),
+            crate::middleware::platform_team::require_platform_member,
+        ))
+        .layer(axum::middleware::from_fn_with_state(
+            state.clone(),
+            crate::middleware::auth::require_auth,
+        ));
+
     // ── Provider owner invite acceptance (authenticated platform users) ───
     let owner_invite_accept_routes = Router::new()
         .route(
@@ -596,6 +616,7 @@ fn create_router_inner(state: AppState, rate_limit_enabled: bool) -> Router {
         .merge(admin_routes)
         .merge(owner_invite_accept_routes)
         .merge(owner_api_routes)
+        .nest("/platform/admin/team", team_routes)
         .merge(compliance_routes)
         .merge(introspection_routes)
         .merge(internal_docs_routes)
