@@ -472,13 +472,18 @@ pub async fn list_team_members(
     State(state): State<AppState>,
     req: axum::extract::Request,
 ) -> Result<impl IntoResponse, AppError> {
-    let rows = sqlx::query_as::<_, (String, String, String, String, Option<String>, String, String, Option<chrono::DateTime<chrono::Utc>>, chrono::DateTime<chrono::Utc>)>(
+    let rows = sqlx::query_as::<_, (String, String, String, String, Option<String>, String, String, Option<chrono::DateTime<chrono::Utc>>, chrono::DateTime<chrono::Utc>, i64)>(
         "SELECT pm.id, pm.user_id, pm.role, pm.status,
                 pm.invited_by_user_id,
                 u.email, COALESCE(u.name, '') as name,
-                pm.last_login_at, pm.created_at
+                pm.last_login_at, pm.created_at,
+                COUNT(pmt.id) as tenant_count
          FROM platform_members pm
          JOIN users u ON u.id = pm.user_id
+         LEFT JOIN platform_member_tenants pmt ON pmt.member_id = pm.id
+         GROUP BY pm.id, pm.user_id, pm.role, pm.status,
+                  pm.invited_by_user_id, u.email, u.name,
+                  pm.last_login_at, pm.created_at
          ORDER BY
            CASE pm.role
              WHEN 'owner' THEN 0
@@ -491,29 +496,23 @@ pub async fn list_team_members(
     .fetch_all(&state.db)
     .await?;
 
-    let mut members = Vec::new();
-    for (id, user_id, role, status, invited_by, email, name, last_login_at, created_at) in rows {
-        let tenant_count: (i64,) = sqlx::query_as(
-            "SELECT COUNT(*) FROM platform_member_tenants WHERE member_id = $1"
-        )
-        .bind(&id)
-        .fetch_one(&state.db)
-        .await
-        .unwrap_or((0,));
-
-        members.push(serde_json::json!({
-            "id": id,
-            "user_id": user_id,
-            "role": role,
-            "status": status,
-            "invited_by_user_id": invited_by,
-            "email": email,
-            "name": name,
-            "last_login_at": last_login_at.map(|v| v.to_rfc3339()),
-            "created_at": created_at.to_rfc3339(),
-            "tenant_count": tenant_count.0,
-        }));
-    }
+    let members: Vec<serde_json::Value> = rows
+        .into_iter()
+        .map(|(id, user_id, role, status, invited_by, email, name, last_login_at, created_at, tenant_count)| {
+            serde_json::json!({
+                "id": id,
+                "user_id": user_id,
+                "role": role,
+                "status": status,
+                "invited_by_user_id": invited_by,
+                "email": email,
+                "name": name,
+                "last_login_at": last_login_at.map(|v| v.to_rfc3339()),
+                "created_at": created_at.to_rfc3339(),
+                "tenant_count": tenant_count,
+            })
+        })
+        .collect();
 
     Ok(Json(serde_json::json!({ "members": members })))
 }
@@ -642,34 +641,25 @@ pub async fn update_team_member(
         }
     }
 
-    let mut updates = Vec::new();
-    let mut bind_idx = 1;
-
-    if body.role.is_some() {
-        bind_idx += 1;
-        updates.push(format!("role = ${}", bind_idx));
-    }
-    if body.status.is_some() {
-        bind_idx += 1;
-        updates.push(format!("status = ${}", bind_idx));
-    }
-
-    if updates.is_empty() {
+    if body.role.is_none() && body.status.is_none() {
         return Err(AppError::BadRequest { error: "no_changes", message: "No fields to update".into() });
     }
 
-    updates.push("updated_at = NOW()".to_string());
-    let sql = format!("UPDATE platform_members SET {} WHERE id = $1", updates.join(", "));
-
-    let mut query = sqlx::query(&sql).bind(&member_id);
-    if let Some(ref role) = body.role {
-        query = query.bind(role);
-    }
-    if let Some(ref status) = body.status {
-        query = query.bind(status);
+    if let Some(ref new_role) = body.role {
+        sqlx::query("UPDATE platform_members SET role = $1, updated_at = NOW() WHERE id = $2")
+            .bind(new_role)
+            .bind(&member_id)
+            .execute(&state.db)
+            .await?;
     }
 
-    query.execute(&state.db).await?;
+    if let Some(ref new_status) = body.status {
+        sqlx::query("UPDATE platform_members SET status = $1, updated_at = NOW() WHERE id = $2")
+            .bind(new_status)
+            .bind(&member_id)
+            .execute(&state.db)
+            .await?;
+    }
 
     // If role changed to owner/admin, clear tenant assignments (they see all)
     if let Some(ref new_role) = body.role {
@@ -923,8 +913,7 @@ After the transaction commits, send the invite email:
         vec![]
     };
 
-    // Send invite email
-    let inviter_email = &claims.sub; // We'll use the claims email if available
+    // Send invite email — claims.sub is a user ID, look up email
     let inviter = sqlx::query_as::<_, (String,)>(
         "SELECT email FROM users WHERE id = $1"
     )
@@ -1550,7 +1539,11 @@ export function TeamView() {
               // Expanded detail
               createShow(
                 () => expandedId() === member.id && expandedDetail() != null,
-                () => MemberDetail(expandedDetail()!, () => loadTeamMemberDetail(member.id).then(setExpandedDetail)),
+                // createShow re-runs this callback when condition flips, giving fresh expandedDetail
+                () => MemberDetail(expandedDetail()!, async () => {
+                  const detail = await loadTeamMemberDetail(member.id);
+                  setExpandedDetail(detail);
+                }),
               ),
             ),
           ),
@@ -1625,7 +1618,8 @@ function DetailRow(label: string, value: string) {
 }
 
 function TenantAssigner(member: PlatformMember, onSave: () => void) {
-  const allTenants = tenants();
+  // Use reactive accessor for tenants list; member is fresh from createShow re-render
+  const allTenants = () => tenants();
   const assigned = new Set((member.tenants || []).map((t) => t.id));
   const [selected, setSelected] = createSignal<Set<string>>(assigned);
   const [saving, setSaving] = createSignal(false);
@@ -1639,7 +1633,7 @@ function TenantAssigner(member: PlatformMember, onSave: () => void) {
 
   return h('div', { class: 'team-tenant-assigner' },
     h('div', { class: 'team-tenant-checkboxes' },
-      ...allTenants.map((t) =>
+      () => allTenants().map((t) =>
         h('label', { class: 'team-tenant-checkbox' },
           h('input', {
             type: 'checkbox',
@@ -1672,7 +1666,6 @@ function InviteModal(onClose: () => void, onInvited: () => void) {
   const [inviteUrl, setInviteUrl] = createSignal<string | null>(null);
 
   const needsTenants = () => role() === 'editor' || role() === 'viewer';
-  const allTenants = tenants();
 
   async function submit() {
     if (!email().trim()) return;
@@ -1726,7 +1719,7 @@ function InviteModal(onClose: () => void, onInvited: () => void) {
             () => h('div', { class: 'modal-field' },
               h('label', null, 'Tenant Access'),
               h('div', { class: 'team-tenant-checkboxes' },
-                ...allTenants.map((t) =>
+                () => tenants().map((t) =>
                   h('label', { class: 'team-tenant-checkbox' },
                     h('input', {
                       type: 'checkbox',
@@ -1930,20 +1923,69 @@ createShow(
 ),
 ```
 
-- [ ] **Step 2: Disable workspace actions for viewers in workspace mode**
+- [ ] **Step 2: Add canEdit helper to store**
 
-In the workspace shell, viewers should not see destructive action buttons. The `platformRole()` signal is already available. For individual workspace views (OverviewView, etc.), the viewer enforcement is primarily server-side (403 on mutations). The UI can hide action buttons by checking `platformRole()` where needed.
-
-For now, add a general pattern:
+Add to `admin/src/platform/console/store.ts`:
 
 ```typescript
 export function canEdit(): boolean {
   const role = platformRole();
   return role === 'owner' || role === 'admin' || role === 'editor';
 }
+
+export function isOwner(): boolean {
+  return platformRole() === 'owner';
+}
 ```
 
-Add this to the store as a derived helper. Views can use `canEdit()` to conditionally show/hide edit buttons.
+- [ ] **Step 3: Audit and guard all mutation triggers across workspace views**
+
+The following buttons/actions across workspace views must be hidden or disabled for viewers. Wrap each in `createShow(() => canEdit(), ...)` or add `disabled: () => !canEdit()`:
+
+**OverviewView.ts:**
+- "Hide Checklist" button (line ~137)
+- Time window picker buttons are fine (they filter, not mutate)
+
+**UsersView.ts (Members tab):**
+- "Send Invite" button and invite form
+- "Block" / "Unblock" buttons on user rows
+- "Revoke Sessions" button
+
+**HostedPageView.ts:**
+- "Save" button for hosted page edits
+- All form inputs should be `disabled: () => !canEdit()`
+
+**IntegrateView.ts:**
+- Webhook create/edit/delete buttons
+- "Test Webhook" button
+
+**SecurityConfigView.ts:**
+- "Save" button for security config changes
+- All form inputs should be `disabled: () => !canEdit()`
+
+**OrganizationsView.ts:**
+- "Create Organization" button
+- "Add Member" form and button within org detail
+- "Remove Member" buttons
+
+**RolesView.ts:**
+- "Create Role" button
+- "Delete Role" buttons
+
+**SessionsView.ts:**
+- "Revoke" session buttons
+
+**PasskeysView.ts:**
+- "Delete" passkey buttons
+
+**TokensView.ts:**
+- "Rotate" management key button
+
+For each file: import `canEdit` from the store, then wrap the relevant action elements. The API also returns 403 for viewers as a safety net, but the UI should prevent the attempt.
+
+- [ ] **Step 4: Guard "New Workspace" and "Delete Tenant" for non-owner**
+
+In ConsoleApp.ts, also hide the delete tenant option (if present anywhere) for non-owners using `isOwner()`.
 
 - [ ] **Step 3: Build and verify**
 
