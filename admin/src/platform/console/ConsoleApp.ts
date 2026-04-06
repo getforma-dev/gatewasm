@@ -71,7 +71,7 @@ function TenantsList() {
               type: 'button',
               class: 'clip-btn',
               onClick: async () => {
-                const slug = 'my-app-' + Math.random().toString(36).slice(2, 6);
+                const slug = 'my-app-' + Math.random().toString(36).slice(2, 8);
                 const created = await createTenant({ name: 'My App', slug });
                 if (created) {
                   selectTenant(created);
@@ -144,7 +144,13 @@ function CreateTenantModal(onClose: () => void) {
   const [slugStatus, setSlugStatus] = createSignal<'idle' | 'checking' | 'available' | 'taken' | 'invalid'>('idle');
   const [slugWarn, setSlugWarn] = createSignal('');
   const [slugError, setSlugError] = createSignal('');
+  const [slugSuggestion, setSlugSuggestion] = createSignal('');
   let checkTimer: ReturnType<typeof setTimeout> | undefined;
+
+  function closeModal() {
+    clearTimeout(checkTimer);
+    onClose();
+  }
 
   function validateAndCheckSlug(raw: string, normalized: string) {
     clearTimeout(checkTimer);
@@ -190,9 +196,21 @@ function CreateTenantModal(onClose: () => void) {
     // All local checks pass — check availability
     setSlugStatus('checking');
     checkTimer = setTimeout(async () => {
-      const available = await checkSlugAvailability(normalized);
-      if (slug() === normalized) {
-        setSlugStatus(available ? 'available' : 'taken');
+      try {
+        const available = await checkSlugAvailability(normalized);
+        if (slug() === normalized) {
+          if (available) {
+            setSlugStatus('available');
+          } else {
+            setSlugStatus('taken');
+            setSlugSuggestion(normalized + '-' + Math.random().toString(36).slice(2, 5));
+          }
+        }
+      } catch {
+        // Network error — don't show false "available", reset to idle
+        if (slug() === normalized) {
+          setSlugStatus('idle');
+        }
       }
     }, 500);
   }
@@ -200,10 +218,9 @@ function CreateTenantModal(onClose: () => void) {
   function handleNameChange(value: string) {
     setName(value);
     if (!slugEdited()) {
-      const raw = value.trim().toLowerCase();
       const normalized = normalizeTenantSlugInput(value);
       setSlug(normalized);
-      validateAndCheckSlug(raw, normalized);
+      validateAndCheckSlug(normalized, normalized);
     }
   }
 
@@ -212,9 +229,12 @@ function CreateTenantModal(onClose: () => void) {
     const input = e.target as HTMLInputElement;
     const raw = input.value;
     const normalized = normalizeTenantSlugInput(raw);
-    // Force the DOM input to show the normalized value (strips invalid chars in real-time)
     if (input.value !== normalized) {
+      const pos = input.selectionStart ?? normalized.length;
+      const removed = raw.length - normalized.length;
       input.value = normalized;
+      const newPos = Math.max(0, pos - removed);
+      input.setSelectionRange(newPos, newPos);
     }
     setSlug(normalized);
     validateAndCheckSlug(raw.trim().toLowerCase(), normalized);
@@ -222,6 +242,7 @@ function CreateTenantModal(onClose: () => void) {
 
   async function handleSubmit(event: Event) {
     event.preventDefault();
+    clearTimeout(checkTimer);
     const nextName = name().trim();
     const nextSlug = slug().trim();
     if (!nextName) { toast.show('App name is required', 'error'); return; }
@@ -231,12 +252,12 @@ function CreateTenantModal(onClose: () => void) {
     const created = await createTenant({ name: nextName, slug: nextSlug });
     setSaving(false);
     if (!created) return;
-    onClose();
+    closeModal();
     selectTenant(created);
   }
 
   return h('div', { class: 'modal-overlay', onClick: (e: Event) => {
-    if ((e.target as HTMLElement).classList.contains('modal-overlay')) onClose();
+    if ((e.target as HTMLElement).classList.contains('modal-overlay')) closeModal();
   }},
     h('div', { class: 'modal-content' },
       h('div', { class: 'modal-header' },
@@ -244,7 +265,7 @@ function CreateTenantModal(onClose: () => void) {
         h('button', {
           type: 'button',
           class: 'modal-close',
-          onClick: onClose,
+          onClick: closeModal,
         }, '\u00D7'),
       ),
       h('p', { class: 'card-copy', style: 'padding: 0 var(--space-lg)' },
@@ -293,23 +314,21 @@ function CreateTenantModal(onClose: () => void) {
           ),
           createShow(
             () => slugStatus() === 'taken',
-            () => {
-              const suggestion = slug() + '-' + Math.random().toString(36).slice(2, 5);
-              return h('div', { class: 'slug-status-taken' },
-                h('span', null, '\u2717 Already taken'),
-                h('button', {
-                  type: 'button',
-                  class: 'slug-suggestion',
-                  onClick: () => {
-                    const input = document.getElementById('field-tenant-slug') as HTMLInputElement;
-                    if (input) input.value = suggestion;
-                    setSlug(suggestion);
-                    setSlugEdited(true);
-                    validateAndCheckSlug(suggestion, suggestion);
-                  },
-                }, 'Try ' + suggestion),
-              );
-            },
+            () => h('div', { class: 'slug-status-taken' },
+              h('span', null, '\u2717 Already taken'),
+              h('button', {
+                type: 'button',
+                class: 'slug-suggestion',
+                onClick: () => {
+                  const s = slugSuggestion();
+                  const input = document.getElementById('field-tenant-slug') as HTMLInputElement;
+                  if (input) input.value = s;
+                  setSlug(s);
+                  setSlugEdited(true);
+                  validateAndCheckSlug(s, s);
+                },
+              }, () => 'Try ' + slugSuggestion()),
+            ),
           ),
         ),
         h('div', { class: 'tenant-create-preview' },
@@ -322,7 +341,7 @@ function CreateTenantModal(onClose: () => void) {
           h('button', {
             type: 'button',
             class: 'btn btn-ghost btn-sm',
-            onClick: onClose,
+            onClick: closeModal,
           }, 'Cancel'),
           h('button', {
             type: 'submit',

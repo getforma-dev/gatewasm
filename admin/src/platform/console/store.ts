@@ -721,14 +721,10 @@ export async function createTenant(fields: { name: string; slug: string }): Prom
 }
 
 export async function checkSlugAvailability(slug: string): Promise<boolean> {
-  try {
-    const data = await api.get<{ available: boolean }>(
-      '/platform/self-serve/check-slug/' + encodeURIComponent(slug),
-    );
-    return data.available;
-  } catch {
-    return true; // Assume available on error — will fail at creation time if not
-  }
+  const data = await api.get<{ available: boolean }>(
+    '/platform/self-serve/check-slug/' + encodeURIComponent(slug),
+  );
+  return data.available;
 }
 
 export async function pollTenantStats(id: string): Promise<TenantStats> {
@@ -1475,6 +1471,7 @@ export function initRouting(): void {
         switchToWorkspaceInternal(tenant);
       } else {
         switchToAccountInternal();
+        history.replaceState(null, '', '/platform/console');
       }
     } else {
       switchToAccountInternal();
@@ -1499,6 +1496,8 @@ export async function init(): Promise<void> {
         auth.startAutoRefresh();
         return;
       }
+      // Slug not found — clean up the URL
+      history.replaceState(null, '', '/platform/console');
     }
 
     await restoreWorkspaceState();
