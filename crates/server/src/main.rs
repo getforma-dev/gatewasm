@@ -292,6 +292,30 @@ async fn bootstrap_platform_plane(pool: &PgPool, config: &AppConfig) {
             }
         }
     }
+
+    // ── Ensure platform_members row exists for each owner ────────────
+    for owner_email in &config.platform_owner_emails {
+        let owner_user = sqlx::query_as::<_, (String,)>(
+            "SELECT id FROM users WHERE lower(email) = lower($1) AND tenant_id = 'ten_platform'"
+        )
+        .bind(owner_email)
+        .fetch_optional(pool)
+        .await;
+
+        if let Ok(Some((user_id,))) = owner_user {
+            sqlx::query(
+                "INSERT INTO platform_members (id, user_id, role, status, created_at, updated_at)
+                 VALUES ($1, $2, 'owner', 'active', NOW(), NOW())
+                 ON CONFLICT (user_id) DO UPDATE SET role = 'owner', updated_at = NOW()"
+            )
+            .bind(format!("pmem_{}", uuid::Uuid::new_v4()))
+            .bind(&user_id)
+            .execute(pool)
+            .await
+            .ok();
+            tracing::info!(email = %owner_email, "platform_members: owner row ensured");
+        }
+    }
 }
 
 fn auth_plane_for_path(path: &str) -> &'static str {
