@@ -1,5 +1,5 @@
 import { h, createSignal, createShow } from 'formajs';
-import { currentUser, loadLoginHistory, loadMfaStatus, signout } from '../store';
+import { currentUser, loadLoginHistory, loadMfaStatus, signout, myPasskeys, loadMyPasskeys, renameMyPasskey, deleteMyPasskey, type MyPasskey } from '../store';
 
 export function AccountSettingsView() {
   const [loginHistory, setLoginHistory] = createSignal<any[]>([]);
@@ -9,6 +9,7 @@ export function AccountSettingsView() {
   // Load data on mount
   loadLoginHistory().then((h) => { setLoginHistory(h); setHistoryLoaded(true); });
   loadMfaStatus().then((s) => setMfaStatus(s));
+  loadMyPasskeys();
 
   return h('div', { class: 'console-view' },
     h('div', { class: 'view-header' },
@@ -56,6 +57,21 @@ export function AccountSettingsView() {
               : null,
           );
         },
+      ),
+    ),
+
+    // ── Passkeys Section ──────────────────────────────────────────────
+    h('section', { class: 'console-card' },
+      h('div', { class: 'card-label' }, 'Passkeys'),
+      createShow(
+        () => myPasskeys().length === 0,
+        () => h('p', { class: 'card-copy' }, 'No passkeys registered. Use your tenant login flow to register WebAuthn credentials.'),
+      ),
+      createShow(
+        () => myPasskeys().length > 0,
+        () => h('div', { class: 'user-list user-list-shell' },
+          () => myPasskeys().map((pk: MyPasskey) => PasskeyRow(pk)),
+        ),
       ),
     ),
 
@@ -118,5 +134,67 @@ function DetailRow(label: string, value: string) {
   return h('div', { class: 'detail-row' },
     h('span', { class: 'detail-label' }, label),
     h('span', { class: 'detail-value' }, value),
+  );
+}
+
+function PasskeyRow(pk: MyPasskey) {
+  const [editing, setEditing] = createSignal(false);
+  const [newName, setNewName] = createSignal(pk.name);
+
+  return h('div', { class: 'user-row' },
+    h('div', { class: 'user-row-summary' },
+      h('div', { class: 'user-row-main' },
+        createShow(
+          () => !editing(),
+          () => h('div', null,
+            h('div', { class: 'user-email' },
+              pk.name,
+              pk.is_synced
+                ? h('span', { class: 'badge badge-subtle' }, 'Synced')
+                : h('span', { class: 'badge badge-subtle' }, 'Device-bound'),
+            ),
+            h('div', { class: 'user-meta text-muted' },
+              'Registered ' + new Date(pk.created_at).toLocaleDateString(),
+              pk.last_used_at
+                ? ' \u00b7 Last used ' + new Date(pk.last_used_at).toLocaleDateString()
+                : ' \u00b7 Never used',
+            ),
+          ),
+        ),
+        createShow(
+          editing,
+          () => h('div', { class: 'invite-form-row' },
+            h('input', {
+              type: 'text',
+              class: 'search-input',
+              value: newName,
+              onInput: (e: Event) => setNewName((e.target as HTMLInputElement).value),
+            }),
+            h('button', {
+              class: 'btn btn-sm btn-primary',
+              onClick: async () => {
+                await renameMyPasskey(pk.id, newName());
+                setEditing(false);
+              },
+            }, 'Save'),
+            h('button', {
+              class: 'btn btn-sm btn-ghost',
+              onClick: () => { setEditing(false); setNewName(pk.name); },
+            }, 'Cancel'),
+          ),
+        ),
+      ),
+      h('div', { class: 'user-actions' },
+        h('button', {
+          class: 'btn btn-sm btn-ghost',
+          onClick: () => setEditing(!editing()),
+        }, 'Rename'),
+        h('button', {
+          class: 'btn btn-sm btn-ghost',
+          style: 'color: var(--danger)',
+          onClick: () => void deleteMyPasskey(pk.id),
+        }, 'Delete'),
+      ),
+    ),
   );
 }

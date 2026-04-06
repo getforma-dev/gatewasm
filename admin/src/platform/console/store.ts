@@ -208,6 +208,15 @@ export interface PlatformUser {
   mfa_enabled: boolean;
 }
 
+export interface MyPasskey {
+  id: string;
+  name: string;
+  created_at: string;
+  last_used_at: string | null;
+  is_synced: boolean;
+  transports: string[];
+}
+
 export type ConsoleView =
   | 'overview'
   | 'integrate'
@@ -314,6 +323,7 @@ export const [invitesLoading, setInvitesLoading] = createSignal(false);
 export const [organizations, setOrganizations] = createSignal<Organization[]>([]);
 export const [organizationsLoading, setOrganizationsLoading] = createSignal(false);
 export const [userDetail, setUserDetail] = createSignal<UserDetail | null>(null);
+export const [myPasskeys, setMyPasskeys] = createSignal<MyPasskey[]>([]);
 
 let tenantDetailRequestSeq = 0;
 let usersRequestSeq = 0;
@@ -576,6 +586,36 @@ export async function loadMfaStatus(): Promise<any> {
     return await api.get<any>('/auth/mfa/status');
   } catch {
     return null;
+  }
+}
+
+export async function loadMyPasskeys(): Promise<void> {
+  try {
+    const data = await api.get<{ credentials: MyPasskey[] }>('/auth/webauthn/credentials');
+    setMyPasskeys(data.credentials || []);
+  } catch { setMyPasskeys([]); }
+}
+
+export async function renameMyPasskey(id: string, name: string): Promise<void> {
+  try {
+    await api.request('/auth/webauthn/credentials/' + encodeURIComponent(id), {
+      method: 'PATCH',
+      body: { name },
+    });
+    toast.show('Passkey renamed', 'success');
+    await loadMyPasskeys();
+  } catch (e) {
+    toast.show(e instanceof Error ? e.message : 'Failed to rename passkey', 'error');
+  }
+}
+
+export async function deleteMyPasskey(id: string): Promise<void> {
+  try {
+    await api.del('/auth/webauthn/credentials/' + encodeURIComponent(id));
+    toast.show('Passkey deleted', 'success');
+    await loadMyPasskeys();
+  } catch (e) {
+    toast.show(e instanceof Error ? e.message : 'Failed to delete passkey', 'error');
   }
 }
 
