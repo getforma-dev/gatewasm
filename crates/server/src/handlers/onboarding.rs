@@ -1584,11 +1584,7 @@ pub async fn list_tenant_audit_log(
         })
         .collect();
 
-    Ok(Json(serde_json::json!({
-        "audit_log": entries,
-        "limit": limit,
-        "offset": offset,
-    })))
+    Ok(Json(serde_json::json!({ "audit_log": entries })))
 }
 
 /// GET /platform/self-serve/tenants/{id}/sessions
@@ -1807,7 +1803,7 @@ pub async fn create_tenant_role(
     })?;
     let description = body["description"].as_str().map(String::from);
     let permissions = body.get("permissions").cloned().unwrap_or(serde_json::json!([]));
-    let role_id = format!("role_{}", name.to_lowercase().replace(' ', "_"));
+    let role_id = format!("role_{}", uuid::Uuid::new_v4());
 
     sqlx::query(
         "INSERT INTO roles (id, name, description, permissions_jsonb, tenant_id, is_system, created_at) \
@@ -1861,9 +1857,9 @@ pub async fn update_tenant_role(
         message: "Tenant not found".into(),
     })?;
 
-    // Verify role exists and is custom (not system)
+    // Verify role exists in this tenant and is custom (not system)
     let is_system: bool = sqlx::query_scalar(
-        "SELECT is_system FROM roles WHERE id = $1 AND (tenant_id IS NULL OR tenant_id = $2)",
+        "SELECT is_system FROM roles WHERE id = $1 AND tenant_id = $2",
     )
     .bind(&role_id)
     .bind(&tenant_id)
@@ -1967,8 +1963,9 @@ pub async fn delete_tenant_role(
         });
     }
 
-    sqlx::query("DELETE FROM user_roles WHERE role_id = $1")
+    sqlx::query("DELETE FROM user_roles WHERE role_id = $1 AND tenant_id = $2")
         .bind(&role_id)
+        .bind(&tenant_id)
         .execute(&state.db)
         .await?;
 

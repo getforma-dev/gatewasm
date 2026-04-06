@@ -24,7 +24,7 @@ export function TokensView() {
       createShow(
         () => jwks() != null,
         () => {
-          const keys = jwks().keys || [];
+          const keys = jwks()?.keys || [];
           return h('div', { class: 'stack-sm' },
             ...keys.map((key: any) =>
               h('div', { class: 'console-card' },
