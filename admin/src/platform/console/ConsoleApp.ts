@@ -663,7 +663,7 @@ export function ConsoleApp() {
               view: () => view(),
               onPlaneSwitch: (p: Plane) => setPlane(p),
               onTabSwitch: (v: ConsoleView) => navigateTenantView(v),
-              onSettings: () => backToTenants(),
+              onSettings: () => { backToTenants(); setAccountTab('account-settings'); },
               onSignOut: () => void signout(),
               onThemeToggle: handleThemeToggle,
               themeLabel: () => themeMode() === 'dark' ? 'Light Mode' : 'Dark Mode',

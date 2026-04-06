@@ -202,7 +202,7 @@ export function PlaneNav(props: PlaneNavProps) {
           setMenuOpen(false);
           props.onSettings();
         },
-      }, 'Settings'),
+      }, 'Account Settings'),
       h('button', {
         type: 'button',
         class: 'plane-avatar-menu-item hv',
