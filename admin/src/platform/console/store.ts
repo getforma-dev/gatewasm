@@ -1283,12 +1283,18 @@ function preferredTenantView(tenant: Tenant): TenantWorkspaceView {
 }
 
 async function hydrateTenantView(nextView: TenantWorkspaceView, tenant: Tenant): Promise<void> {
-  const tasks: Promise<void>[] = [
-    loadTenantDetail(tenant.id, overviewWindow()),
-    loadIntrospect(tenant.slug),
-  ];
+  const tasks: Promise<void>[] = [];
 
-  syncIntrospectRefresh(tenant.slug);
+  // Only load tenant detail for overview (stats dashboard) — not every tab switch
+  if (nextView === 'overview') {
+    tasks.push(loadTenantDetail(tenant.id, overviewWindow()));
+  }
+
+  // Only load introspect for integrate view (Auth Reference live preview)
+  if (nextView === 'integrate') {
+    tasks.push(loadIntrospect(tenant.slug));
+    syncIntrospectRefresh(tenant.slug);
+  }
 
   if (nextView === 'members') {
     tasks.push(loadUsers(tenant.id));
@@ -1413,7 +1419,14 @@ export function selectTenant(tenant: Tenant): void {
   });
 
   persistWorkspaceState();
-  void hydrateTenantView(nextView, tenant);
+
+  // Load tenant detail + introspect once on tenant selection, plus view-specific data
+  void Promise.all([
+    loadTenantDetail(tenant.id, overviewWindow()),
+    loadIntrospect(tenant.slug),
+    hydrateTenantView(nextView, tenant),
+  ]);
+  syncIntrospectRefresh(tenant.slug);
 }
 
 export function backToTenants(): void {
