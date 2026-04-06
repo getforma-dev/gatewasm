@@ -18,6 +18,8 @@ import { SessionsView } from './views/SessionsView';
 import { PasskeysView } from './views/PasskeysView';
 import { RolesView } from './views/RolesView';
 import { TokensView } from './views/TokensView';
+import { ApiKeysView } from './views/ApiKeysView';
+import { AccountSettingsView } from './views/AccountSettingsView';
 import {
   view, loading, toast, backToTenants, signout,
   selectedTenant, tenants, selectTenant, createTenant, currentUser,
@@ -196,17 +198,6 @@ function TenantCreatePanel() {
   );
 }
 
-function ComingSoonView(label: string) {
-  return h('div', { class: 'console-view' },
-    h('div', { class: 'view-header' },
-      h('div', { class: 'view-eyebrow' }, 'Coming Soon'),
-      h('h2', { class: 'view-title' }, label),
-      h('p', { class: 'view-subtitle text-muted' },
-        'API endpoints are ready \u2014 dashboard view coming next.',
-      ),
-    ),
-  );
-}
 
 function AccountTabBtn(id: AccountTab, label: string) {
   return h('button', {
@@ -263,8 +254,8 @@ export function ConsoleApp() {
             accountTab,
             [
               { match: 'tenants', render: () => TenantsList() },
-              { match: 'api-keys', render: () => ComingSoonView('API Keys') },
-              { match: 'account-settings', render: () => ComingSoonView('Account Settings') },
+              { match: 'api-keys', render: () => ApiKeysView() },
+              { match: 'account-settings', render: () => AccountSettingsView() },
             ],
           ),
         ),

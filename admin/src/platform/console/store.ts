@@ -455,6 +455,23 @@ export async function loadTenants(): Promise<void> {
   }
 }
 
+export async function rotateTenantKey(tenantId: string): Promise<string | null> {
+  try {
+    const data = await api.post<{ api_key: string }>(
+      '/platform/self-serve/tenants/' + encodeURIComponent(tenantId) + '/rotate-key', {},
+    );
+    toast.show('API key rotated', 'success');
+    const updated = tenants().map((t) =>
+      t.id === tenantId ? { ...t, management_api_key: data.api_key } : t,
+    );
+    setTenants(updated);
+    return data.api_key;
+  } catch (e) {
+    toast.show(e instanceof Error ? e.message : 'Failed to rotate key', 'error');
+    return null;
+  }
+}
+
 export async function loadCurrentUser(): Promise<void> {
   try {
     const data = await api.get<PlatformUser>('/auth/me');
@@ -462,6 +479,23 @@ export async function loadCurrentUser(): Promise<void> {
   } catch (e) {
     setCurrentUser(null);
     toast.show(e instanceof Error ? e.message : 'Failed to load account profile', 'error');
+  }
+}
+
+export async function loadLoginHistory(): Promise<any[]> {
+  try {
+    const data = await api.get<{ history: any[] }>('/auth/login-history');
+    return data.history || [];
+  } catch {
+    return [];
+  }
+}
+
+export async function loadMfaStatus(): Promise<any> {
+  try {
+    return await api.get<any>('/auth/mfa/status');
+  } catch {
+    return null;
   }
 }
 
