@@ -428,7 +428,10 @@ function authStatusCard() {
       ),
       h('div', { class: 'card-actions' },
         h('a', {
-          href: () => '/t/' + selectedTenant()!.slug + '/login?redirect=/t/' + selectedTenant()!.slug + '/site',
+          href: () => {
+            const t = selectedTenant();
+            return t ? '/t/' + t.slug + '/login?redirect=/t/' + t.slug + '/site' : '#';
+          },
           target: '_blank',
           class: 'btn btn-primary btn-sm',
         }, 'Start tenant sign-in'),
