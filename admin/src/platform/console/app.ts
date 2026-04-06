@@ -8,7 +8,7 @@
 import { mount } from 'formajs';
 import { initThemeMode } from '../../core/utils';
 import { ConsoleApp } from './ConsoleApp';
-import { init } from './store';
+import { init, initRouting } from './store';
 
 initThemeMode();
 
@@ -21,5 +21,8 @@ if (location.hostname === 'localhost') {
 // Store is a singleton module — ConsoleApp imports deps directly.
 // init() rejects on auth failure (redirects to login).
 init()
-  .then(() => mount(() => ConsoleApp(), '#app'))
+  .then(() => {
+    initRouting();
+    mount(() => ConsoleApp(), '#app');
+  })
   .catch(() => {});

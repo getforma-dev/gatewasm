@@ -1407,9 +1407,9 @@ export async function refreshCurrentView(): Promise<void> {
 
 // ── Navigation ──────────────────────────────────────────────────────────
 
-export function selectTenant(tenant: Tenant): void {
+// Internal: switch to workspace mode without pushing history
+function switchToWorkspaceInternal(tenant: Tenant): void {
   const nextView = preferredTenantView(tenant);
-
   batch(() => {
     setSelectedTenant(tenant);
     resetTenantScopedState();
@@ -1417,10 +1417,7 @@ export function selectTenant(tenant: Tenant): void {
     setPlaneSignal(planeForView(nextView));
     setMode('workspace');
   });
-
   persistWorkspaceState();
-
-  // Load tenant detail + introspect once on tenant selection, plus view-specific data
   void Promise.all([
     loadTenantDetail(tenant.id, overviewWindow()),
     loadIntrospect(tenant.slug),
@@ -1429,9 +1426,9 @@ export function selectTenant(tenant: Tenant): void {
   syncIntrospectRefresh(tenant.slug);
 }
 
-export function backToTenants(): void {
+// Internal: switch to account mode without pushing history
+function switchToAccountInternal(): void {
   clearOverviewRefresh();
-
   batch(() => {
     tenantDetailRequestSeq += 1;
     usersRequestSeq += 1;
@@ -1446,13 +1443,61 @@ export function backToTenants(): void {
   persistWorkspaceState();
 }
 
+export function selectTenant(tenant: Tenant): void {
+  switchToWorkspaceInternal(tenant);
+  history.pushState({ slug: tenant.slug }, '', '/platform/console/' + tenant.slug);
+}
+
+export function backToTenants(): void {
+  switchToAccountInternal();
+  history.pushState(null, '', '/platform/console');
+}
+
+export function initRouting(): void {
+  window.addEventListener('popstate', () => {
+    const path = window.location.pathname;
+    const match = path.match(/^\/platform\/console\/([^/]+)/);
+    if (match) {
+      const slug = match[1];
+      const tenant = tenants().find((t) => t.slug === slug);
+      if (tenant) {
+        switchToWorkspaceInternal(tenant);
+      } else {
+        switchToAccountInternal();
+      }
+    } else {
+      switchToAccountInternal();
+    }
+  });
+}
+
 // ── Lifecycle ───────────────────────────────────────────────────────────
 
 export async function init(): Promise<void> {
   try {
     await auth.silentRefresh();
     await Promise.all([loadTenants(), loadCurrentUser()]);
+
+    // Check URL for tenant slug — takes priority over localStorage
+    const urlMatch = window.location.pathname.match(/^\/platform\/console\/([^/]+)/);
+    if (urlMatch) {
+      const slug = urlMatch[1];
+      const tenant = tenants().find((t) => t.slug === slug);
+      if (tenant) {
+        switchToWorkspaceInternal(tenant);
+        auth.startAutoRefresh();
+        return;
+      }
+    }
+
     await restoreWorkspaceState();
+
+    // After restore, sync URL with restored state
+    const sel = selectedTenant();
+    if (sel && mode() === 'workspace') {
+      history.replaceState({ slug: sel.slug }, '', '/platform/console/' + sel.slug);
+    }
+
     auth.startAutoRefresh();
   } catch {
     window.location.href = '/platform/login';
