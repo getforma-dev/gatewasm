@@ -1801,6 +1801,21 @@ pub async fn create_tenant_role(
         error: "missing_name",
         message: "Role name is required".into(),
     })?;
+
+    if name.is_empty() || name.len() > 64 {
+        return Err(AppError::BadRequest {
+            error: "invalid_name",
+            message: "Role name must be 1-64 characters".into(),
+        });
+    }
+
+    if !name.chars().all(|c| c.is_alphanumeric() || c == '_' || c == '-' || c == ' ') {
+        return Err(AppError::BadRequest {
+            error: "invalid_name",
+            message: "Role name may only contain letters, numbers, spaces, hyphens, and underscores".into(),
+        });
+    }
+
     let description = body["description"].as_str().map(String::from);
     let permissions = body.get("permissions").cloned().unwrap_or(serde_json::json!([]));
     let role_id = format!("role_{}", uuid::Uuid::new_v4());

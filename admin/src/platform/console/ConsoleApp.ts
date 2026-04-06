@@ -7,6 +7,7 @@ import { getThemeMode, toggleThemeMode, type ThemeMode } from '../../core/utils'
 import { normalizeTenantSlugInput } from '../tenantSlug';
 import { CommandPalette, type CommandPaletteSection } from './CommandPalette';
 import { PlaneNav } from './views/PlaneNav';
+import { userDisplayName, userInitials } from './helpers';
 import { OverviewView } from './views/OverviewView';
 import { UsersView } from './views/UsersView';
 import { IntegrateView } from './views/IntegrateView';
@@ -207,65 +208,12 @@ function ComingSoonView(label: string) {
   );
 }
 
-function userDisplayName(name: string | null | undefined, email: string): string {
-  const trimmed = (name || '').trim();
-  if (trimmed) return trimmed;
-  const local = email.split('@')[0] || email;
-  return local.replace(/[._-]+/g, ' ');
-}
-
-function userInitials(name: string | null | undefined, email: string): string {
-  const parts = userDisplayName(name, email).split(/\s+/).filter(Boolean);
-  if (parts.length === 0) return email.slice(0, 2).toUpperCase();
-  return parts.slice(0, 2).map((p) => p[0] || '').join('').toUpperCase() || email.slice(0, 2).toUpperCase();
-}
-
 function AccountTabBtn(id: AccountTab, label: string) {
   return h('button', {
     type: 'button',
     class: () => 'account-tab' + (accountTab() === id ? ' active' : ''),
     onClick: () => setAccountTab(id),
   }, label);
-}
-
-function AccountShell() {
-  return h('div', { class: 'account-shell' },
-    h('header', { class: 'account-header' },
-      h('div', { class: 'account-header-left' },
-        h('div', { class: 'plane-logo-mark' }),
-        h('span', { class: 'plane-product-name' }, 'GateWASM'),
-      ),
-      h('div', { class: 'account-header-right' },
-        h('button', {
-          type: 'button',
-          class: 'plane-avatar hv',
-          onClick: () => void signout(),
-          title: 'Sign out',
-        }, () => {
-          const u = currentUser();
-          return u ? userInitials(u.name, u.email) : '--';
-        }),
-      ),
-    ),
-    h('div', { class: 'account-tabs' },
-      AccountTabBtn('tenants', 'Tenants'),
-      AccountTabBtn('api-keys', 'API Keys'),
-      AccountTabBtn('account-settings', 'Settings'),
-    ),
-    h('div', { class: 'account-stage' },
-      h('main', { class: 'main page-enter' },
-        LoadingBar(() => loading()),
-        createSwitch(
-          accountTab,
-          [
-            { match: 'tenants', render: () => TenantsList() },
-            { match: 'api-keys', render: () => ComingSoonView('API Keys') },
-            { match: 'account-settings', render: () => ComingSoonView('Account Settings') },
-          ],
-        ),
-      ),
-    ),
-  );
 }
 
 export function ConsoleApp() {
@@ -277,6 +225,52 @@ export function ConsoleApp() {
   const handleThemeToggle = () => {
     setThemeMode(toggleThemeMode(themeMode()));
   };
+
+  function AccountShell() {
+    return h('div', { class: 'account-shell' },
+      h('header', { class: 'account-header' },
+        h('div', { class: 'account-header-left' },
+          h('div', { class: 'plane-logo-mark' }),
+          h('span', { class: 'plane-product-name' }, 'GateWASM'),
+        ),
+        h('div', { class: 'account-header-right' },
+          h('button', {
+            type: 'button',
+            class: 'plane-avatar hv',
+            onClick: handleThemeToggle,
+            title: () => themeMode() === 'dark' ? 'Switch to light mode' : 'Switch to dark mode',
+          }, () => themeMode() === 'dark' ? '\u263E' : '\u2600'),
+          h('button', {
+            type: 'button',
+            class: 'plane-avatar hv',
+            onClick: () => void signout(),
+            title: 'Sign out',
+          }, () => {
+            const u = currentUser();
+            return u ? userInitials(u.name, u.email) : '--';
+          }),
+        ),
+      ),
+      h('div', { class: 'account-tabs' },
+        AccountTabBtn('tenants', 'Tenants'),
+        AccountTabBtn('api-keys', 'API Keys'),
+        AccountTabBtn('account-settings', 'Settings'),
+      ),
+      h('div', { class: 'account-stage' },
+        h('main', { class: 'main page-enter' },
+          LoadingBar(() => loading()),
+          createSwitch(
+            accountTab,
+            [
+              { match: 'tenants', render: () => TenantsList() },
+              { match: 'api-keys', render: () => ComingSoonView('API Keys') },
+              { match: 'account-settings', render: () => ComingSoonView('Account Settings') },
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 
   const openCommandPalette = () => setPaletteOpen(true);
   const closeCommandPalette = () => setPaletteOpen(false);
@@ -491,6 +485,8 @@ export function ConsoleApp() {
               onTabSwitch: (v: ConsoleView) => navigateTenantView(v),
               onSettings: () => backToTenants(),
               onSignOut: () => void signout(),
+              onThemeToggle: handleThemeToggle,
+              themeLabel: () => themeMode() === 'dark' ? 'Light Mode' : 'Dark Mode',
               user: () => currentUser(),
               tenant: () => selectedTenant(),
               tenants: () => tenants(),

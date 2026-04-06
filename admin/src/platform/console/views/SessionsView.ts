@@ -1,4 +1,4 @@
-import { h, createSignal, createShow } from 'formajs';
+import { h, createShow } from 'formajs';
 import { Skeleton } from '../../../core/components/ui/Skeleton';
 import {
   selectedTenant, allSessions, allSessionsLoading,
@@ -47,20 +47,10 @@ export function SessionsView() {
 }
 
 function SessionRow(s: TenantSession) {
-  const [timeLeft, setTimeLeft] = createSignal(formatTimeLeft(Date.parse(s.expires_at)));
-  const timer = setInterval(() => setTimeLeft(formatTimeLeft(Date.parse(s.expires_at))), 1000);
-  setTimeout(() => {
-    const check = setInterval(() => {
-      if (!document.querySelector('.sess-' + s.id.slice(0, 8))) {
-        clearInterval(timer);
-        clearInterval(check);
-      }
-    }, 5000);
-  }, 0);
-
   const tenantId = selectedTenant()?.id || '';
+  const timeLeft = formatTimeLeft(Date.parse(s.expires_at));
 
-  return h('div', { class: 'user-row sess-' + s.id.slice(0, 8) },
+  return h('div', { class: 'user-row' },
     h('div', { class: 'user-row-summary' },
       h('div', { class: 'user-row-main' },
         h('div', { class: 'user-email' },
@@ -69,7 +59,7 @@ function SessionRow(s: TenantSession) {
         ),
         h('div', { class: 'user-meta text-muted' },
           (s.login_ip || 'Unknown IP') + ' \u00b7 ' + new Date(s.created_at).toLocaleString(),
-          h('span', { class: 'session-card-expiry' }, ' \u00b7 ' + timeLeft()),
+          h('span', { class: 'session-card-expiry' }, ' \u00b7 ' + timeLeft),
         ),
       ),
       h('button', {

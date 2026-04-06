@@ -1,5 +1,6 @@
 import { h, createSignal, createShow, onCleanup } from 'formajs';
 import { PLANES, type Plane, type ConsoleView, type PlatformUser, type Tenant } from '../store';
+import { userDisplayName, userInitials } from '../helpers';
 
 // ── Accent colors per plane ────────────────────────────────────────────────
 
@@ -8,30 +9,6 @@ const PLANE_ACCENTS: Record<Plane, string> = {
   organization: '#2E9BFF',
   enduser: '#1EDC82',
 };
-
-// ── Helpers ─────────────────────────────────────────────────────────────────
-
-function userDisplayName(name: string | null | undefined, email: string): string {
-  const trimmed = (name || '').trim();
-  if (trimmed) return trimmed;
-  const local = email.split('@')[0] || email;
-  return local.replace(/[._-]+/g, ' ');
-}
-
-function userInitials(name: string | null | undefined, email: string): string {
-  const source = userDisplayName(name, email)
-    .split(/\s+/)
-    .map((part) => part.trim())
-    .filter(Boolean);
-
-  if (source.length === 0) return email.slice(0, 2).toUpperCase();
-
-  return source
-    .slice(0, 2)
-    .map((part) => part[0] || '')
-    .join('')
-    .toUpperCase() || email.slice(0, 2).toUpperCase();
-}
 
 // ── Props ───────────────────────────────────────────────────────────────────
 
@@ -42,6 +19,8 @@ export interface PlaneNavProps {
   onTabSwitch: (view: ConsoleView) => void;
   onSettings: () => void;
   onSignOut: () => void;
+  onThemeToggle: () => void;
+  themeLabel: () => string;
   user: () => PlatformUser | null;
   tenant: () => Tenant | null;
   tenants: () => Tenant[];
@@ -199,9 +178,9 @@ export function PlaneNav(props: PlaneNavProps) {
   );
 
   const headerCenter = h('div', { class: 'plane-header-center' },
-    h('span', { class: 'plane-status-dot' }),
+    h('span', { class: 'plane-status-dot', 'aria-label': 'System status: online' }),
     h('span', { class: 'plane-status' }, 'ONLINE'),
-    h('span', { class: 'plane-status' }, uptime),
+    h('span', { class: 'plane-status', 'aria-live': 'off', 'aria-label': 'Session uptime' }, uptime),
   );
 
   const avatarMenu = createShow(
@@ -228,6 +207,15 @@ export function PlaneNav(props: PlaneNavProps) {
           props.onSettings();
         },
       }, 'Settings'),
+      h('button', {
+        type: 'button',
+        class: 'plane-avatar-menu-item hv',
+        role: 'menuitem',
+        onClick: () => {
+          setMenuOpen(false);
+          props.onThemeToggle();
+        },
+      }, () => props.themeLabel()),
       h('button', {
         type: 'button',
         class: 'plane-avatar-menu-item plane-avatar-menu-item-danger hv',
