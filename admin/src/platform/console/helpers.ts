@@ -1,6 +1,9 @@
 import { h } from 'formajs';
 
+let _markSeq = 0;
+
 export function FAuthMark(size: number = 28) {
+  const gid = 'fauth-g-' + (++_markSeq);
   const height = Math.round(size * 34 / 28);
   return h('svg', {
     width: String(size), height: String(height),
@@ -8,14 +11,14 @@ export function FAuthMark(size: number = 28) {
     class: 'fauth-mark',
   },
     h('defs', null,
-      h('linearGradient', { id: 'fauth-g', x1: '50', y1: '0', x2: '50', y2: '120', gradientUnits: 'userSpaceOnUse' },
+      h('linearGradient', { id: gid, x1: '50', y1: '0', x2: '50', y2: '120', gradientUnits: 'userSpaceOnUse' },
         h('stop', { offset: '0%', 'stop-color': '#c4a265', 'stop-opacity': '0.14' }),
         h('stop', { offset: '100%', 'stop-color': '#c4a265', 'stop-opacity': '0.03' }),
       ),
     ),
-    h('path', { d: 'M6 4L94 4L100 10L100 78L50 118L0 78L0 10Z', fill: 'url(#fauth-g)' }),
+    h('path', { d: 'M6 4L94 4L100 10L100 78L50 118L0 78L0 10Z', fill: 'url(#' + gid + ')' }),
     h('path', { d: 'M6 4L94 4L100 10L100 78L50 118L0 78L0 10Z', fill: 'none', stroke: '#c4a265', 'stroke-width': '2.5' }),
-    h('text', { x: '50', y: '72', 'text-anchor': 'middle', 'font-family': "'Orbitron', sans-serif", 'font-weight': '900', 'font-size': '50', fill: '#c4a265' }, 'F'),
+    h('text', { x: '50', y: '72', 'text-anchor': 'middle', 'font-family': "'Orbitron', sans-serif", 'font-weight': '700', 'font-size': '50', fill: '#c4a265' }, 'F'),
   );
 }
 

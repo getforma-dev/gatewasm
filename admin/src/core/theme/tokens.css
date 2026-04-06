@@ -120,6 +120,7 @@
   --accent-border:  rgba(196, 162, 101, 0.25);
 
   /* ── Plane Accents ─────────────────────────────────────────────── */
+  /* Plane 1 intentionally matches --accent: Operator is the 'home' plane */
   --plane1: #c4a265;
   --plane1-glow: rgba(196, 162, 101, 0.25);
   --plane1-muted: rgba(196, 162, 101, 0.08);
@@ -224,6 +225,7 @@
   --accent-border:  rgba(184, 134, 11, 0.2);
 
   /* ── Plane Accents ─────────────────────────────────────────────── */
+  /* Plane 1 intentionally matches --accent: Operator is the 'home' plane */
   --plane1: #c4a265;
   --plane1-glow: rgba(196, 162, 101, 0.25);
   --plane1-muted: rgba(196, 162, 101, 0.08);

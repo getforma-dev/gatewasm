@@ -56,7 +56,6 @@ export function PlaneNav(props: PlaneNavProps) {
 
   // ── Derived state ──────────────────────────────────────────────────────
 
-  const accent = () => PLANE_ACCENTS[props.plane()];
   const planeDef = () => PLANES.find((p) => p.key === props.plane()) || PLANES[0];
   const currentTabDef = () => {
     const pd = planeDef();

@@ -40,16 +40,18 @@
 
 ## Logo
 
-The FAuth mark is a shield shape with an "F" in Orbitron 900.
+The FAuth mark is a shield shape with an "F" in Orbitron 700.
 - Primary color: `#c4a265` (gold stroke + fill)
 - Background: gradient from 14% to 3% opacity gold
 - Shield path: `M6 4L94 4L100 10L100 78L50 118L0 78L0 10Z`
 
+Note: Plane 1 (Operator) intentionally matches the brand accent gold.
+The Operator plane is the "home" plane — sharing the brand color reinforces this.
+
 ### Variants
-- `fauth-mark-gold.svg` -- Gold on transparent (default)
-- `fauth-mark-dark.svg` -- Gold on dark background
-- `fauth-mark-white.svg` -- White for dark backgrounds
-- `fauth-mark-inverted.svg` -- Dark mark for light backgrounds
+- `fauth-mark-gold.svg` — Gold on transparent (default)
+- `fauth-mark-dark.svg` — Gold on dark background
+- `fauth-mark-white.svg` — White for dark backgrounds
 
 ### Favicon
 Shield mark at 64x64px with `#0a0a0c` fill background.
