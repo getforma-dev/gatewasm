@@ -2130,6 +2130,14 @@
   gap: var(--space-sm);
 }
 
+.tenant-empty-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  margin-top: var(--space-lg);
+  flex-wrap: wrap;
+}
+
 .tenant-card {
   min-height: 220px;
   padding: var(--space-lg);

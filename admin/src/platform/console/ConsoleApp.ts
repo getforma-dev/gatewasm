@@ -64,14 +64,28 @@ function TenantsList() {
           h('div', { class: 'diamond-label' }, 'Getting Started'),
           h('h3', { class: 'section-title' }, 'Create your first workspace'),
           h('p', { class: 'card-copy' },
-            'A workspace is a tenant with its own users, login flow, roles, and security configuration. Choose a name and slug, and you\'re ready to integrate.',
+            'A workspace is a tenant with its own users, login flow, roles, and security configuration.',
           ),
-          h('button', {
-            type: 'button',
-            class: 'clip-btn',
-            onClick: () => setShowCreate(true),
-            style: 'margin-top: var(--space-md)',
-          }, '+ Create Workspace'),
+          h('div', { class: 'tenant-empty-actions' },
+            h('button', {
+              type: 'button',
+              class: 'clip-btn',
+              onClick: async () => {
+                const slug = 'my-app-' + Math.random().toString(36).slice(2, 6);
+                const created = await createTenant({ name: 'My App', slug });
+                if (created) {
+                  selectTenant(created);
+                  openIntegrateGuide();
+                }
+              },
+            }, '\u26A1 Quick Start'),
+            h('button', {
+              type: 'button',
+              class: 'clip-btn-secondary',
+              onClick: () => setShowCreate(true),
+              style: 'margin-left: var(--space-sm)',
+            }, '+ Custom Workspace'),
+          ),
         ),
       ),
     ),
