@@ -11,13 +11,13 @@ import { OverviewView } from './views/OverviewView';
 import { UsersView } from './views/UsersView';
 import { IntegrateView } from './views/IntegrateView';
 import { HostedPageView } from './views/HostedPageView';
-import { SettingsView } from './views/SettingsView';
 import {
   view, loading, toast, backToTenants, signout,
   selectedTenant, tenants, selectTenant, createTenant, currentUser,
   navigateTenantView, refreshCurrentView, openIntegrateGuide, openSessionInspector,
   plane, setPlane, type Plane, type ConsoleView,
   type TenantWorkspaceView,
+  mode, accountTab, setAccountTab, type AccountTab,
 } from './store';
 
 function TenantsList() {
@@ -189,10 +189,6 @@ function TenantCreatePanel() {
   );
 }
 
-function TenantWorkspaceGuard(render: () => HTMLElement) {
-  return () => selectedTenant() ? render() : TenantsList();
-}
-
 function ComingSoonView(label: string) {
   return h('div', { class: 'console-view' },
     h('div', { class: 'view-header' },
@@ -200,6 +196,65 @@ function ComingSoonView(label: string) {
       h('h2', { class: 'view-title' }, label),
       h('p', { class: 'view-subtitle text-muted' },
         'API endpoints are ready \u2014 dashboard view coming next.',
+      ),
+    ),
+  );
+}
+
+function userDisplayName(name: string | null | undefined, email: string): string {
+  const trimmed = (name || '').trim();
+  if (trimmed) return trimmed;
+  const local = email.split('@')[0] || email;
+  return local.replace(/[._-]+/g, ' ');
+}
+
+function userInitials(name: string | null | undefined, email: string): string {
+  const parts = userDisplayName(name, email).split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return email.slice(0, 2).toUpperCase();
+  return parts.slice(0, 2).map((p) => p[0] || '').join('').toUpperCase() || email.slice(0, 2).toUpperCase();
+}
+
+function AccountTabBtn(id: AccountTab, label: string) {
+  return h('button', {
+    type: 'button',
+    class: () => 'account-tab' + (accountTab() === id ? ' active' : ''),
+    onClick: () => setAccountTab(id),
+  }, label);
+}
+
+function AccountShell() {
+  const user = currentUser();
+  return h('div', { class: 'account-shell' },
+    h('header', { class: 'account-header' },
+      h('div', { class: 'account-header-left' },
+        h('div', { class: 'plane-logo-mark' }),
+        h('span', { class: 'plane-product-name' }, 'GateWASM'),
+      ),
+      h('div', { class: 'account-header-right' },
+        h('button', {
+          type: 'button',
+          class: 'plane-avatar hv',
+          onClick: () => void signout(),
+          title: 'Sign out',
+        }, user ? userInitials(user.name, user.email) : '--'),
+      ),
+    ),
+    h('div', { class: 'account-tabs' },
+      AccountTabBtn('tenants', 'Tenants'),
+      AccountTabBtn('api-keys', 'API Keys'),
+      AccountTabBtn('account-settings', 'Settings'),
+    ),
+    h('div', { class: 'account-stage' },
+      h('main', { class: 'main page-enter' },
+        LoadingBar(() => loading()),
+        createSwitch(
+          accountTab,
+          [
+            { match: 'tenants', render: () => TenantsList() },
+            { match: 'api-keys', render: () => ComingSoonView('API Keys') },
+            { match: 'account-settings', render: () => ComingSoonView('Account Settings') },
+          ],
+        ),
       ),
     ),
   );
@@ -234,11 +289,10 @@ export function ConsoleApp() {
         label: 'Navigate',
         items: [
           {
-            id: 'palette-tenants',
-            title: 'Your Tenants',
-            subtitle: 'Back to the tenant list and workspace hub.',
-            meta: currentView === 'tenants' ? 'Current page' : undefined,
-            keywords: ['console tenants workspace list'],
+            id: 'palette-all-tenants',
+            title: 'All Tenants',
+            subtitle: 'Return to the account view and tenant list.',
+            keywords: ['console tenants workspace list account'],
             onSelect: openConsoleHome,
           },
           {
@@ -295,14 +349,6 @@ export function ConsoleApp() {
           meta: currentView === 'hosted-page' ? 'Current page' : undefined,
           keywords: ['hosted page site preview login page'],
           onSelect: () => navigateTenantView('hosted-page'),
-        },
-        {
-          id: 'palette-settings',
-          title: 'Settings',
-          subtitle: 'Rename the tenant, update its slug, and manage defaults.',
-          meta: currentView === 'settings' ? 'Current page' : undefined,
-          keywords: ['settings slug name config'],
-          onSelect: () => navigateTenantView('settings'),
         },
         {
           id: 'palette-roles',
@@ -419,54 +465,60 @@ export function ConsoleApp() {
     return sections;
   };
 
-  return h('div', {
-    class: 'shell',
-    'data-plane': () => plane(),
-  },
-    PlaneNav({
-      plane: () => plane(),
-      view: () => view(),
-      onPlaneSwitch: (p: Plane) => setPlane(p),
-      onTabSwitch: (v: ConsoleView) => {
-        if (v === 'tenants') { backToTenants(); return; }
-        navigateTenantView(v as TenantWorkspaceView);
-      },
-      onSettings: () => navigateTenantView('settings' as TenantWorkspaceView),
-      onSignOut: () => void signout(),
-      user: () => currentUser(),
-      tenant: () => selectedTenant(),
-      tenants: () => tenants(),
-      onTenantSwitch: (t) => selectTenant(t),
-      onBackToAccount: () => backToTenants(),
-    }),
-    h('div', { class: 'shell-stage' },
-      h('main', { class: 'main page-enter' },
-        LoadingBar(() => loading()),
-        createSwitch(
-          () => view(),
-          [
-            { match: 'tenants', render: () => TenantsList() },
-            { match: 'overview', render: TenantWorkspaceGuard(() => OverviewView()) },
-            { match: 'members', render: TenantWorkspaceGuard(() => UsersView()) },
-            { match: 'integrate', render: TenantWorkspaceGuard(() => IntegrateView()) },
-            { match: 'hosted-page', render: TenantWorkspaceGuard(() => HostedPageView()) },
-            { match: 'settings', render: TenantWorkspaceGuard(() => SettingsView()) },
-            { match: 'roles', render: TenantWorkspaceGuard(() => ComingSoonView('Roles')) },
-            { match: 'audit-log', render: TenantWorkspaceGuard(() => ComingSoonView('Audit Log')) },
-            { match: 'sessions', render: TenantWorkspaceGuard(() => ComingSoonView('Sessions')) },
-            { match: 'passkeys', render: TenantWorkspaceGuard(() => ComingSoonView('Passkeys')) },
-            { match: 'tokens', render: TenantWorkspaceGuard(() => ComingSoonView('Tokens')) },
-            { match: 'activity', render: TenantWorkspaceGuard(() => ComingSoonView('Activity')) },
-          ],
-        ),
-      ),
+  return h('div', null,
+    createSwitch(
+      mode,
+      [
+        { match: 'account', render: () => AccountShell() },
+        {
+          match: 'workspace',
+          render: () => h('div', {
+            class: 'shell',
+            'data-plane': () => plane(),
+          },
+            PlaneNav({
+              plane: () => plane(),
+              view: () => view(),
+              onPlaneSwitch: (p: Plane) => setPlane(p),
+              onTabSwitch: (v: ConsoleView) => navigateTenantView(v),
+              onSettings: () => backToTenants(),
+              onSignOut: () => void signout(),
+              user: () => currentUser(),
+              tenant: () => selectedTenant(),
+              tenants: () => tenants(),
+              onTenantSwitch: (t) => selectTenant(t),
+              onBackToAccount: () => backToTenants(),
+            }),
+            h('div', { class: 'shell-stage' },
+              h('main', { class: 'main page-enter' },
+                LoadingBar(() => loading()),
+                createSwitch(
+                  () => view(),
+                  [
+                    { match: 'overview', render: () => OverviewView() },
+                    { match: 'members', render: () => UsersView() },
+                    { match: 'integrate', render: () => IntegrateView() },
+                    { match: 'hosted-page', render: () => HostedPageView() },
+                    { match: 'roles', render: () => ComingSoonView('Roles') },
+                    { match: 'audit-log', render: () => ComingSoonView('Audit Log') },
+                    { match: 'sessions', render: () => ComingSoonView('Sessions') },
+                    { match: 'passkeys', render: () => ComingSoonView('Passkeys') },
+                    { match: 'tokens', render: () => ComingSoonView('Tokens') },
+                    { match: 'activity', render: () => ComingSoonView('Activity') },
+                  ],
+                ),
+              ),
+            ),
+            CommandPalette({
+              open: paletteOpen,
+              onClose: closeCommandPalette,
+              shortcutLabel,
+              sections: paletteSections,
+            }),
+            ToastView(toast),
+          ),
+        },
+      ],
     ),
-    CommandPalette({
-      open: paletteOpen,
-      onClose: closeCommandPalette,
-      shortcutLabel,
-      sections: paletteSections,
-    }),
-    ToastView(toast),
   );
 }
