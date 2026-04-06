@@ -1525,6 +1525,474 @@ pub async fn list_tenant_user_sessions(
     Ok(Json(serde_json::json!({ "sessions": sessions })))
 }
 
+/// GET /platform/self-serve/tenants/{id}/audit-log
+pub async fn list_tenant_audit_log(
+    State(state): State<AppState>,
+    Path(tenant_id): Path<String>,
+    req: axum::extract::Request,
+) -> Result<impl IntoResponse, AppError> {
+    let platform_user = req
+        .extensions()
+        .get::<PlatformUser>()
+        .cloned()
+        .ok_or(AppError::Unauthorized {
+            error: "unauthorized",
+            message: "Not authenticated".into(),
+        })?;
+
+    sqlx::query_scalar::<_, String>(
+        "SELECT id FROM tenants WHERE id = $1 AND owner_user_id = $2 AND status != 'deleted'",
+    )
+    .bind(&tenant_id)
+    .bind(&platform_user.user_id)
+    .fetch_optional(&state.db)
+    .await?
+    .ok_or(AppError::NotFound {
+        error: "tenant_not_found",
+        message: "Tenant not found".into(),
+    })?;
+
+    let limit: i64 = 100;
+    let offset: i64 = 0;
+
+    let rows = sqlx::query(
+        "SELECT la.id, la.email, la.user_id, la.success, la.ip_address, la.user_agent, \
+         la.failure_reason, la.created_at \
+         FROM login_attempts la \
+         WHERE la.tenant_id = $1 \
+         ORDER BY la.created_at DESC LIMIT $2 OFFSET $3",
+    )
+    .bind(&tenant_id)
+    .bind(limit)
+    .bind(offset)
+    .fetch_all(&state.db)
+    .await?;
+
+    let entries: Vec<serde_json::Value> = rows
+        .iter()
+        .map(|r| {
+            serde_json::json!({
+                "id": r.get::<String, _>("id"),
+                "email": r.get::<String, _>("email"),
+                "user_id": r.get::<Option<String>, _>("user_id"),
+                "success": r.get::<bool, _>("success"),
+                "ip_address": r.get::<Option<String>, _>("ip_address"),
+                "user_agent": r.get::<Option<String>, _>("user_agent"),
+                "failure_reason": r.get::<Option<String>, _>("failure_reason"),
+                "created_at": r.get::<chrono::DateTime<Utc>, _>("created_at").to_rfc3339(),
+            })
+        })
+        .collect();
+
+    Ok(Json(serde_json::json!({ "audit_log": entries })))
+}
+
+/// GET /platform/self-serve/tenants/{id}/sessions
+pub async fn list_tenant_sessions(
+    State(state): State<AppState>,
+    Path(tenant_id): Path<String>,
+    req: axum::extract::Request,
+) -> Result<impl IntoResponse, AppError> {
+    let platform_user = req
+        .extensions()
+        .get::<PlatformUser>()
+        .cloned()
+        .ok_or(AppError::Unauthorized {
+            error: "unauthorized",
+            message: "Not authenticated".into(),
+        })?;
+
+    sqlx::query_scalar::<_, String>(
+        "SELECT id FROM tenants WHERE id = $1 AND owner_user_id = $2 AND status != 'deleted'",
+    )
+    .bind(&tenant_id)
+    .bind(&platform_user.user_id)
+    .fetch_optional(&state.db)
+    .await?
+    .ok_or(AppError::NotFound {
+        error: "tenant_not_found",
+        message: "Tenant not found".into(),
+    })?;
+
+    let rows = sqlx::query(
+        "SELECT rt.id, rt.user_id, u.email, rt.created_at, rt.expires_at, \
+         rt.auth_method, rt.auth_provider, rt.last_activity_at, rt.login_ip, rt.mfa_verified \
+         FROM refresh_tokens rt \
+         JOIN users u ON u.id = rt.user_id \
+         WHERE rt.tenant_id = $1 AND rt.revoked = FALSE AND rt.expires_at > NOW() \
+         ORDER BY rt.created_at DESC LIMIT 100",
+    )
+    .bind(&tenant_id)
+    .fetch_all(&state.db)
+    .await?;
+
+    let sessions: Vec<serde_json::Value> = rows
+        .iter()
+        .map(|r| {
+            serde_json::json!({
+                "id": r.get::<String, _>("id"),
+                "user_id": r.get::<String, _>("user_id"),
+                "email": r.get::<String, _>("email"),
+                "created_at": r.get::<chrono::DateTime<Utc>, _>("created_at").to_rfc3339(),
+                "expires_at": r.get::<chrono::DateTime<Utc>, _>("expires_at").to_rfc3339(),
+                "auth_method": r.get::<String, _>("auth_method"),
+                "auth_provider": r.get::<Option<String>, _>("auth_provider"),
+                "last_activity_at": r.get::<Option<chrono::DateTime<Utc>>, _>("last_activity_at").map(|d| d.to_rfc3339()),
+                "login_ip": r.get::<Option<String>, _>("login_ip"),
+                "mfa_verified": r.get::<bool, _>("mfa_verified"),
+            })
+        })
+        .collect();
+
+    Ok(Json(serde_json::json!({ "sessions": sessions })))
+}
+
+/// GET /platform/self-serve/tenants/{id}/passkeys
+pub async fn list_tenant_passkeys(
+    State(state): State<AppState>,
+    Path(tenant_id): Path<String>,
+    req: axum::extract::Request,
+) -> Result<impl IntoResponse, AppError> {
+    let platform_user = req
+        .extensions()
+        .get::<PlatformUser>()
+        .cloned()
+        .ok_or(AppError::Unauthorized {
+            error: "unauthorized",
+            message: "Not authenticated".into(),
+        })?;
+
+    sqlx::query_scalar::<_, String>(
+        "SELECT id FROM tenants WHERE id = $1 AND owner_user_id = $2 AND status != 'deleted'",
+    )
+    .bind(&tenant_id)
+    .bind(&platform_user.user_id)
+    .fetch_optional(&state.db)
+    .await?
+    .ok_or(AppError::NotFound {
+        error: "tenant_not_found",
+        message: "Tenant not found".into(),
+    })?;
+
+    let rows = sqlx::query(
+        "SELECT wc.id, wc.name, wc.is_synced, wc.user_id, u.email, \
+         wc.created_at, wc.last_used_at, wc.aaguid \
+         FROM webauthn_credentials wc \
+         JOIN users u ON u.id = wc.user_id \
+         WHERE wc.tenant_id = $1 \
+         ORDER BY wc.created_at DESC LIMIT 100",
+    )
+    .bind(&tenant_id)
+    .fetch_all(&state.db)
+    .await?;
+
+    let passkeys: Vec<serde_json::Value> = rows
+        .iter()
+        .map(|r| {
+            serde_json::json!({
+                "id": r.get::<String, _>("id"),
+                "name": r.get::<String, _>("name"),
+                "is_synced": r.get::<bool, _>("is_synced"),
+                "user_id": r.get::<String, _>("user_id"),
+                "email": r.get::<String, _>("email"),
+                "aaguid": r.get::<Option<String>, _>("aaguid"),
+                "created_at": r.get::<chrono::DateTime<Utc>, _>("created_at").to_rfc3339(),
+                "last_used_at": r.get::<Option<chrono::DateTime<Utc>>, _>("last_used_at").map(|d| d.to_rfc3339()),
+            })
+        })
+        .collect();
+
+    Ok(Json(serde_json::json!({ "passkeys": passkeys })))
+}
+
+// ── Role CRUD ─────────────────────────────────────────────────────────
+
+/// GET /platform/self-serve/tenants/{id}/roles
+pub async fn list_tenant_roles(
+    State(state): State<AppState>,
+    Path(tenant_id): Path<String>,
+    req: axum::extract::Request,
+) -> Result<impl IntoResponse, AppError> {
+    let platform_user = req
+        .extensions()
+        .get::<PlatformUser>()
+        .cloned()
+        .ok_or(AppError::Unauthorized {
+            error: "unauthorized",
+            message: "Not authenticated".into(),
+        })?;
+
+    sqlx::query_scalar::<_, String>(
+        "SELECT id FROM tenants WHERE id = $1 AND owner_user_id = $2 AND status != 'deleted'",
+    )
+    .bind(&tenant_id)
+    .bind(&platform_user.user_id)
+    .fetch_optional(&state.db)
+    .await?
+    .ok_or(AppError::NotFound {
+        error: "tenant_not_found",
+        message: "Tenant not found".into(),
+    })?;
+
+    let rows = sqlx::query(
+        "SELECT id, name, description, is_system, permissions_jsonb, tenant_id, created_at \
+         FROM roles WHERE tenant_id IS NULL OR tenant_id = $1 \
+         ORDER BY is_system DESC, name",
+    )
+    .bind(&tenant_id)
+    .fetch_all(&state.db)
+    .await?;
+
+    let roles: Vec<serde_json::Value> = rows
+        .iter()
+        .map(|r| {
+            let perms: Option<serde_json::Value> = r.get("permissions_jsonb");
+            serde_json::json!({
+                "id": r.get::<String, _>("id"),
+                "name": r.get::<String, _>("name"),
+                "description": r.get::<Option<String>, _>("description"),
+                "is_system": r.get::<bool, _>("is_system"),
+                "permissions": perms.unwrap_or(serde_json::json!([])),
+                "tenant_id": r.get::<Option<String>, _>("tenant_id"),
+                "created_at": r.get::<chrono::DateTime<Utc>, _>("created_at").to_rfc3339(),
+            })
+        })
+        .collect();
+
+    Ok(Json(serde_json::json!({ "roles": roles })))
+}
+
+/// POST /platform/self-serve/tenants/{id}/roles
+pub async fn create_tenant_role(
+    State(state): State<AppState>,
+    Path(tenant_id): Path<String>,
+    req: axum::extract::Request,
+) -> Result<impl IntoResponse, AppError> {
+    let platform_user = req
+        .extensions()
+        .get::<PlatformUser>()
+        .cloned()
+        .ok_or(AppError::Unauthorized {
+            error: "unauthorized",
+            message: "Not authenticated".into(),
+        })?;
+
+    sqlx::query_scalar::<_, String>(
+        "SELECT id FROM tenants WHERE id = $1 AND owner_user_id = $2 AND status != 'deleted'",
+    )
+    .bind(&tenant_id)
+    .bind(&platform_user.user_id)
+    .fetch_optional(&state.db)
+    .await?
+    .ok_or(AppError::NotFound {
+        error: "tenant_not_found",
+        message: "Tenant not found".into(),
+    })?;
+
+    let body: serde_json::Value = axum::Json::from_request(req, &state)
+        .await
+        .map_err(|_| AppError::BadRequest {
+            error: "invalid_body",
+            message: "Invalid JSON body".into(),
+        })?
+        .0;
+
+    let name = body["name"].as_str().ok_or(AppError::BadRequest {
+        error: "missing_name",
+        message: "Role name is required".into(),
+    })?;
+
+    if name.is_empty() || name.len() > 64 {
+        return Err(AppError::BadRequest {
+            error: "invalid_name",
+            message: "Role name must be 1-64 characters".into(),
+        });
+    }
+
+    if !name.chars().all(|c| c.is_alphanumeric() || c == '_' || c == '-' || c == ' ') {
+        return Err(AppError::BadRequest {
+            error: "invalid_name",
+            message: "Role name may only contain letters, numbers, spaces, hyphens, and underscores".into(),
+        });
+    }
+
+    let description = body["description"].as_str().map(String::from);
+    let permissions = body.get("permissions").cloned().unwrap_or(serde_json::json!([]));
+    let role_id = format!("role_{}", uuid::Uuid::new_v4());
+
+    sqlx::query(
+        "INSERT INTO roles (id, name, description, permissions_jsonb, tenant_id, is_system, created_at) \
+         VALUES ($1, $2, $3, $4, $5, FALSE, NOW())",
+    )
+    .bind(&role_id)
+    .bind(name)
+    .bind(&description)
+    .bind(&permissions)
+    .bind(&tenant_id)
+    .execute(&state.db)
+    .await?;
+
+    Ok((
+        StatusCode::CREATED,
+        Json(serde_json::json!({
+            "id": role_id,
+            "name": name,
+            "description": description,
+            "permissions": permissions,
+            "is_system": false,
+            "tenant_id": tenant_id,
+        })),
+    ))
+}
+
+/// PATCH /platform/self-serve/tenants/{id}/roles/{role_id}
+pub async fn update_tenant_role(
+    State(state): State<AppState>,
+    Path((tenant_id, role_id)): Path<(String, String)>,
+    req: axum::extract::Request,
+) -> Result<impl IntoResponse, AppError> {
+    let platform_user = req
+        .extensions()
+        .get::<PlatformUser>()
+        .cloned()
+        .ok_or(AppError::Unauthorized {
+            error: "unauthorized",
+            message: "Not authenticated".into(),
+        })?;
+
+    sqlx::query_scalar::<_, String>(
+        "SELECT id FROM tenants WHERE id = $1 AND owner_user_id = $2 AND status != 'deleted'",
+    )
+    .bind(&tenant_id)
+    .bind(&platform_user.user_id)
+    .fetch_optional(&state.db)
+    .await?
+    .ok_or(AppError::NotFound {
+        error: "tenant_not_found",
+        message: "Tenant not found".into(),
+    })?;
+
+    // Verify role exists in this tenant and is custom (not system)
+    let is_system: bool = sqlx::query_scalar(
+        "SELECT is_system FROM roles WHERE id = $1 AND tenant_id = $2",
+    )
+    .bind(&role_id)
+    .bind(&tenant_id)
+    .fetch_optional(&state.db)
+    .await?
+    .ok_or(AppError::NotFound {
+        error: "role_not_found",
+        message: "Role not found".into(),
+    })?;
+
+    if is_system {
+        return Err(AppError::BadRequest {
+            error: "system_role",
+            message: "Cannot modify system roles".into(),
+        });
+    }
+
+    let body: serde_json::Value = axum::Json::from_request(req, &state)
+        .await
+        .map_err(|_| AppError::BadRequest {
+            error: "invalid_body",
+            message: "Invalid JSON body".into(),
+        })?
+        .0;
+
+    if let Some(name) = body["name"].as_str() {
+        sqlx::query("UPDATE roles SET name = $1 WHERE id = $2 AND tenant_id = $3")
+            .bind(name)
+            .bind(&role_id)
+            .bind(&tenant_id)
+            .execute(&state.db)
+            .await?;
+    }
+
+    if let Some(desc) = body.get("description") {
+        let desc_str = desc.as_str().map(String::from);
+        sqlx::query("UPDATE roles SET description = $1 WHERE id = $2 AND tenant_id = $3")
+            .bind(&desc_str)
+            .bind(&role_id)
+            .bind(&tenant_id)
+            .execute(&state.db)
+            .await?;
+    }
+
+    if let Some(perms) = body.get("permissions") {
+        sqlx::query("UPDATE roles SET permissions_jsonb = $1 WHERE id = $2 AND tenant_id = $3")
+            .bind(perms)
+            .bind(&role_id)
+            .bind(&tenant_id)
+            .execute(&state.db)
+            .await?;
+    }
+
+    Ok(Json(serde_json::json!({ "message": "Role updated" })))
+}
+
+/// DELETE /platform/self-serve/tenants/{id}/roles/{role_id}
+pub async fn delete_tenant_role(
+    State(state): State<AppState>,
+    Path((tenant_id, role_id)): Path<(String, String)>,
+    req: axum::extract::Request,
+) -> Result<impl IntoResponse, AppError> {
+    let platform_user = req
+        .extensions()
+        .get::<PlatformUser>()
+        .cloned()
+        .ok_or(AppError::Unauthorized {
+            error: "unauthorized",
+            message: "Not authenticated".into(),
+        })?;
+
+    sqlx::query_scalar::<_, String>(
+        "SELECT id FROM tenants WHERE id = $1 AND owner_user_id = $2 AND status != 'deleted'",
+    )
+    .bind(&tenant_id)
+    .bind(&platform_user.user_id)
+    .fetch_optional(&state.db)
+    .await?
+    .ok_or(AppError::NotFound {
+        error: "tenant_not_found",
+        message: "Tenant not found".into(),
+    })?;
+
+    // Verify role is custom
+    let is_system: bool = sqlx::query_scalar(
+        "SELECT is_system FROM roles WHERE id = $1 AND tenant_id = $2",
+    )
+    .bind(&role_id)
+    .bind(&tenant_id)
+    .fetch_optional(&state.db)
+    .await?
+    .ok_or(AppError::NotFound {
+        error: "role_not_found",
+        message: "Role not found in this tenant".into(),
+    })?;
+
+    if is_system {
+        return Err(AppError::BadRequest {
+            error: "system_role",
+            message: "Cannot delete system roles".into(),
+        });
+    }
+
+    sqlx::query("DELETE FROM user_roles WHERE role_id = $1 AND tenant_id = $2")
+        .bind(&role_id)
+        .bind(&tenant_id)
+        .execute(&state.db)
+        .await?;
+
+    sqlx::query("DELETE FROM roles WHERE id = $1 AND tenant_id = $2")
+        .bind(&role_id)
+        .bind(&tenant_id)
+        .execute(&state.db)
+        .await?;
+
+    Ok(Json(serde_json::json!({ "message": "Role deleted" })))
+}
+
 // ── Hosted Page Management ─────────────────────────────────────────────
 
 /// GET /platform/self-serve/tenants/{id}/hosted-page
@@ -1692,6 +2160,272 @@ pub async fn update_hosted_page(
     Ok(Json(serde_json::json!({ "status": "saved" })))
 }
 
+// ── Security Config ─────────────────────────────────────────────────────
+
+/// GET /platform/self-serve/tenants/{id}/security-config
+pub async fn get_tenant_security_config(
+    State(state): State<AppState>,
+    Path(tenant_id): Path<String>,
+    req: axum::extract::Request,
+) -> Result<impl IntoResponse, AppError> {
+    let platform_user = req
+        .extensions()
+        .get::<PlatformUser>()
+        .cloned()
+        .ok_or(AppError::Unauthorized {
+            error: "unauthorized",
+            message: "Not authenticated".into(),
+        })?;
+
+    sqlx::query_scalar::<_, String>(
+        "SELECT id FROM tenants WHERE id = $1 AND owner_user_id = $2 AND status != 'deleted'",
+    )
+    .bind(&tenant_id)
+    .bind(&platform_user.user_id)
+    .fetch_optional(&state.db)
+    .await?
+    .ok_or(AppError::NotFound {
+        error: "tenant_not_found",
+        message: "Tenant not found".into(),
+    })?;
+
+    let row: (serde_json::Value, String) = sqlx::query_as(
+        "SELECT COALESCE(t.security_config, '{}'::jsonb), COALESCE(te.plan, 'trial') \
+         FROM tenants t \
+         LEFT JOIN tenant_entitlements te ON te.tenant_id = t.id \
+         WHERE t.id = $1",
+    )
+    .bind(&tenant_id)
+    .fetch_one(&state.db)
+    .await?;
+
+    let config = crate::security_config::TenantSecurityConfig::from_json(&row.0);
+
+    Ok(Json(serde_json::json!({
+        "security_config": config,
+        "plan": row.1,
+    })))
+}
+
+/// PATCH /platform/self-serve/tenants/{id}/security-config
+pub async fn update_tenant_security_config(
+    State(state): State<AppState>,
+    Path(tenant_id): Path<String>,
+    req: axum::extract::Request,
+) -> Result<impl IntoResponse, AppError> {
+    let platform_user = req
+        .extensions()
+        .get::<PlatformUser>()
+        .cloned()
+        .ok_or(AppError::Unauthorized {
+            error: "unauthorized",
+            message: "Not authenticated".into(),
+        })?;
+
+    sqlx::query_scalar::<_, String>(
+        "SELECT id FROM tenants WHERE id = $1 AND owner_user_id = $2 AND status != 'deleted'",
+    )
+    .bind(&tenant_id)
+    .bind(&platform_user.user_id)
+    .fetch_optional(&state.db)
+    .await?
+    .ok_or(AppError::NotFound {
+        error: "tenant_not_found",
+        message: "Tenant not found".into(),
+    })?;
+
+    let body: serde_json::Value = axum::Json::from_request(req, &state)
+        .await
+        .map_err(|_| AppError::BadRequest {
+            error: "invalid_body",
+            message: "Invalid JSON body".into(),
+        })?
+        .0;
+
+    if !body.is_object() {
+        return Err(AppError::BadRequest {
+            error: "invalid_body",
+            message: "Request body must be a JSON object".into(),
+        });
+    }
+
+    // Load current config
+    let current_json: serde_json::Value = sqlx::query_scalar(
+        "SELECT COALESCE(security_config, '{}'::jsonb) FROM tenants WHERE id = $1",
+    )
+    .bind(&tenant_id)
+    .fetch_one(&state.db)
+    .await?;
+
+    // Merge patch into current
+    let mut merged = current_json.clone();
+    if let (Some(base), Some(patch)) = (merged.as_object_mut(), body.as_object()) {
+        for (k, v) in patch {
+            base.insert(k.clone(), v.clone());
+        }
+    }
+
+    // Validate
+    let config = crate::security_config::TenantSecurityConfig::from_json(&merged);
+
+    let plan: String = sqlx::query_scalar(
+        "SELECT COALESCE(plan, 'trial') FROM tenant_entitlements WHERE tenant_id = $1",
+    )
+    .bind(&tenant_id)
+    .fetch_optional(&state.db)
+    .await?
+    .unwrap_or_else(|| "trial".to_string());
+
+    let violations = config.validate_for_plan(&plan);
+    if !violations.is_empty() {
+        return Err(AppError::Forbidden {
+            error: "plan_violation",
+            message: format!("Security config violates plan restrictions: {}", violations.join(", ")),
+        });
+    }
+
+    // Save
+    sqlx::query("UPDATE tenants SET security_config = $1, updated_at = NOW() WHERE id = $2")
+        .bind(&merged)
+        .bind(&tenant_id)
+        .execute(&state.db)
+        .await?;
+
+    Ok(Json(serde_json::json!({
+        "security_config": config,
+        "plan": plan,
+    })))
+}
+
+// ── Tenant Invite Proxy Endpoints ───────────────────────────────────────
+
+/// GET /platform/self-serve/tenants/{id}/invites
+pub async fn list_tenant_invites_selfserve(
+    State(state): State<AppState>,
+    Path(tenant_id): Path<String>,
+    req: axum::extract::Request,
+) -> Result<impl IntoResponse, AppError> {
+    let platform_user = req.extensions().get::<PlatformUser>().cloned()
+        .ok_or(AppError::Unauthorized { error: "unauthorized", message: "Not authenticated".into() })?;
+
+    sqlx::query_scalar::<_, String>(
+        "SELECT id FROM tenants WHERE id = $1 AND owner_user_id = $2 AND status != 'deleted'",
+    ).bind(&tenant_id).bind(&platform_user.user_id)
+    .fetch_optional(&state.db).await?
+    .ok_or(AppError::NotFound { error: "tenant_not_found", message: "Tenant not found".into() })?;
+
+    // Auto-expire stale invites
+    sqlx::query(
+        "UPDATE tenant_user_invites SET status = 'expired', updated_at = NOW() \
+         WHERE tenant_id = $1 AND status = 'pending' AND expires_at < NOW()",
+    ).bind(&tenant_id).execute(&state.db).await.ok();
+
+    let rows = sqlx::query(
+        "SELECT tui.id, tui.email, tui.role_id, r.name AS role_name, tui.status, \
+         tui.expires_at, tui.created_at \
+         FROM tenant_user_invites tui \
+         LEFT JOIN roles r ON r.id = tui.role_id \
+         WHERE tui.tenant_id = $1 \
+         ORDER BY tui.created_at DESC LIMIT 50",
+    ).bind(&tenant_id).fetch_all(&state.db).await?;
+
+    let invites: Vec<serde_json::Value> = rows.iter().map(|r| {
+        serde_json::json!({
+            "id": r.get::<String, _>("id"),
+            "email": r.get::<String, _>("email"),
+            "role_id": r.get::<String, _>("role_id"),
+            "role_name": r.get::<Option<String>, _>("role_name"),
+            "status": r.get::<String, _>("status"),
+            "expires_at": r.get::<chrono::DateTime<Utc>, _>("expires_at").to_rfc3339(),
+            "created_at": r.get::<chrono::DateTime<Utc>, _>("created_at").to_rfc3339(),
+        })
+    }).collect();
+
+    Ok(Json(serde_json::json!({ "invites": invites })))
+}
+
+/// POST /platform/self-serve/tenants/{id}/invites
+pub async fn create_tenant_invite_selfserve(
+    State(state): State<AppState>,
+    Path(tenant_id): Path<String>,
+    req: axum::extract::Request,
+) -> Result<impl IntoResponse, AppError> {
+    let platform_user = req.extensions().get::<PlatformUser>().cloned()
+        .ok_or(AppError::Unauthorized { error: "unauthorized", message: "Not authenticated".into() })?;
+
+    sqlx::query_scalar::<_, String>(
+        "SELECT id FROM tenants WHERE id = $1 AND owner_user_id = $2 AND status != 'deleted'",
+    ).bind(&tenant_id).bind(&platform_user.user_id)
+    .fetch_optional(&state.db).await?
+    .ok_or(AppError::NotFound { error: "tenant_not_found", message: "Tenant not found".into() })?;
+
+    let body: serde_json::Value = axum::Json::from_request(req, &state)
+        .await.map_err(|_| AppError::BadRequest { error: "invalid_body", message: "Invalid JSON".into() })?.0;
+
+    let email = body["email"].as_str().ok_or(AppError::BadRequest {
+        error: "missing_email", message: "Email is required".into(),
+    })?.to_lowercase().trim().to_string();
+
+    let role_id = body["role"].as_str().unwrap_or("role_admin").to_string();
+    let invite_id = format!("tinv_{}", uuid::Uuid::new_v4());
+
+    // Revoke previous pending invites for same email
+    sqlx::query(
+        "UPDATE tenant_user_invites SET status = 'revoked', updated_at = NOW() \
+         WHERE tenant_id = $1 AND lower(email) = lower($2) AND status = 'pending'",
+    ).bind(&tenant_id).bind(&email).execute(&state.db).await.ok();
+
+    let expires_at = Utc::now() + chrono::Duration::hours(72);
+
+    sqlx::query(
+        "INSERT INTO tenant_user_invites \
+         (id, tenant_id, email, role_id, token_hash, status, invited_by_user_id, expires_at, created_at, updated_at) \
+         VALUES ($1, $2, $3, $4, $5, 'pending', $6, $7, NOW(), NOW())",
+    )
+    .bind(&invite_id)
+    .bind(&tenant_id)
+    .bind(&email)
+    .bind(&role_id)
+    .bind(&format!("hash_{}", uuid::Uuid::new_v4())) // placeholder hash
+    .bind(&platform_user.user_id)
+    .bind(expires_at)
+    .execute(&state.db).await?;
+
+    Ok((
+        axum::http::StatusCode::CREATED,
+        Json(serde_json::json!({
+            "invite": { "id": invite_id, "email": email, "role_id": role_id, "status": "pending", "expires_at": expires_at.to_rfc3339() },
+        })),
+    ))
+}
+
+/// POST /platform/self-serve/tenants/{id}/invites/{invite_id}/revoke
+pub async fn revoke_tenant_invite_selfserve(
+    State(state): State<AppState>,
+    Path((tenant_id, invite_id)): Path<(String, String)>,
+    req: axum::extract::Request,
+) -> Result<impl IntoResponse, AppError> {
+    let platform_user = req.extensions().get::<PlatformUser>().cloned()
+        .ok_or(AppError::Unauthorized { error: "unauthorized", message: "Not authenticated".into() })?;
+
+    sqlx::query_scalar::<_, String>(
+        "SELECT id FROM tenants WHERE id = $1 AND owner_user_id = $2 AND status != 'deleted'",
+    ).bind(&tenant_id).bind(&platform_user.user_id)
+    .fetch_optional(&state.db).await?
+    .ok_or(AppError::NotFound { error: "tenant_not_found", message: "Tenant not found".into() })?;
+
+    let result = sqlx::query(
+        "UPDATE tenant_user_invites SET status = 'revoked', updated_at = NOW() \
+         WHERE id = $1 AND tenant_id = $2 AND status = 'pending'",
+    ).bind(&invite_id).bind(&tenant_id).execute(&state.db).await?;
+
+    if result.rows_affected() == 0 {
+        return Err(AppError::NotFound { error: "invite_not_found", message: "Invite not found or not pending".into() });
+    }
+
+    Ok(Json(serde_json::json!({ "success": true, "invite_id": invite_id })))
+}
+
 // ── Get Started Page ────────────────────────────────────────────────────
 
 /// GET /get-started — Self-serve onboarding page.
@@ -1708,6 +2442,1159 @@ pub async fn get_started_page(State(state): State<AppState>) -> impl IntoRespons
         [(axum::http::header::HeaderName::from_static("content-security-policy"), page.csp)],
         Html(page.html),
     ).into_response()
+}
+
+// ── Organization Management ──────────────────────────────────────────
+
+/// GET /platform/self-serve/tenants/{id}/organizations
+pub async fn list_tenant_organizations(
+    State(state): State<AppState>,
+    Path(tenant_id): Path<String>,
+    req: axum::extract::Request,
+) -> Result<impl IntoResponse, AppError> {
+    let platform_user = req
+        .extensions()
+        .get::<PlatformUser>()
+        .cloned()
+        .ok_or(AppError::Unauthorized {
+            error: "unauthorized",
+            message: "Not authenticated".into(),
+        })?;
+
+    sqlx::query_scalar::<_, String>(
+        "SELECT id FROM tenants WHERE id = $1 AND owner_user_id = $2 AND status != 'deleted'",
+    )
+    .bind(&tenant_id)
+    .bind(&platform_user.user_id)
+    .fetch_optional(&state.db)
+    .await?
+    .ok_or(AppError::NotFound {
+        error: "tenant_not_found",
+        message: "Tenant not found".into(),
+    })?;
+
+    let rows = sqlx::query(
+        "SELECT id, name, slug, metadata, created_at, updated_at \
+         FROM organizations WHERE tenant_id = $1 \
+         ORDER BY created_at DESC",
+    )
+    .bind(&tenant_id)
+    .fetch_all(&state.db)
+    .await?;
+
+    let orgs: Vec<serde_json::Value> = rows
+        .iter()
+        .map(|r| {
+            serde_json::json!({
+                "id": r.get::<String, _>("id"),
+                "name": r.get::<String, _>("name"),
+                "slug": r.get::<String, _>("slug"),
+                "metadata": r.get::<Option<serde_json::Value>, _>("metadata"),
+                "created_at": r.get::<chrono::DateTime<Utc>, _>("created_at").to_rfc3339(),
+                "updated_at": r.get::<chrono::DateTime<Utc>, _>("updated_at").to_rfc3339(),
+            })
+        })
+        .collect();
+
+    let total = orgs.len();
+    Ok(Json(serde_json::json!({ "organizations": orgs, "total": total })))
+}
+
+/// POST /platform/self-serve/tenants/{id}/organizations
+pub async fn create_tenant_organization(
+    State(state): State<AppState>,
+    Path(tenant_id): Path<String>,
+    req: axum::extract::Request,
+) -> Result<impl IntoResponse, AppError> {
+    let platform_user = req
+        .extensions()
+        .get::<PlatformUser>()
+        .cloned()
+        .ok_or(AppError::Unauthorized {
+            error: "unauthorized",
+            message: "Not authenticated".into(),
+        })?;
+
+    sqlx::query_scalar::<_, String>(
+        "SELECT id FROM tenants WHERE id = $1 AND owner_user_id = $2 AND status != 'deleted'",
+    )
+    .bind(&tenant_id)
+    .bind(&platform_user.user_id)
+    .fetch_optional(&state.db)
+    .await?
+    .ok_or(AppError::NotFound {
+        error: "tenant_not_found",
+        message: "Tenant not found".into(),
+    })?;
+
+    let body: serde_json::Value = axum::Json::from_request(req, &state)
+        .await
+        .map_err(|_| AppError::BadRequest {
+            error: "invalid_body",
+            message: "Invalid JSON body".into(),
+        })?
+        .0;
+
+    let name = body["name"].as_str().ok_or(AppError::BadRequest {
+        error: "missing_name",
+        message: "Organization name is required".into(),
+    })?;
+
+    if name.is_empty() || name.len() > 120 {
+        return Err(AppError::BadRequest {
+            error: "invalid_name",
+            message: "Organization name must be 1-120 characters".into(),
+        });
+    }
+
+    let slug = body["slug"].as_str().ok_or(AppError::BadRequest {
+        error: "missing_slug",
+        message: "Organization slug is required".into(),
+    })?;
+
+    let slug = slug.trim().to_lowercase();
+    if slug.is_empty()
+        || slug.len() > 64
+        || !slug.chars().all(|c| c.is_ascii_alphanumeric() || c == '-')
+    {
+        return Err(AppError::BadRequest {
+            error: "invalid_slug",
+            message: "Slug must be 1-64 characters, lowercase alphanumeric or hyphens".into(),
+        });
+    }
+
+    // Check slug uniqueness within tenant
+    let slug_exists: Option<String> = sqlx::query_scalar(
+        "SELECT id FROM organizations WHERE tenant_id = $1 AND slug = $2",
+    )
+    .bind(&tenant_id)
+    .bind(&slug)
+    .fetch_optional(&state.db)
+    .await?;
+
+    if slug_exists.is_some() {
+        return Err(AppError::Conflict {
+            error: "slug_taken",
+            message: format!("Organization slug '{}' is already in use for this tenant", slug),
+        });
+    }
+
+    let org_id = format!("org_{}", uuid::Uuid::new_v4());
+    let metadata = body.get("metadata").cloned();
+
+    sqlx::query(
+        "INSERT INTO organizations (id, tenant_id, name, slug, metadata) \
+         VALUES ($1, $2, $3, $4, $5)",
+    )
+    .bind(&org_id)
+    .bind(&tenant_id)
+    .bind(name)
+    .bind(&slug)
+    .bind(&metadata)
+    .execute(&state.db)
+    .await?;
+
+    Ok((
+        StatusCode::CREATED,
+        Json(serde_json::json!({
+            "id": org_id,
+            "name": name,
+            "slug": slug,
+            "metadata": metadata,
+            "tenant_id": tenant_id,
+        })),
+    ))
+}
+
+/// GET /platform/self-serve/tenants/{id}/organizations/{org_id}
+pub async fn get_tenant_organization(
+    State(state): State<AppState>,
+    Path((tenant_id, org_id)): Path<(String, String)>,
+    req: axum::extract::Request,
+) -> Result<impl IntoResponse, AppError> {
+    let platform_user = req
+        .extensions()
+        .get::<PlatformUser>()
+        .cloned()
+        .ok_or(AppError::Unauthorized {
+            error: "unauthorized",
+            message: "Not authenticated".into(),
+        })?;
+
+    sqlx::query_scalar::<_, String>(
+        "SELECT id FROM tenants WHERE id = $1 AND owner_user_id = $2 AND status != 'deleted'",
+    )
+    .bind(&tenant_id)
+    .bind(&platform_user.user_id)
+    .fetch_optional(&state.db)
+    .await?
+    .ok_or(AppError::NotFound {
+        error: "tenant_not_found",
+        message: "Tenant not found".into(),
+    })?;
+
+    let row = sqlx::query(
+        "SELECT id, name, slug, metadata, created_at, updated_at \
+         FROM organizations WHERE id = $1 AND tenant_id = $2",
+    )
+    .bind(&org_id)
+    .bind(&tenant_id)
+    .fetch_optional(&state.db)
+    .await?
+    .ok_or(AppError::NotFound {
+        error: "organization_not_found",
+        message: "Organization not found".into(),
+    })?;
+
+    Ok(Json(serde_json::json!({
+        "id": row.get::<String, _>("id"),
+        "name": row.get::<String, _>("name"),
+        "slug": row.get::<String, _>("slug"),
+        "metadata": row.get::<Option<serde_json::Value>, _>("metadata"),
+        "created_at": row.get::<chrono::DateTime<Utc>, _>("created_at").to_rfc3339(),
+        "updated_at": row.get::<chrono::DateTime<Utc>, _>("updated_at").to_rfc3339(),
+    })))
+}
+
+/// PATCH /platform/self-serve/tenants/{id}/organizations/{org_id}
+pub async fn update_tenant_organization(
+    State(state): State<AppState>,
+    Path((tenant_id, org_id)): Path<(String, String)>,
+    req: axum::extract::Request,
+) -> Result<impl IntoResponse, AppError> {
+    let platform_user = req
+        .extensions()
+        .get::<PlatformUser>()
+        .cloned()
+        .ok_or(AppError::Unauthorized {
+            error: "unauthorized",
+            message: "Not authenticated".into(),
+        })?;
+
+    sqlx::query_scalar::<_, String>(
+        "SELECT id FROM tenants WHERE id = $1 AND owner_user_id = $2 AND status != 'deleted'",
+    )
+    .bind(&tenant_id)
+    .bind(&platform_user.user_id)
+    .fetch_optional(&state.db)
+    .await?
+    .ok_or(AppError::NotFound {
+        error: "tenant_not_found",
+        message: "Tenant not found".into(),
+    })?;
+
+    // Verify org exists in this tenant
+    sqlx::query_scalar::<_, String>(
+        "SELECT id FROM organizations WHERE id = $1 AND tenant_id = $2",
+    )
+    .bind(&org_id)
+    .bind(&tenant_id)
+    .fetch_optional(&state.db)
+    .await?
+    .ok_or(AppError::NotFound {
+        error: "organization_not_found",
+        message: "Organization not found".into(),
+    })?;
+
+    let body: serde_json::Value = axum::Json::from_request(req, &state)
+        .await
+        .map_err(|_| AppError::BadRequest {
+            error: "invalid_body",
+            message: "Invalid JSON body".into(),
+        })?
+        .0;
+
+    if let Some(name) = body["name"].as_str() {
+        if name.is_empty() || name.len() > 120 {
+            return Err(AppError::BadRequest {
+                error: "invalid_name",
+                message: "Organization name must be 1-120 characters".into(),
+            });
+        }
+        sqlx::query("UPDATE organizations SET name = $1, updated_at = NOW() WHERE id = $2 AND tenant_id = $3")
+            .bind(name)
+            .bind(&org_id)
+            .bind(&tenant_id)
+            .execute(&state.db)
+            .await?;
+    }
+
+    if let Some(slug) = body["slug"].as_str() {
+        let slug = slug.trim().to_lowercase();
+        if slug.is_empty()
+            || slug.len() > 64
+            || !slug.chars().all(|c| c.is_ascii_alphanumeric() || c == '-')
+        {
+            return Err(AppError::BadRequest {
+                error: "invalid_slug",
+                message: "Slug must be 1-64 characters, lowercase alphanumeric or hyphens".into(),
+            });
+        }
+        sqlx::query("UPDATE organizations SET slug = $1, updated_at = NOW() WHERE id = $2 AND tenant_id = $3")
+            .bind(&slug)
+            .bind(&org_id)
+            .bind(&tenant_id)
+            .execute(&state.db)
+            .await
+            .map_err(|e| {
+                if let sqlx::Error::Database(ref db_err) = e {
+                    if db_err.is_unique_violation() {
+                        return AppError::Conflict {
+                            error: "slug_taken",
+                            message: format!("Organization slug '{}' is already in use", slug),
+                        };
+                    }
+                }
+                AppError::from(e)
+            })?;
+    }
+
+    if let Some(metadata) = body.get("metadata") {
+        sqlx::query("UPDATE organizations SET metadata = $1, updated_at = NOW() WHERE id = $2 AND tenant_id = $3")
+            .bind(metadata)
+            .bind(&org_id)
+            .bind(&tenant_id)
+            .execute(&state.db)
+            .await?;
+    }
+
+    Ok(Json(serde_json::json!({ "message": "Organization updated" })))
+}
+
+/// DELETE /platform/self-serve/tenants/{id}/organizations/{org_id}
+pub async fn delete_tenant_organization(
+    State(state): State<AppState>,
+    Path((tenant_id, org_id)): Path<(String, String)>,
+    req: axum::extract::Request,
+) -> Result<impl IntoResponse, AppError> {
+    let platform_user = req
+        .extensions()
+        .get::<PlatformUser>()
+        .cloned()
+        .ok_or(AppError::Unauthorized {
+            error: "unauthorized",
+            message: "Not authenticated".into(),
+        })?;
+
+    sqlx::query_scalar::<_, String>(
+        "SELECT id FROM tenants WHERE id = $1 AND owner_user_id = $2 AND status != 'deleted'",
+    )
+    .bind(&tenant_id)
+    .bind(&platform_user.user_id)
+    .fetch_optional(&state.db)
+    .await?
+    .ok_or(AppError::NotFound {
+        error: "tenant_not_found",
+        message: "Tenant not found".into(),
+    })?;
+
+    // Delete members first, then the organization
+    sqlx::query("DELETE FROM organization_members WHERE organization_id = $1 AND tenant_id = $2")
+        .bind(&org_id)
+        .bind(&tenant_id)
+        .execute(&state.db)
+        .await?;
+
+    let result = sqlx::query("DELETE FROM organizations WHERE id = $1 AND tenant_id = $2")
+        .bind(&org_id)
+        .bind(&tenant_id)
+        .execute(&state.db)
+        .await?;
+
+    if result.rows_affected() == 0 {
+        return Err(AppError::NotFound {
+            error: "organization_not_found",
+            message: "Organization not found".into(),
+        });
+    }
+
+    Ok(Json(serde_json::json!({ "message": "Organization deleted" })))
+}
+
+/// GET /platform/self-serve/tenants/{id}/organizations/{org_id}/members
+pub async fn list_organization_members(
+    State(state): State<AppState>,
+    Path((tenant_id, org_id)): Path<(String, String)>,
+    req: axum::extract::Request,
+) -> Result<impl IntoResponse, AppError> {
+    let platform_user = req
+        .extensions()
+        .get::<PlatformUser>()
+        .cloned()
+        .ok_or(AppError::Unauthorized {
+            error: "unauthorized",
+            message: "Not authenticated".into(),
+        })?;
+
+    sqlx::query_scalar::<_, String>(
+        "SELECT id FROM tenants WHERE id = $1 AND owner_user_id = $2 AND status != 'deleted'",
+    )
+    .bind(&tenant_id)
+    .bind(&platform_user.user_id)
+    .fetch_optional(&state.db)
+    .await?
+    .ok_or(AppError::NotFound {
+        error: "tenant_not_found",
+        message: "Tenant not found".into(),
+    })?;
+
+    let rows = sqlx::query(
+        "SELECT m.user_id, m.role, m.created_at, u.email, u.name \
+         FROM organization_members m \
+         JOIN users u ON u.id = m.user_id \
+         WHERE m.organization_id = $1 AND m.tenant_id = $2 \
+         ORDER BY m.created_at DESC",
+    )
+    .bind(&org_id)
+    .bind(&tenant_id)
+    .fetch_all(&state.db)
+    .await?;
+
+    let members: Vec<serde_json::Value> = rows
+        .iter()
+        .map(|r| {
+            serde_json::json!({
+                "user_id": r.get::<String, _>("user_id"),
+                "email": r.get::<String, _>("email"),
+                "name": r.get::<Option<String>, _>("name"),
+                "role": r.get::<String, _>("role"),
+                "created_at": r.get::<chrono::DateTime<Utc>, _>("created_at").to_rfc3339(),
+            })
+        })
+        .collect();
+
+    Ok(Json(serde_json::json!({ "members": members })))
+}
+
+/// POST /platform/self-serve/tenants/{id}/organizations/{org_id}/members
+pub async fn add_organization_member(
+    State(state): State<AppState>,
+    Path((tenant_id, org_id)): Path<(String, String)>,
+    req: axum::extract::Request,
+) -> Result<impl IntoResponse, AppError> {
+    let platform_user = req
+        .extensions()
+        .get::<PlatformUser>()
+        .cloned()
+        .ok_or(AppError::Unauthorized {
+            error: "unauthorized",
+            message: "Not authenticated".into(),
+        })?;
+
+    sqlx::query_scalar::<_, String>(
+        "SELECT id FROM tenants WHERE id = $1 AND owner_user_id = $2 AND status != 'deleted'",
+    )
+    .bind(&tenant_id)
+    .bind(&platform_user.user_id)
+    .fetch_optional(&state.db)
+    .await?
+    .ok_or(AppError::NotFound {
+        error: "tenant_not_found",
+        message: "Tenant not found".into(),
+    })?;
+
+    let body: serde_json::Value = axum::Json::from_request(req, &state)
+        .await
+        .map_err(|_| AppError::BadRequest {
+            error: "invalid_body",
+            message: "Invalid JSON body".into(),
+        })?
+        .0;
+
+    let user_id = body["user_id"].as_str().ok_or(AppError::BadRequest {
+        error: "missing_user_id",
+        message: "user_id is required".into(),
+    })?;
+
+    let role = body["role"].as_str().unwrap_or("member");
+
+    // Verify user exists in tenant
+    sqlx::query_scalar::<_, String>(
+        "SELECT id FROM users WHERE id = $1 AND tenant_id = $2",
+    )
+    .bind(user_id)
+    .bind(&tenant_id)
+    .fetch_optional(&state.db)
+    .await?
+    .ok_or(AppError::NotFound {
+        error: "user_not_found",
+        message: "User not found in this tenant".into(),
+    })?;
+
+    // Verify organization exists in tenant
+    sqlx::query_scalar::<_, String>(
+        "SELECT id FROM organizations WHERE id = $1 AND tenant_id = $2",
+    )
+    .bind(&org_id)
+    .bind(&tenant_id)
+    .fetch_optional(&state.db)
+    .await?
+    .ok_or(AppError::NotFound {
+        error: "organization_not_found",
+        message: "Organization not found".into(),
+    })?;
+
+    sqlx::query(
+        "INSERT INTO organization_members (organization_id, user_id, tenant_id, role) \
+         VALUES ($1, $2, $3, $4) \
+         ON CONFLICT (organization_id, user_id) DO UPDATE SET role = EXCLUDED.role",
+    )
+    .bind(&org_id)
+    .bind(user_id)
+    .bind(&tenant_id)
+    .bind(role)
+    .execute(&state.db)
+    .await?;
+
+    Ok((
+        StatusCode::CREATED,
+        Json(serde_json::json!({
+            "message": "Member added",
+            "organization_id": org_id,
+            "user_id": user_id,
+            "role": role,
+        })),
+    ))
+}
+
+/// DELETE /platform/self-serve/tenants/{id}/organizations/{org_id}/members/{user_id}
+pub async fn remove_organization_member(
+    State(state): State<AppState>,
+    Path((tenant_id, org_id, user_id)): Path<(String, String, String)>,
+    req: axum::extract::Request,
+) -> Result<impl IntoResponse, AppError> {
+    let platform_user = req
+        .extensions()
+        .get::<PlatformUser>()
+        .cloned()
+        .ok_or(AppError::Unauthorized {
+            error: "unauthorized",
+            message: "Not authenticated".into(),
+        })?;
+
+    sqlx::query_scalar::<_, String>(
+        "SELECT id FROM tenants WHERE id = $1 AND owner_user_id = $2 AND status != 'deleted'",
+    )
+    .bind(&tenant_id)
+    .bind(&platform_user.user_id)
+    .fetch_optional(&state.db)
+    .await?
+    .ok_or(AppError::NotFound {
+        error: "tenant_not_found",
+        message: "Tenant not found".into(),
+    })?;
+
+    let result = sqlx::query(
+        "DELETE FROM organization_members \
+         WHERE organization_id = $1 AND user_id = $2 AND tenant_id = $3",
+    )
+    .bind(&org_id)
+    .bind(&user_id)
+    .bind(&tenant_id)
+    .execute(&state.db)
+    .await?;
+
+    if result.rows_affected() == 0 {
+        return Err(AppError::NotFound {
+            error: "member_not_found",
+            message: "Member not found in this organization".into(),
+        });
+    }
+
+    Ok(Json(serde_json::json!({ "message": "Member removed" })))
+}
+
+/// GET /platform/self-serve/tenants/{id}/users/{user_id}/detail
+pub async fn get_tenant_user_detail(
+    State(state): State<AppState>,
+    Path((tenant_id, user_id)): Path<(String, String)>,
+    req: axum::extract::Request,
+) -> Result<impl IntoResponse, AppError> {
+    let platform_user = req.extensions().get::<PlatformUser>().cloned()
+        .ok_or(AppError::Unauthorized { error: "unauthorized", message: "Not authenticated".into() })?;
+
+    sqlx::query_scalar::<_, String>(
+        "SELECT id FROM tenants WHERE id = $1 AND owner_user_id = $2 AND status != 'deleted'",
+    ).bind(&tenant_id).bind(&platform_user.user_id)
+    .fetch_optional(&state.db).await?
+    .ok_or(AppError::NotFound { error: "tenant_not_found", message: "Tenant not found".into() })?;
+
+    let user = sqlx::query(
+        "SELECT id, email, name, email_verified, COALESCE(login_attempts, 0) AS login_attempts, \
+         locked_until, created_at \
+         FROM users WHERE id = $1 AND tenant_id = $2",
+    )
+    .bind(&user_id)
+    .bind(&tenant_id)
+    .fetch_optional(&state.db).await?
+    .ok_or(AppError::NotFound { error: "user_not_found", message: "User not found".into() })?;
+
+    // Get roles, permissions, providers, active sessions in one query
+    let detail: (serde_json::Value, serde_json::Value, serde_json::Value, i64) = sqlx::query_as(
+        "SELECT \
+           COALESCE((SELECT jsonb_agg(r.name) FROM roles r JOIN user_roles ur ON ur.role_id = r.id WHERE ur.user_id = $1), '[]'::jsonb), \
+           COALESCE((SELECT jsonb_agg(DISTINCT val) FROM (SELECT jsonb_array_elements_text(r.permissions_jsonb) AS val FROM roles r JOIN user_roles ur ON ur.role_id = r.id WHERE ur.user_id = $1) sub), '[]'::jsonb), \
+           COALESCE((SELECT jsonb_agg(provider) FROM credentials WHERE user_id = $1), '[]'::jsonb), \
+           (SELECT COUNT(*) FROM refresh_tokens WHERE user_id = $1 AND tenant_id = $2 AND revoked = FALSE AND expires_at > NOW())",
+    )
+    .bind(&user_id)
+    .bind(&tenant_id)
+    .fetch_one(&state.db).await?;
+
+    Ok(Json(serde_json::json!({
+        "id": user.get::<String, _>("id"),
+        "email": user.get::<String, _>("email"),
+        "name": user.get::<Option<String>, _>("name"),
+        "email_verified": user.get::<bool, _>("email_verified"),
+        "login_attempts": user.get::<i32, _>("login_attempts"),
+        "locked_until": user.get::<Option<chrono::DateTime<Utc>>, _>("locked_until").map(|d| d.to_rfc3339()),
+        "roles": detail.0,
+        "permissions": detail.1,
+        "providers": detail.2,
+        "active_sessions": detail.3,
+        "created_at": user.get::<chrono::DateTime<Utc>, _>("created_at").to_rfc3339(),
+    })))
+}
+
+// ── Webhook Self-Serve Proxy Endpoints ────────────────────────────────
+
+/// GET /platform/self-serve/tenants/{id}/webhooks
+pub async fn list_tenant_webhooks(
+    State(state): State<AppState>,
+    Path(tenant_id): Path<String>,
+    req: axum::extract::Request,
+) -> Result<impl IntoResponse, AppError> {
+    let platform_user = req
+        .extensions()
+        .get::<PlatformUser>()
+        .cloned()
+        .ok_or(AppError::Unauthorized {
+            error: "unauthorized",
+            message: "Not authenticated".into(),
+        })?;
+
+    sqlx::query_scalar::<_, String>(
+        "SELECT id FROM tenants WHERE id = $1 AND owner_user_id = $2 AND status != 'deleted'",
+    )
+    .bind(&tenant_id)
+    .bind(&platform_user.user_id)
+    .fetch_optional(&state.db)
+    .await?
+    .ok_or(AppError::NotFound {
+        error: "tenant_not_found",
+        message: "Tenant not found".into(),
+    })?;
+
+    let rows = sqlx::query(
+        "SELECT id, url, events, active, description, created_at, updated_at \
+         FROM webhooks WHERE tenant_id = $1 ORDER BY created_at DESC",
+    )
+    .bind(&tenant_id)
+    .fetch_all(&state.db)
+    .await?;
+
+    let webhooks: Vec<serde_json::Value> = rows
+        .iter()
+        .map(|r| {
+            serde_json::json!({
+                "id": r.get::<String, _>("id"),
+                "url": r.get::<String, _>("url"),
+                "events": r.get::<serde_json::Value, _>("events"),
+                "active": r.get::<bool, _>("active"),
+                "description": r.get::<Option<String>, _>("description"),
+                "created_at": r.get::<chrono::DateTime<Utc>, _>("created_at").to_rfc3339(),
+                "updated_at": r.get::<chrono::DateTime<Utc>, _>("updated_at").to_rfc3339(),
+            })
+        })
+        .collect();
+
+    Ok(Json(serde_json::json!({ "webhooks": webhooks })))
+}
+
+/// POST /platform/self-serve/tenants/{id}/webhooks
+pub async fn create_tenant_webhook(
+    State(state): State<AppState>,
+    Path(tenant_id): Path<String>,
+    req: axum::extract::Request,
+) -> Result<impl IntoResponse, AppError> {
+    let platform_user = req
+        .extensions()
+        .get::<PlatformUser>()
+        .cloned()
+        .ok_or(AppError::Unauthorized {
+            error: "unauthorized",
+            message: "Not authenticated".into(),
+        })?;
+
+    sqlx::query_scalar::<_, String>(
+        "SELECT id FROM tenants WHERE id = $1 AND owner_user_id = $2 AND status != 'deleted'",
+    )
+    .bind(&tenant_id)
+    .bind(&platform_user.user_id)
+    .fetch_optional(&state.db)
+    .await?
+    .ok_or(AppError::NotFound {
+        error: "tenant_not_found",
+        message: "Tenant not found".into(),
+    })?;
+
+    let body: serde_json::Value = axum::Json::from_request(req, &state)
+        .await
+        .map_err(|_| AppError::BadRequest {
+            error: "invalid_body",
+            message: "Invalid JSON body. Required: url, events".into(),
+        })?
+        .0;
+
+    let url = body["url"].as_str().ok_or(AppError::BadRequest {
+        error: "missing_url",
+        message: "Webhook URL is required".into(),
+    })?;
+
+    if !url.starts_with("http://") && !url.starts_with("https://") {
+        return Err(AppError::BadRequest {
+            error: "invalid_url",
+            message: "Webhook URL must start with http:// or https://".into(),
+        });
+    }
+    if super::webhooks::is_private_url(url) {
+        return Err(AppError::BadRequest {
+            error: "invalid_url",
+            message: "URL must not target private/internal addresses".into(),
+        });
+    }
+
+    let events = body["events"]
+        .as_array()
+        .ok_or(AppError::BadRequest {
+            error: "missing_events",
+            message: "Events array is required".into(),
+        })?;
+
+    if events.is_empty() {
+        return Err(AppError::BadRequest {
+            error: "no_events",
+            message: "At least one event type is required".into(),
+        });
+    }
+
+    let event_strings: Vec<String> = events
+        .iter()
+        .filter_map(|v| v.as_str().map(String::from))
+        .collect();
+
+    for ev in &event_strings {
+        if !super::webhooks::WEBHOOK_EVENTS.contains(&ev.as_str()) {
+            return Err(AppError::BadRequest {
+                error: "invalid_event",
+                message: format!(
+                    "Unknown event type '{}'. Valid events: {:?}",
+                    ev,
+                    super::webhooks::WEBHOOK_EVENTS
+                ),
+            });
+        }
+    }
+
+    let webhook_id = format!("wh_{}", uuid::Uuid::new_v4());
+
+    use rand::RngCore;
+    let mut secret_bytes = [0u8; 32];
+    rand::thread_rng().fill_bytes(&mut secret_bytes);
+    let secret = format!(
+        "whsec_{}",
+        base64::Engine::encode(&base64::engine::general_purpose::STANDARD, secret_bytes)
+    );
+
+    let events_json = serde_json::to_value(&event_strings).unwrap_or_default();
+    let description = body["description"].as_str().unwrap_or("");
+
+    sqlx::query(
+        "INSERT INTO webhooks (id, tenant_id, url, secret, events, active, description) \
+         VALUES ($1, $2, $3, $4, $5, TRUE, $6)",
+    )
+    .bind(&webhook_id)
+    .bind(&tenant_id)
+    .bind(url)
+    .bind(&secret)
+    .bind(&events_json)
+    .bind(description)
+    .execute(&state.db)
+    .await?;
+
+    tracing::info!(webhook_id = %webhook_id, tenant = %tenant_id, "Self-serve webhook created");
+
+    Ok((
+        StatusCode::CREATED,
+        Json(serde_json::json!({
+            "webhook": {
+                "id": webhook_id,
+                "url": url,
+                "events": event_strings,
+                "active": true,
+                "description": description,
+                "secret": secret,
+            }
+        })),
+    ))
+}
+
+/// GET /platform/self-serve/tenants/{id}/webhooks/{webhook_id}
+pub async fn get_tenant_webhook(
+    State(state): State<AppState>,
+    Path((tenant_id, webhook_id)): Path<(String, String)>,
+    req: axum::extract::Request,
+) -> Result<impl IntoResponse, AppError> {
+    let platform_user = req
+        .extensions()
+        .get::<PlatformUser>()
+        .cloned()
+        .ok_or(AppError::Unauthorized {
+            error: "unauthorized",
+            message: "Not authenticated".into(),
+        })?;
+
+    sqlx::query_scalar::<_, String>(
+        "SELECT id FROM tenants WHERE id = $1 AND owner_user_id = $2 AND status != 'deleted'",
+    )
+    .bind(&tenant_id)
+    .bind(&platform_user.user_id)
+    .fetch_optional(&state.db)
+    .await?
+    .ok_or(AppError::NotFound {
+        error: "tenant_not_found",
+        message: "Tenant not found".into(),
+    })?;
+
+    let row = sqlx::query(
+        "SELECT id, url, events, active, description, created_at, updated_at \
+         FROM webhooks WHERE id = $1 AND tenant_id = $2",
+    )
+    .bind(&webhook_id)
+    .bind(&tenant_id)
+    .fetch_optional(&state.db)
+    .await?
+    .ok_or(AppError::NotFound {
+        error: "webhook_not_found",
+        message: "Webhook not found".into(),
+    })?;
+
+    Ok(Json(serde_json::json!({
+        "webhook": {
+            "id": row.get::<String, _>("id"),
+            "url": row.get::<String, _>("url"),
+            "events": row.get::<serde_json::Value, _>("events"),
+            "active": row.get::<bool, _>("active"),
+            "description": row.get::<Option<String>, _>("description"),
+            "created_at": row.get::<chrono::DateTime<Utc>, _>("created_at").to_rfc3339(),
+            "updated_at": row.get::<chrono::DateTime<Utc>, _>("updated_at").to_rfc3339(),
+        }
+    })))
+}
+
+/// PATCH /platform/self-serve/tenants/{id}/webhooks/{webhook_id}
+pub async fn update_tenant_webhook(
+    State(state): State<AppState>,
+    Path((tenant_id, webhook_id)): Path<(String, String)>,
+    req: axum::extract::Request,
+) -> Result<impl IntoResponse, AppError> {
+    let platform_user = req
+        .extensions()
+        .get::<PlatformUser>()
+        .cloned()
+        .ok_or(AppError::Unauthorized {
+            error: "unauthorized",
+            message: "Not authenticated".into(),
+        })?;
+
+    sqlx::query_scalar::<_, String>(
+        "SELECT id FROM tenants WHERE id = $1 AND owner_user_id = $2 AND status != 'deleted'",
+    )
+    .bind(&tenant_id)
+    .bind(&platform_user.user_id)
+    .fetch_optional(&state.db)
+    .await?
+    .ok_or(AppError::NotFound {
+        error: "tenant_not_found",
+        message: "Tenant not found".into(),
+    })?;
+
+    // Verify webhook belongs to tenant
+    sqlx::query_scalar::<_, String>(
+        "SELECT id FROM webhooks WHERE id = $1 AND tenant_id = $2",
+    )
+    .bind(&webhook_id)
+    .bind(&tenant_id)
+    .fetch_optional(&state.db)
+    .await?
+    .ok_or(AppError::NotFound {
+        error: "webhook_not_found",
+        message: "Webhook not found".into(),
+    })?;
+
+    let body: serde_json::Value = axum::Json::from_request(req, &state)
+        .await
+        .map_err(|_| AppError::BadRequest {
+            error: "invalid_body",
+            message: "Invalid JSON body".into(),
+        })?
+        .0;
+
+    if let Some(url) = body.get("url").and_then(|v| v.as_str()) {
+        if !url.starts_with("http://") && !url.starts_with("https://") {
+            return Err(AppError::BadRequest {
+                error: "invalid_url",
+                message: "Webhook URL must start with http:// or https://".into(),
+            });
+        }
+        if super::webhooks::is_private_url(url) {
+            return Err(AppError::BadRequest {
+                error: "invalid_url",
+                message: "URL must not target private/internal addresses".into(),
+            });
+        }
+        sqlx::query("UPDATE webhooks SET url = $1, updated_at = NOW() WHERE id = $2")
+            .bind(url)
+            .bind(&webhook_id)
+            .execute(&state.db)
+            .await?;
+    }
+
+    if let Some(events) = body.get("events").and_then(|v| v.as_array()) {
+        let event_strings: Vec<String> = events
+            .iter()
+            .filter_map(|v| v.as_str().map(String::from))
+            .collect();
+        for ev in &event_strings {
+            if !super::webhooks::WEBHOOK_EVENTS.contains(&ev.as_str()) {
+                return Err(AppError::BadRequest {
+                    error: "invalid_event",
+                    message: format!("Unknown event type '{}'", ev),
+                });
+            }
+        }
+        let json = serde_json::to_value(&event_strings).unwrap_or_default();
+        sqlx::query("UPDATE webhooks SET events = $1, updated_at = NOW() WHERE id = $2")
+            .bind(&json)
+            .bind(&webhook_id)
+            .execute(&state.db)
+            .await?;
+    }
+
+    if let Some(desc) = body.get("description").and_then(|v| v.as_str()) {
+        sqlx::query("UPDATE webhooks SET description = $1, updated_at = NOW() WHERE id = $2")
+            .bind(desc)
+            .bind(&webhook_id)
+            .execute(&state.db)
+            .await?;
+    }
+
+    if let Some(active) = body.get("active").and_then(|v| v.as_bool()) {
+        sqlx::query("UPDATE webhooks SET active = $1, updated_at = NOW() WHERE id = $2")
+            .bind(active)
+            .bind(&webhook_id)
+            .execute(&state.db)
+            .await?;
+    }
+
+    Ok(Json(serde_json::json!({ "message": "Webhook updated" })))
+}
+
+/// DELETE /platform/self-serve/tenants/{id}/webhooks/{webhook_id}
+pub async fn delete_tenant_webhook(
+    State(state): State<AppState>,
+    Path((tenant_id, webhook_id)): Path<(String, String)>,
+    req: axum::extract::Request,
+) -> Result<impl IntoResponse, AppError> {
+    let platform_user = req
+        .extensions()
+        .get::<PlatformUser>()
+        .cloned()
+        .ok_or(AppError::Unauthorized {
+            error: "unauthorized",
+            message: "Not authenticated".into(),
+        })?;
+
+    sqlx::query_scalar::<_, String>(
+        "SELECT id FROM tenants WHERE id = $1 AND owner_user_id = $2 AND status != 'deleted'",
+    )
+    .bind(&tenant_id)
+    .bind(&platform_user.user_id)
+    .fetch_optional(&state.db)
+    .await?
+    .ok_or(AppError::NotFound {
+        error: "tenant_not_found",
+        message: "Tenant not found".into(),
+    })?;
+
+    let result = sqlx::query("DELETE FROM webhooks WHERE id = $1 AND tenant_id = $2")
+        .bind(&webhook_id)
+        .bind(&tenant_id)
+        .execute(&state.db)
+        .await?;
+
+    if result.rows_affected() == 0 {
+        return Err(AppError::NotFound {
+            error: "webhook_not_found",
+            message: "Webhook not found".into(),
+        });
+    }
+
+    tracing::info!(webhook_id = %webhook_id, tenant = %tenant_id, "Self-serve webhook deleted");
+
+    Ok(Json(serde_json::json!({ "message": "Webhook deleted" })))
+}
+
+/// GET /platform/self-serve/tenants/{id}/webhooks/{webhook_id}/deliveries
+pub async fn list_webhook_deliveries(
+    State(state): State<AppState>,
+    Path((tenant_id, webhook_id)): Path<(String, String)>,
+    req: axum::extract::Request,
+) -> Result<impl IntoResponse, AppError> {
+    let platform_user = req
+        .extensions()
+        .get::<PlatformUser>()
+        .cloned()
+        .ok_or(AppError::Unauthorized {
+            error: "unauthorized",
+            message: "Not authenticated".into(),
+        })?;
+
+    sqlx::query_scalar::<_, String>(
+        "SELECT id FROM tenants WHERE id = $1 AND owner_user_id = $2 AND status != 'deleted'",
+    )
+    .bind(&tenant_id)
+    .bind(&platform_user.user_id)
+    .fetch_optional(&state.db)
+    .await?
+    .ok_or(AppError::NotFound {
+        error: "tenant_not_found",
+        message: "Tenant not found".into(),
+    })?;
+
+    // Verify webhook belongs to tenant
+    sqlx::query_scalar::<_, String>(
+        "SELECT id FROM webhooks WHERE id = $1 AND tenant_id = $2",
+    )
+    .bind(&webhook_id)
+    .bind(&tenant_id)
+    .fetch_optional(&state.db)
+    .await?
+    .ok_or(AppError::NotFound {
+        error: "webhook_not_found",
+        message: "Webhook not found".into(),
+    })?;
+
+    let rows = sqlx::query(
+        "SELECT id, event_type, payload, response_status, response_body, attempt, max_attempts, \
+         status, delivered_at, created_at \
+         FROM webhook_deliveries WHERE webhook_id = $1 \
+         ORDER BY created_at DESC LIMIT 50",
+    )
+    .bind(&webhook_id)
+    .fetch_all(&state.db)
+    .await?;
+
+    let deliveries: Vec<serde_json::Value> = rows
+        .iter()
+        .map(|r| {
+            serde_json::json!({
+                "id": r.get::<String, _>("id"),
+                "event_type": r.get::<String, _>("event_type"),
+                "payload": r.get::<serde_json::Value, _>("payload"),
+                "response_status": r.get::<Option<i32>, _>("response_status"),
+                "response_body": r.get::<Option<String>, _>("response_body"),
+                "attempt": r.get::<i32, _>("attempt"),
+                "max_attempts": r.get::<i32, _>("max_attempts"),
+                "status": r.get::<String, _>("status"),
+                "delivered_at": r.get::<Option<chrono::DateTime<Utc>>, _>("delivered_at")
+                    .map(|t| t.to_rfc3339()),
+                "created_at": r.get::<chrono::DateTime<Utc>, _>("created_at").to_rfc3339(),
+            })
+        })
+        .collect();
+
+    Ok(Json(serde_json::json!({ "deliveries": deliveries })))
+}
+
+/// POST /platform/self-serve/tenants/{id}/webhooks/{webhook_id}/test
+pub async fn test_tenant_webhook(
+    State(state): State<AppState>,
+    Path((tenant_id, webhook_id)): Path<(String, String)>,
+    req: axum::extract::Request,
+) -> Result<impl IntoResponse, AppError> {
+    let platform_user = req
+        .extensions()
+        .get::<PlatformUser>()
+        .cloned()
+        .ok_or(AppError::Unauthorized {
+            error: "unauthorized",
+            message: "Not authenticated".into(),
+        })?;
+
+    sqlx::query_scalar::<_, String>(
+        "SELECT id FROM tenants WHERE id = $1 AND owner_user_id = $2 AND status != 'deleted'",
+    )
+    .bind(&tenant_id)
+    .bind(&platform_user.user_id)
+    .fetch_optional(&state.db)
+    .await?
+    .ok_or(AppError::NotFound {
+        error: "tenant_not_found",
+        message: "Tenant not found".into(),
+    })?;
+
+    let row = sqlx::query(
+        "SELECT id, url, secret, events FROM webhooks WHERE id = $1 AND tenant_id = $2",
+    )
+    .bind(&webhook_id)
+    .bind(&tenant_id)
+    .fetch_optional(&state.db)
+    .await?
+    .ok_or(AppError::NotFound {
+        error: "webhook_not_found",
+        message: "Webhook not found".into(),
+    })?;
+
+    let url: String = row.get("url");
+    let secret: String = row.get("secret");
+
+    let payload = serde_json::json!({
+        "event": "test",
+        "tenant_id": tenant_id,
+        "timestamp": Utc::now().to_rfc3339(),
+        "data": {
+            "message": "This is a test webhook delivery from GateWASM"
+        }
+    });
+
+    let delivery_id = format!("whd_{}", uuid::Uuid::new_v4());
+
+    let result = super::webhook_engine::deliver_single(&url, &secret, &payload).await;
+
+    let (status_str, response_status, response_body) = match result {
+        Ok((code, body)) => ("delivered".to_string(), Some(code as i32), Some(body)),
+        Err(e) => ("failed".to_string(), None, Some(e.to_string())),
+    };
+
+    sqlx::query(
+        "INSERT INTO webhook_deliveries (id, webhook_id, event_type, payload, response_status, response_body, status, delivered_at, attempt) \
+         VALUES ($1, $2, 'test', $3, $4, $5, $6, NOW(), 1)",
+    )
+    .bind(&delivery_id)
+    .bind(&webhook_id)
+    .bind(&payload)
+    .bind(response_status)
+    .bind(response_body.as_deref())
+    .bind(&status_str)
+    .execute(&state.db)
+    .await?;
+
+    Ok(Json(serde_json::json!({
+        "delivery_id": delivery_id,
+        "status": status_str,
+        "response_status": response_status,
+    })))
 }
 
 /// GET /platform/login — Returning platform users sign in here.

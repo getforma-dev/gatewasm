@@ -82,6 +82,51 @@ export interface UserSession {
   mfa_verified: boolean;
 }
 
+export interface AuditLogEntry {
+  id: string;
+  email: string;
+  user_id: string | null;
+  success: boolean;
+  ip_address: string | null;
+  user_agent: string | null;
+  failure_reason: string | null;
+  created_at: string;
+}
+
+export interface TenantSession {
+  id: string;
+  user_id: string;
+  email: string;
+  created_at: string;
+  expires_at: string;
+  auth_method: string;
+  auth_provider: string | null;
+  last_activity_at: string | null;
+  login_ip: string | null;
+  mfa_verified: boolean;
+}
+
+export interface Passkey {
+  id: string;
+  name: string;
+  is_synced: boolean;
+  user_id: string;
+  email: string;
+  aaguid: string | null;
+  created_at: string;
+  last_used_at: string | null;
+}
+
+export interface Role {
+  id: string;
+  name: string;
+  description: string | null;
+  is_system: boolean;
+  permissions: string[];
+  tenant_id: string | null;
+  created_at: string;
+}
+
 export interface HostedPageData {
   headline: string;
   body: string;
@@ -89,6 +134,89 @@ export interface HostedPageData {
   cta_link: string;
   custom_html: string | null;
   updated_at: string | null;
+}
+
+export interface SecurityConfig {
+  idle_timeout_minutes: number;
+  max_sessions_per_user: number;
+  host_prefix_cookies: boolean;
+  csp_enabled: boolean;
+  client_fingerprint: boolean;
+  webauthn_enabled: boolean;
+  webauthn_attestation: string;
+  webauthn_require_device_bound: boolean;
+  fedcm_enabled: boolean;
+  dpop_required: boolean;
+  par_required: boolean;
+  mtls_enabled: boolean;
+  introspection_enabled: boolean;
+  caep_enabled: boolean;
+  impossible_travel_enabled: boolean;
+  impossible_travel_speed_threshold_kmh: number;
+}
+
+export interface TenantInvite {
+  id: string;
+  email: string;
+  role_id: string;
+  role_name: string | null;
+  status: string;
+  expires_at: string;
+  created_at: string;
+}
+
+export interface Organization {
+  id: string;
+  name: string;
+  slug: string;
+  metadata: any;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface OrgMember {
+  user_id: string;
+  email: string;
+  name: string | null;
+  role: string;
+  created_at: string;
+}
+
+export interface UserDetail {
+  id: string;
+  email: string;
+  name: string | null;
+  email_verified: boolean;
+  login_attempts: number;
+  locked_until: string | null;
+  roles: string[];
+  permissions: string[];
+  providers: string[];
+  active_sessions: number;
+  created_at: string;
+}
+
+export interface Webhook {
+  id: string;
+  url: string;
+  events: string[];
+  active: boolean;
+  description: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface WebhookDelivery {
+  id: string;
+  event_type: string;
+  payload: any;
+  response_status: number | null;
+  response_body: string | null;
+  attempt: number;
+  max_attempts: number;
+  status: string;
+  delivered_at: string | null;
+  created_at: string;
 }
 
 export interface PlatformUser {
@@ -103,22 +231,81 @@ export interface PlatformUser {
   mfa_enabled: boolean;
 }
 
-export type ConsoleView =
-  | 'tenants'
-  | 'overview'
-  | 'users'
-  | 'hosted-page'
-  | 'integrate'
-  | 'settings';
+export interface MyPasskey {
+  id: string;
+  name: string;
+  created_at: string;
+  last_used_at: string | null;
+  is_synced: boolean;
+  transports: string[];
+}
 
-export type TenantWorkspaceView = Exclude<ConsoleView, 'tenants'>;
-export type IntegrateSection = 'guide' | 'session-inspector';
+export type ConsoleView =
+  | 'overview'
+  | 'integrate'
+  | 'security'
+  | 'members'
+  | 'hosted-page'
+  | 'organizations'
+  | 'roles'
+  | 'audit-log'
+  | 'sessions'
+  | 'passkeys'
+  | 'tokens'
+  | 'activity';
+
+export type TenantWorkspaceView = ConsoleView;
+export type IntegrateSection = 'guide' | 'session-inspector' | 'webhooks';
 export type OverviewWindow = '24h' | '7d' | '30d';
+
+export type Plane = 'operator' | 'organization' | 'enduser';
+
+export type AppMode = 'account' | 'workspace';
+export type AccountTab = 'tenants' | 'api-keys' | 'account-settings';
+
+export interface PlaneTab {
+  id: string;
+  label: string;
+  shortcut: string;
+}
+
+export const PLANES: { key: Plane; label: string; sector: string; num: number; tabs: PlaneTab[] }[] = [
+  {
+    key: 'operator', label: 'Operator', sector: 'SEC-01', num: 1,
+    tabs: [
+      { id: 'overview', label: 'Overview', shortcut: '\u2325\u0031' },
+      { id: 'integrate', label: 'Integrate', shortcut: '\u2325\u0032' },
+      { id: 'security', label: 'Security', shortcut: '\u2325\u0033' },
+    ],
+  },
+  {
+    key: 'organization', label: 'Organization', sector: 'SEC-02', num: 2,
+    tabs: [
+      { id: 'members', label: 'Members', shortcut: '\u2325\u0031' },
+      { id: 'hosted-page', label: 'Hosted Page', shortcut: '\u2325\u0032' },
+      { id: 'organizations', label: 'Organizations', shortcut: '\u2325\u0033' },
+      { id: 'roles', label: 'Roles', shortcut: '\u2325\u0034' },
+      { id: 'audit-log', label: 'Audit Log', shortcut: '\u2325\u0035' },
+    ],
+  },
+  {
+    key: 'enduser', label: 'End User', sector: 'SEC-03', num: 3,
+    tabs: [
+      { id: 'sessions', label: 'Sessions', shortcut: '\u2325\u0031' },
+      { id: 'passkeys', label: 'Passkeys', shortcut: '\u2325\u0032' },
+      { id: 'tokens', label: 'Tokens', shortcut: '\u2325\u0033' },
+      { id: 'activity', label: 'Activity', shortcut: '\u2325\u0034' },
+    ],
+  },
+];
 
 interface PersistedConsoleWorkspace {
   tenantId: string | null;
   view: ConsoleView;
   integrateSection: IntegrateSection;
+  plane: Plane;
+  mode: AppMode;
+  accountTab: AccountTab;
 }
 
 // ── State ───────────────────────────────────────────────────────────────
@@ -127,7 +314,7 @@ export const [tenants, setTenants] = createSignal<Tenant[]>([]);
 export const [selectedTenant, setSelectedTenant] = createSignal<Tenant | null>(null);
 export const [selectedTenantStats, setSelectedTenantStats] = createSignal<TenantStats | null>(null);
 export const [loading, setLoading] = createSignal(false);
-export const [view, setView] = createSignal<ConsoleView>('tenants');
+export const [view, setView] = createSignal<ConsoleView>('overview');
 export const [users, setUsers] = createSignal<TenantUser[]>([]);
 export const [usersLoading, setUsersLoading] = createSignal(false);
 export const [hostedPage, setHostedPage] = createSignal<HostedPageData | null>(null);
@@ -136,9 +323,32 @@ export const [introspectToken, setIntrospectToken] = createSignal<string | null>
 export const [introspectUnavailable, setIntrospectUnavailable] = createSignal(false);
 export const [userSessions, setUserSessions] = createSignal<UserSession[]>([]);
 export const [userSessionsLoading, setUserSessionsLoading] = createSignal(false);
+export const [auditLog, setAuditLog] = createSignal<AuditLogEntry[]>([]);
+export const [auditLogLoading, setAuditLogLoading] = createSignal(false);
+export const [allSessions, setAllSessions] = createSignal<TenantSession[]>([]);
+export const [allSessionsLoading, setAllSessionsLoading] = createSignal(false);
+export const [passkeys, setPasskeys] = createSignal<Passkey[]>([]);
+export const [passkeysLoading, setPasskeysLoading] = createSignal(false);
+export const [roles, setRoles] = createSignal<Role[]>([]);
+export const [rolesLoading, setRolesLoading] = createSignal(false);
+export const [jwks, setJwks] = createSignal<any>(null);
 export const [integrateSection, setIntegrateSectionSignal] = createSignal<IntegrateSection>('guide');
 export const [overviewWindow, setOverviewWindowSignal] = createSignal<OverviewWindow>('7d');
 export const [currentUser, setCurrentUser] = createSignal<PlatformUser | null>(null);
+export const [plane, setPlaneSignal] = createSignal<Plane>('operator');
+export const [mode, setMode] = createSignal<AppMode>('account');
+export const [accountTab, setAccountTab] = createSignal<AccountTab>('tenants');
+export const [securityConfig, setSecurityConfig] = createSignal<SecurityConfig | null>(null);
+export const [securityConfigLoading, setSecurityConfigLoading] = createSignal(false);
+export const [tenantPlan, setTenantPlan] = createSignal<string>('trial');
+export const [invites, setInvites] = createSignal<TenantInvite[]>([]);
+export const [invitesLoading, setInvitesLoading] = createSignal(false);
+export const [organizations, setOrganizations] = createSignal<Organization[]>([]);
+export const [organizationsLoading, setOrganizationsLoading] = createSignal(false);
+export const [userDetail, setUserDetail] = createSignal<UserDetail | null>(null);
+export const [myPasskeys, setMyPasskeys] = createSignal<MyPasskey[]>([]);
+export const [webhooks, setWebhooks] = createSignal<Webhook[]>([]);
+export const [webhooksLoading, setWebhooksLoading] = createSignal(false);
 
 let tenantDetailRequestSeq = 0;
 let usersRequestSeq = 0;
@@ -174,6 +384,27 @@ function resetTenantScopedState(): void {
     setIntrospectData(null);
     setIntrospectToken(null);
     setIntrospectUnavailable(false);
+    setUserSessions([]);
+    setUserSessionsLoading(false);
+    setAuditLog([]);
+    setAuditLogLoading(false);
+    setAllSessions([]);
+    setAllSessionsLoading(false);
+    setPasskeys([]);
+    setPasskeysLoading(false);
+    setRoles([]);
+    setRolesLoading(false);
+    setJwks(null);
+    setSecurityConfig(null);
+    setSecurityConfigLoading(false);
+    setTenantPlan('trial');
+    setInvites([]);
+    setInvitesLoading(false);
+    setOrganizations([]);
+    setOrganizationsLoading(false);
+    setUserDetail(null);
+    setWebhooks([]);
+    setWebhooksLoading(false);
     setIntegrateSectionSignal('guide');
     setOverviewWindowSignal('7d');
   });
@@ -187,6 +418,23 @@ function workspaceStorageKey(): string | null {
   return WORKSPACE_STORAGE_PREFIX + user.id;
 }
 
+export function planeForView(v: ConsoleView): Plane {
+  for (const p of PLANES) {
+    if (p.tabs.some((t) => t.id === v)) return p.key;
+  }
+  return 'operator';
+}
+
+export function setPlane(nextPlane: Plane): void {
+  if (plane() === nextPlane) return;
+  setPlaneSignal(nextPlane);
+  const planeDef = PLANES.find((p) => p.key === nextPlane);
+  if (planeDef) {
+    const firstTab = planeDef.tabs[0].id as ConsoleView;
+    navigateTenantView(firstTab as TenantWorkspaceView);
+  }
+}
+
 function readWorkspaceState(): PersistedConsoleWorkspace | null {
   const storageKey = workspaceStorageKey();
   if (!storageKey) {
@@ -198,19 +446,53 @@ function readWorkspaceState(): PersistedConsoleWorkspace | null {
     if (!raw) {
       return null;
     }
-    const parsed = JSON.parse(raw) as Partial<PersistedConsoleWorkspace>;
+    const parsed = JSON.parse(raw) as Partial<PersistedConsoleWorkspace> & { view?: string };
+    // Backward compat: 'users' was renamed to 'members'
+    if (parsed.view === 'users') parsed.view = 'members';
+
+    // Backward compat: 'tenants' and 'settings' are no longer ConsoleView values
+    let resolvedMode: AppMode;
+    let resolvedAccountTab: AccountTab;
+    if (parsed.view === 'tenants') {
+      resolvedMode = 'account';
+      resolvedAccountTab = 'tenants';
+      parsed.view = 'overview';
+    } else if (parsed.view === 'settings') {
+      resolvedMode = 'account';
+      resolvedAccountTab = 'account-settings';
+      parsed.view = 'overview';
+    } else {
+      const validAccountTabs: AccountTab[] = ['tenants', 'api-keys', 'account-settings'];
+      resolvedAccountTab = (typeof parsed.accountTab === 'string' && validAccountTabs.includes(parsed.accountTab as AccountTab))
+        ? (parsed.accountTab as AccountTab)
+        : 'tenants';
+      // Derive mode from tenantId
+      resolvedMode = (typeof parsed.mode === 'string' && (parsed.mode === 'account' || parsed.mode === 'workspace'))
+        ? (parsed.mode as AppMode)
+        : (typeof parsed.tenantId === 'string' ? 'workspace' : 'account');
+    }
+
     const nextView = parsed.view;
     const nextSection = parsed.integrateSection;
-    if (
-      typeof nextView !== 'string' ||
-      !['tenants', 'overview', 'users', 'hosted-page', 'integrate', 'settings'].includes(nextView)
-    ) {
+    const validViews: ConsoleView[] = [
+      'overview', 'integrate', 'security',
+      'members', 'hosted-page', 'organizations', 'roles', 'audit-log',
+      'sessions', 'passkeys', 'tokens', 'activity',
+    ];
+    if (typeof nextView !== 'string' || !validViews.includes(nextView as ConsoleView)) {
       return null;
     }
+    const nextPlane = parsed.plane;
+    const validPlanes: Plane[] = ['operator', 'organization', 'enduser'];
     return {
       tenantId: typeof parsed.tenantId === 'string' ? parsed.tenantId : null,
       view: nextView as ConsoleView,
-      integrateSection: nextSection === 'session-inspector' ? 'session-inspector' : 'guide',
+      integrateSection: nextSection === 'session-inspector' ? 'session-inspector' : nextSection === 'webhooks' ? 'webhooks' : 'guide',
+      plane: (typeof nextPlane === 'string' && validPlanes.includes(nextPlane as Plane))
+        ? (nextPlane as Plane)
+        : planeForView(nextView as ConsoleView),
+      mode: resolvedMode,
+      accountTab: resolvedAccountTab,
     };
   } catch {
     return null;
@@ -228,6 +510,9 @@ function persistWorkspaceState(): void {
       tenantId: selectedTenant()?.id || null,
       view: view(),
       integrateSection: integrateSection(),
+      plane: plane(),
+      mode: mode(),
+      accountTab: accountTab(),
     };
     window.localStorage.setItem(storageKey, JSON.stringify(snapshot));
   } catch {
@@ -237,7 +522,13 @@ function persistWorkspaceState(): void {
 
 async function restoreWorkspaceState(): Promise<void> {
   const snapshot = readWorkspaceState();
-  if (!snapshot || !snapshot.tenantId || snapshot.view === 'tenants') {
+  if (!snapshot || !snapshot.tenantId) {
+    if (snapshot) {
+      batch(() => {
+        setMode(snapshot.mode);
+        setAccountTab(snapshot.accountTab);
+      });
+    }
     persistWorkspaceState();
     return;
   }
@@ -255,6 +546,9 @@ async function restoreWorkspaceState(): Promise<void> {
     resetTenantScopedState();
     setIntegrateSectionSignal(snapshot.integrateSection);
     setView(restoredView);
+    setPlaneSignal(snapshot.plane || planeForView(restoredView));
+    setMode(snapshot.mode);
+    setAccountTab(snapshot.accountTab);
   });
 
   persistWorkspaceState();
@@ -278,6 +572,23 @@ export async function loadTenants(): Promise<void> {
   }
 }
 
+export async function rotateTenantKey(tenantId: string): Promise<string | null> {
+  try {
+    const data = await api.post<{ api_key: string }>(
+      '/platform/self-serve/tenants/' + encodeURIComponent(tenantId) + '/rotate-key', {},
+    );
+    toast.show('API key rotated', 'success');
+    const updated = tenants().map((t) =>
+      t.id === tenantId ? { ...t, management_api_key: data.api_key } : t,
+    );
+    setTenants(updated);
+    return data.api_key;
+  } catch (e) {
+    toast.show(e instanceof Error ? e.message : 'Failed to rotate key', 'error');
+    return null;
+  }
+}
+
 export async function loadCurrentUser(): Promise<void> {
   try {
     const data = await api.get<PlatformUser>('/auth/me');
@@ -285,6 +596,53 @@ export async function loadCurrentUser(): Promise<void> {
   } catch (e) {
     setCurrentUser(null);
     toast.show(e instanceof Error ? e.message : 'Failed to load account profile', 'error');
+  }
+}
+
+export async function loadLoginHistory(): Promise<any[]> {
+  try {
+    const data = await api.get<{ history: any[] }>('/auth/login-history');
+    return data.history || [];
+  } catch {
+    return [];
+  }
+}
+
+export async function loadMfaStatus(): Promise<any> {
+  try {
+    return await api.get<any>('/auth/mfa/status');
+  } catch {
+    return null;
+  }
+}
+
+export async function loadMyPasskeys(): Promise<void> {
+  try {
+    const data = await api.get<{ credentials: MyPasskey[] }>('/auth/webauthn/credentials');
+    setMyPasskeys(data.credentials || []);
+  } catch { setMyPasskeys([]); }
+}
+
+export async function renameMyPasskey(id: string, name: string): Promise<void> {
+  try {
+    await api.request('/auth/webauthn/credentials/' + encodeURIComponent(id), {
+      method: 'PATCH',
+      body: { name },
+    });
+    toast.show('Passkey renamed', 'success');
+    await loadMyPasskeys();
+  } catch (e) {
+    toast.show(e instanceof Error ? e.message : 'Failed to rename passkey', 'error');
+  }
+}
+
+export async function deleteMyPasskey(id: string): Promise<void> {
+  try {
+    await api.del('/auth/webauthn/credentials/' + encodeURIComponent(id));
+    toast.show('Passkey deleted', 'success');
+    await loadMyPasskeys();
+  } catch (e) {
+    toast.show(e instanceof Error ? e.message : 'Failed to delete passkey', 'error');
   }
 }
 
@@ -391,6 +749,43 @@ export async function loadUsers(tenantId: string): Promise<void> {
   }
 }
 
+export async function loadInvites(tenantId: string): Promise<void> {
+  setInvitesLoading(true);
+  try {
+    const data = await api.get<{ invites: TenantInvite[] }>(
+      '/platform/self-serve/tenants/' + encodeURIComponent(tenantId) + '/invites',
+    );
+    if (selectedTenant()?.id !== tenantId) return;
+    setInvites(data.invites || []);
+  } catch (e) {
+    toast.show(e instanceof Error ? e.message : 'Failed to load invites', 'error');
+  } finally {
+    setInvitesLoading(false);
+  }
+}
+
+export async function sendInvite(tenantId: string, email: string, role: string): Promise<boolean> {
+  try {
+    await api.post('/platform/self-serve/tenants/' + encodeURIComponent(tenantId) + '/invites', { email, role });
+    toast.show('Invite sent to ' + email, 'success');
+    await loadInvites(tenantId);
+    return true;
+  } catch (e) {
+    toast.show(e instanceof Error ? e.message : 'Failed to send invite', 'error');
+    return false;
+  }
+}
+
+export async function revokeInvite(tenantId: string, inviteId: string): Promise<void> {
+  try {
+    await api.post('/platform/self-serve/tenants/' + encodeURIComponent(tenantId) + '/invites/' + encodeURIComponent(inviteId) + '/revoke', {});
+    toast.show('Invite revoked', 'success');
+    await loadInvites(tenantId);
+  } catch (e) {
+    toast.show(e instanceof Error ? e.message : 'Failed to revoke invite', 'error');
+  }
+}
+
 export async function blockUser(tenantId: string, userId: string): Promise<void> {
   try {
     await api.post('/platform/self-serve/tenants/' + encodeURIComponent(tenantId) + '/users/' + encodeURIComponent(userId) + '/block', {});
@@ -444,6 +839,273 @@ export async function loadUserSessions(tenantId: string, userId: string): Promis
   }
 }
 
+export async function loadAuditLog(tenantId: string): Promise<void> {
+  setAuditLogLoading(true);
+  try {
+    const data = await api.get<{ audit_log: AuditLogEntry[] }>(
+      '/platform/self-serve/tenants/' + encodeURIComponent(tenantId) + '/audit-log',
+    );
+    if (selectedTenant()?.id !== tenantId) return;
+    setAuditLog(data.audit_log || []);
+  } catch (e) {
+    toast.show(e instanceof Error ? e.message : 'Failed to load audit log', 'error');
+  } finally {
+    setAuditLogLoading(false);
+  }
+}
+
+export async function loadAllSessions(tenantId: string): Promise<void> {
+  setAllSessionsLoading(true);
+  try {
+    const data = await api.get<{ sessions: TenantSession[] }>(
+      '/platform/self-serve/tenants/' + encodeURIComponent(tenantId) + '/sessions',
+    );
+    if (selectedTenant()?.id !== tenantId) return;
+    setAllSessions(data.sessions || []);
+  } catch (e) {
+    toast.show(e instanceof Error ? e.message : 'Failed to load sessions', 'error');
+  } finally {
+    setAllSessionsLoading(false);
+  }
+}
+
+export async function loadPasskeys(tenantId: string): Promise<void> {
+  setPasskeysLoading(true);
+  try {
+    const data = await api.get<{ passkeys: Passkey[] }>(
+      '/platform/self-serve/tenants/' + encodeURIComponent(tenantId) + '/passkeys',
+    );
+    if (selectedTenant()?.id !== tenantId) return;
+    setPasskeys(data.passkeys || []);
+  } catch (e) {
+    toast.show(e instanceof Error ? e.message : 'Failed to load passkeys', 'error');
+  } finally {
+    setPasskeysLoading(false);
+  }
+}
+
+export async function loadRoles(tenantId: string): Promise<void> {
+  setRolesLoading(true);
+  try {
+    const data = await api.get<{ roles: Role[] }>(
+      '/platform/self-serve/tenants/' + encodeURIComponent(tenantId) + '/roles',
+    );
+    if (selectedTenant()?.id !== tenantId) return;
+    setRoles(data.roles || []);
+  } catch (e) {
+    toast.show(e instanceof Error ? e.message : 'Failed to load roles', 'error');
+  } finally {
+    setRolesLoading(false);
+  }
+}
+
+export async function createRole(tenantId: string, name: string, description: string): Promise<boolean> {
+  try {
+    await api.post('/platform/self-serve/tenants/' + encodeURIComponent(tenantId) + '/roles', { name, description, permissions: [] });
+    toast.show('Role created', 'success');
+    await loadRoles(tenantId);
+    return true;
+  } catch (e) {
+    toast.show(e instanceof Error ? e.message : 'Failed to create role', 'error');
+    return false;
+  }
+}
+
+export async function deleteRole(tenantId: string, roleId: string): Promise<void> {
+  try {
+    await api.del('/platform/self-serve/tenants/' + encodeURIComponent(tenantId) + '/roles/' + encodeURIComponent(roleId));
+    toast.show('Role deleted', 'success');
+    await loadRoles(tenantId);
+  } catch (e) {
+    toast.show(e instanceof Error ? e.message : 'Failed to delete role', 'error');
+  }
+}
+
+export async function loadOrganizations(tenantId: string): Promise<void> {
+  setOrganizationsLoading(true);
+  try {
+    const data = await api.get<{ organizations: Organization[] }>(
+      '/platform/self-serve/tenants/' + encodeURIComponent(tenantId) + '/organizations',
+    );
+    if (selectedTenant()?.id !== tenantId) return;
+    setOrganizations(data.organizations || []);
+  } catch (e) {
+    toast.show(e instanceof Error ? e.message : 'Failed to load organizations', 'error');
+  } finally {
+    setOrganizationsLoading(false);
+  }
+}
+
+export async function createOrganization(tenantId: string, name: string, slug: string): Promise<boolean> {
+  try {
+    await api.post('/platform/self-serve/tenants/' + encodeURIComponent(tenantId) + '/organizations', { name, slug });
+    toast.show('Organization created', 'success');
+    await loadOrganizations(tenantId);
+    return true;
+  } catch (e) {
+    toast.show(e instanceof Error ? e.message : 'Failed to create organization', 'error');
+    return false;
+  }
+}
+
+export async function deleteOrganization(tenantId: string, orgId: string): Promise<void> {
+  try {
+    await api.del('/platform/self-serve/tenants/' + encodeURIComponent(tenantId) + '/organizations/' + encodeURIComponent(orgId));
+    toast.show('Organization deleted', 'success');
+    await loadOrganizations(tenantId);
+  } catch (e) {
+    toast.show(e instanceof Error ? e.message : 'Failed to delete organization', 'error');
+  }
+}
+
+export async function loadOrgMembers(tenantId: string, orgId: string): Promise<OrgMember[]> {
+  try {
+    const data = await api.get<{ members: OrgMember[] }>(
+      '/platform/self-serve/tenants/' + encodeURIComponent(tenantId) + '/organizations/' + encodeURIComponent(orgId) + '/members',
+    );
+    return data.members || [];
+  } catch {
+    return [];
+  }
+}
+
+export async function addOrgMember(tenantId: string, orgId: string, userId: string, role: string): Promise<boolean> {
+  try {
+    await api.post(
+      '/platform/self-serve/tenants/' + encodeURIComponent(tenantId) + '/organizations/' + encodeURIComponent(orgId) + '/members',
+      { user_id: userId, role },
+    );
+    toast.show('Member added', 'success');
+    return true;
+  } catch (e) {
+    toast.show(e instanceof Error ? e.message : 'Failed to add member', 'error');
+    return false;
+  }
+}
+
+export async function removeOrgMember(tenantId: string, orgId: string, userId: string): Promise<void> {
+  try {
+    await api.del(
+      '/platform/self-serve/tenants/' + encodeURIComponent(tenantId) + '/organizations/' + encodeURIComponent(orgId) + '/members/' + encodeURIComponent(userId),
+    );
+    toast.show('Member removed', 'success');
+  } catch (e) {
+    toast.show(e instanceof Error ? e.message : 'Failed to remove member', 'error');
+  }
+}
+
+export async function loadUserDetail(tenantId: string, userId: string): Promise<void> {
+  try {
+    const data = await api.get<UserDetail>(
+      '/platform/self-serve/tenants/' + encodeURIComponent(tenantId) + '/users/' + encodeURIComponent(userId) + '/detail',
+    );
+    if (selectedTenant()?.id !== tenantId) return;
+    setUserDetail(data);
+  } catch { setUserDetail(null); }
+}
+
+export async function loadWebhooks(tenantId: string): Promise<void> {
+  setWebhooksLoading(true);
+  try {
+    const data = await api.get<{ webhooks: Webhook[] }>(
+      '/platform/self-serve/tenants/' + encodeURIComponent(tenantId) + '/webhooks',
+    );
+    if (selectedTenant()?.id !== tenantId) return;
+    setWebhooks(data.webhooks || []);
+  } catch (e) {
+    toast.show(e instanceof Error ? e.message : 'Failed to load webhooks', 'error');
+  } finally {
+    setWebhooksLoading(false);
+  }
+}
+
+export async function createWebhook(
+  tenantId: string,
+  payload: { url: string; events: string[]; description?: string },
+): Promise<{ webhook: Webhook & { secret: string } } | null> {
+  try {
+    const data = await api.post<{ webhook: Webhook & { secret: string } }>(
+      '/platform/self-serve/tenants/' + encodeURIComponent(tenantId) + '/webhooks',
+      payload,
+    );
+    toast.show('Webhook created', 'success');
+    await loadWebhooks(tenantId);
+    return data;
+  } catch (e) {
+    toast.show(e instanceof Error ? e.message : 'Failed to create webhook', 'error');
+    return null;
+  }
+}
+
+export async function updateWebhook(
+  tenantId: string,
+  webhookId: string,
+  patch: { url?: string; events?: string[]; active?: boolean; description?: string },
+): Promise<boolean> {
+  try {
+    await api.request(
+      '/platform/self-serve/tenants/' + encodeURIComponent(tenantId) + '/webhooks/' + encodeURIComponent(webhookId),
+      { method: 'PATCH', body: patch },
+    );
+    toast.show('Webhook updated', 'success');
+    await loadWebhooks(tenantId);
+    return true;
+  } catch (e) {
+    toast.show(e instanceof Error ? e.message : 'Failed to update webhook', 'error');
+    return false;
+  }
+}
+
+export async function deleteWebhook(tenantId: string, webhookId: string): Promise<void> {
+  try {
+    await api.del(
+      '/platform/self-serve/tenants/' + encodeURIComponent(tenantId) + '/webhooks/' + encodeURIComponent(webhookId),
+    );
+    toast.show('Webhook deleted', 'success');
+    await loadWebhooks(tenantId);
+  } catch (e) {
+    toast.show(e instanceof Error ? e.message : 'Failed to delete webhook', 'error');
+  }
+}
+
+export async function loadWebhookDeliveries(
+  tenantId: string,
+  webhookId: string,
+): Promise<WebhookDelivery[]> {
+  try {
+    const data = await api.get<{ deliveries: WebhookDelivery[] }>(
+      '/platform/self-serve/tenants/' + encodeURIComponent(tenantId) + '/webhooks/' + encodeURIComponent(webhookId) + '/deliveries',
+    );
+    return data.deliveries || [];
+  } catch {
+    return [];
+  }
+}
+
+export async function testWebhook(
+  tenantId: string,
+  webhookId: string,
+): Promise<{ delivery_id: string; status: string; response_status: number | null } | null> {
+  try {
+    const data = await api.post<{ delivery_id: string; status: string; response_status: number | null }>(
+      '/platform/self-serve/tenants/' + encodeURIComponent(tenantId) + '/webhooks/' + encodeURIComponent(webhookId) + '/test',
+      {},
+    );
+    toast.show(data.status === 'delivered' ? 'Test delivered' : 'Test failed', data.status === 'delivered' ? 'success' : 'error');
+    return data;
+  } catch (e) {
+    toast.show(e instanceof Error ? e.message : 'Failed to send test', 'error');
+    return null;
+  }
+}
+
+export async function loadJwks(slug: string): Promise<void> {
+  try {
+    const res = await fetch('/t/' + encodeURIComponent(slug) + '/auth/jwks');
+    if (res.ok) setJwks(await res.json());
+  } catch { /* ignore */ }
+}
+
 export async function loadHostedPage(tenantId: string): Promise<void> {
   const requestSeq = ++hostedPageRequestSeq;
   try {
@@ -475,6 +1137,38 @@ export async function saveHostedPage(tenantId: string, data: Partial<HostedPageD
 
   await loadHostedPage(tenantId);
   return true;
+}
+
+export async function loadSecurityConfig(tenantId: string): Promise<void> {
+  setSecurityConfigLoading(true);
+  try {
+    const data = await api.get<{ security_config: SecurityConfig; plan: string }>(
+      '/platform/self-serve/tenants/' + encodeURIComponent(tenantId) + '/security-config',
+    );
+    if (selectedTenant()?.id !== tenantId) return;
+    setSecurityConfig(data.security_config);
+    setTenantPlan(data.plan);
+  } catch (e) {
+    toast.show(e instanceof Error ? e.message : 'Failed to load security config', 'error');
+  } finally {
+    setSecurityConfigLoading(false);
+  }
+}
+
+export async function saveSecurityConfig(tenantId: string, patch: Partial<SecurityConfig>): Promise<boolean> {
+  try {
+    const data = await api.request<{ security_config: SecurityConfig; plan: string }>(
+      '/platform/self-serve/tenants/' + encodeURIComponent(tenantId) + '/security-config',
+      { method: 'PATCH', body: patch },
+    );
+    setSecurityConfig(data.security_config);
+    setTenantPlan(data.plan);
+    toast.show('Security config updated', 'success');
+    return true;
+  } catch (e) {
+    toast.show(e instanceof Error ? e.message : 'Failed to update security config', 'error');
+    return false;
+  }
 }
 
 export async function deleteTenant(tenantId: string, confirmSlug: string): Promise<boolean> {
@@ -589,17 +1283,40 @@ function preferredTenantView(tenant: Tenant): TenantWorkspaceView {
 }
 
 async function hydrateTenantView(nextView: TenantWorkspaceView, tenant: Tenant): Promise<void> {
-  const tasks: Promise<void>[] = [
-    loadTenantDetail(tenant.id, overviewWindow()),
-    loadIntrospect(tenant.slug),
-  ];
+  const tasks: Promise<void>[] = [];
 
-  syncIntrospectRefresh(tenant.slug);
+  // Only load tenant detail for overview (stats dashboard) — not every tab switch
+  if (nextView === 'overview') {
+    tasks.push(loadTenantDetail(tenant.id, overviewWindow()));
+  }
 
-  if (nextView === 'users') {
+  // Only load introspect for integrate view (Auth Reference live preview)
+  if (nextView === 'integrate') {
+    tasks.push(loadIntrospect(tenant.slug));
+    syncIntrospectRefresh(tenant.slug);
+  }
+
+  if (nextView === 'members') {
     tasks.push(loadUsers(tenant.id));
+    tasks.push(loadInvites(tenant.id));
+  } else if (nextView === 'security') {
+    tasks.push(loadSecurityConfig(tenant.id));
   } else if (nextView === 'hosted-page') {
     tasks.push(loadHostedPage(tenant.id));
+  } else if (nextView === 'audit-log' || nextView === 'activity') {
+    tasks.push(loadAuditLog(tenant.id));
+  } else if (nextView === 'sessions') {
+    tasks.push(loadAllSessions(tenant.id));
+  } else if (nextView === 'passkeys') {
+    tasks.push(loadPasskeys(tenant.id));
+  } else if (nextView === 'organizations') {
+    tasks.push(loadOrganizations(tenant.id));
+  } else if (nextView === 'roles') {
+    tasks.push(loadRoles(tenant.id));
+  } else if (nextView === 'tokens') {
+    tasks.push(loadJwks(tenant.slug));
+  } else if (nextView === 'integrate') {
+    tasks.push(loadWebhooks(tenant.id));
   }
 
   await Promise.all(tasks);
@@ -610,6 +1327,7 @@ export function navigateTenantView(nextView: TenantWorkspaceView): void {
   if (!tenant) return;
 
   setView(nextView);
+  setPlaneSignal(planeForView(nextView));
   persistWorkspaceState();
   void hydrateTenantView(nextView, tenant);
 }
@@ -666,6 +1384,8 @@ export function setIntegrateSection(nextSection: IntegrateSection): void {
 
   if (nextSection === 'session-inspector') {
     void hydrateTenantView('integrate', tenant);
+  } else if (nextSection === 'webhooks') {
+    void loadWebhooks(tenant.id);
   }
 }
 
@@ -673,7 +1393,7 @@ export async function refreshCurrentView(): Promise<void> {
   const currentView = view();
   const tenant = selectedTenant();
 
-  if (currentView === 'tenants' || !tenant) {
+  if (mode() === 'account' || !tenant) {
     await Promise.all([loadTenants(), loadCurrentUser()]);
     return;
   }
@@ -694,10 +1414,19 @@ export function selectTenant(tenant: Tenant): void {
     setSelectedTenant(tenant);
     resetTenantScopedState();
     setView(nextView);
+    setPlaneSignal(planeForView(nextView));
+    setMode('workspace');
   });
 
   persistWorkspaceState();
-  void hydrateTenantView(nextView, tenant);
+
+  // Load tenant detail + introspect once on tenant selection, plus view-specific data
+  void Promise.all([
+    loadTenantDetail(tenant.id, overviewWindow()),
+    loadIntrospect(tenant.slug),
+    hydrateTenantView(nextView, tenant),
+  ]);
+  syncIntrospectRefresh(tenant.slug);
 }
 
 export function backToTenants(): void {
@@ -711,7 +1440,8 @@ export function backToTenants(): void {
     setLoading(false);
     setSelectedTenant(null);
     resetTenantScopedState();
-    setView('tenants');
+    setMode('account');
+    setAccountTab('tenants');
   });
   persistWorkspaceState();
 }

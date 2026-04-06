@@ -80,8 +80,8 @@ export function OverviewView() {
           h('button', {
             type: 'button',
             class: 'btn btn-sm btn-ghost',
-            onClick: () => navigateTenantView('settings'),
-          }, 'Open Settings'),
+            onClick: () => navigateTenantView('integrate'),
+          }, 'Open Integrate'),
         ),
         ChecklistItem(
           'Preview the login page',
@@ -355,8 +355,8 @@ function ActivityFeedCard(
       h('button', {
         type: 'button',
         class: 'btn btn-sm btn-ghost',
-        onClick: () => navigateTenantView('users'),
-      }, 'Open Users'),
+        onClick: () => navigateTenantView('members'),
+      }, 'Open Members'),
     ),
     items().length === 0
       ? OverviewEmptyPanel(
@@ -428,7 +428,10 @@ function authStatusCard() {
       ),
       h('div', { class: 'card-actions' },
         h('a', {
-          href: () => '/t/' + selectedTenant()!.slug + '/login?redirect=/t/' + selectedTenant()!.slug + '/site',
+          href: () => {
+            const t = selectedTenant();
+            return t ? '/t/' + t.slug + '/login?redirect=/t/' + t.slug + '/site' : '#';
+          },
           target: '_blank',
           class: 'btn btn-primary btn-sm',
         }, 'Start tenant sign-in'),

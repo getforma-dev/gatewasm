@@ -865,28 +865,699 @@
 
 
 /* ==========================================================================
-   Shell — Sidebar Layout
+   Shell — Flex Layout
    ========================================================================== */
 
 .shell {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
+  display: flex;
+  flex-direction: column;
   height: 100vh;
   min-height: 100vh;
   width: 100%;
   overflow: hidden;
   position: relative;
-  z-index: 1;
 }
 
 .shell-stage {
   min-width: 0;
   min-height: 0;
-  height: 100vh;
+  flex: 1 1 auto;
   overflow: hidden;
   display: flex;
   flex-direction: column;
 }
+
+
+/* ==========================================================================
+   Shell — Plane Theming via data attribute
+   ========================================================================== */
+
+.shell[data-plane='operator'] {
+  --plane: var(--plane1);
+  --plane-glow: var(--plane1-glow);
+  --plane-muted: var(--plane1-muted);
+  --plane-border: var(--plane1-border);
+}
+.shell[data-plane='organization'] {
+  --plane: var(--plane2);
+  --plane-glow: var(--plane2-glow);
+  --plane-muted: var(--plane2-muted);
+  --plane-border: var(--plane2-border);
+}
+.shell[data-plane='enduser'] {
+  --plane: var(--plane3);
+  --plane-glow: var(--plane3-glow);
+  --plane-muted: var(--plane3-muted);
+  --plane-border: var(--plane3-border);
+}
+
+
+/* ==========================================================================
+   PlaneNav — Container
+   ========================================================================== */
+
+.plane-nav {
+  position: sticky;
+  top: 0;
+  width: 100%;
+  z-index: 10;
+  flex-shrink: 0;
+  transition: all 400ms ease;
+}
+
+.plane-nav-collapsed .plane-nav-expanded {
+  display: none;
+}
+
+.plane-nav-collapsed .plane-collapsed-bar {
+  display: flex;
+}
+
+.plane-nav-expanded {
+  display: block;
+}
+
+
+/* ==========================================================================
+   PlaneNav — Header Bar
+   ========================================================================== */
+
+.plane-header {
+  height: var(--header-height);
+  background: #101018;
+  border-bottom: 1px solid color-mix(in srgb, var(--plane), transparent 82%);
+  display: flex;
+  align-items: center;
+  padding: 0 28px;
+  position: relative;
+}
+
+.plane-header-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.plane-header-center {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.plane-header-right {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.plane-logo-mark {
+  width: 32px;
+  height: 32px;
+  clip-path: polygon(0 0, calc(100% - 6px) 0, 100% 6px, 100% 100%, 6px 100%, 0 calc(100% - 6px));
+  background: linear-gradient(135deg, var(--plane), color-mix(in srgb, var(--plane), transparent 30%));
+  transition: background 400ms;
+}
+
+.plane-product-name {
+  font-family: Rajdhani, sans-serif;
+  font-weight: 700;
+  font-size: 15px;
+  letter-spacing: 0.04em;
+  color: var(--text);
+}
+
+.plane-domain {
+  font-family: 'DM Mono', monospace;
+  font-size: 11px;
+  color: #555;
+}
+
+.plane-status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.plane-status-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #1EDC82;
+  box-shadow: 0 0 6px rgba(30, 220, 130, 0.5);
+  animation: pulse 2s infinite;
+}
+
+.plane-tenant-indicator {
+  font-family: Rajdhani, sans-serif;
+  font-size: 13px;
+  font-weight: 600;
+  color: #ddd;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 200px;
+}
+
+.plane-version {
+  font-family: Rajdhani, sans-serif;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  clip-path: polygon(5px 0, 100% 0, calc(100% - 5px) 100%, 0 100%);
+  padding: 3px 14px;
+  background: var(--plane-muted);
+  border: 1px solid var(--plane-border);
+  color: var(--text-dim);
+}
+
+
+/* ==========================================================================
+   PlaneNav — Avatar
+   ========================================================================== */
+
+.plane-avatar-shell {
+  position: relative;
+}
+
+.plane-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  background: #1A1A22;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: 'DM Mono', monospace;
+  font-size: 12px;
+  color: var(--text-dim);
+  cursor: pointer;
+  border: 1px solid var(--border);
+}
+
+.plane-avatar-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  min-width: 200px;
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 0;
+  z-index: 100;
+  box-shadow: var(--shadow-lg);
+}
+
+.plane-avatar-menu-header {
+  padding: 8px 16px;
+}
+
+.plane-avatar-menu-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.plane-avatar-menu-email {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-family: 'DM Mono', monospace;
+}
+
+.plane-avatar-menu-divider {
+  height: 1px;
+  background: var(--border);
+  margin: 4px 0;
+}
+
+.plane-avatar-menu-item {
+  width: 100%;
+  padding: 8px 16px;
+  font-size: 13px;
+  color: var(--text-dim);
+  cursor: pointer;
+  border: none;
+  background: transparent;
+  text-align: left;
+  font-family: inherit;
+}
+
+.plane-avatar-menu-item-danger {
+  color: var(--danger);
+}
+
+
+/* ==========================================================================
+   PlaneNav — Tier 1 (Plane Switcher)
+   ========================================================================== */
+
+.plane-tier1 {
+  display: flex;
+  align-items: flex-end;
+  gap: 4px;
+  padding: 6px 28px 0;
+  background: #101018;
+  border-bottom: 1px solid color-mix(in srgb, var(--plane), transparent 88%);
+}
+
+.plane-btn {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 16px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  border-radius: 6px 6px 0 0;
+  position: relative;
+  font-family: inherit;
+  color: inherit;
+  transition: all 150ms;
+}
+
+.plane-btn.active {
+  background: var(--plane-muted);
+  border-bottom-color: var(--plane);
+}
+
+.plane-num {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 28px;
+  height: 24px;
+  padding: 0 6px;
+  clip-path: polygon(5px 0, 100% 0, calc(100% - 5px) 100%, 0 100%);
+  font-family: 'Orbitron', sans-serif;
+  font-weight: 700;
+  font-size: 12px;
+  background: #1A1A24;
+  color: #666;
+  transition: all 200ms ease;
+}
+
+.plane-btn.active .plane-num {
+  background: var(--plane);
+  color: #fff;
+  text-shadow: 0 0 10px var(--plane-glow);
+}
+
+.plane-label {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  text-align: left;
+}
+
+.plane-label > :first-child {
+  font-family: Rajdhani, sans-serif;
+  font-size: 14px;
+  font-weight: 500;
+  color: #777;
+}
+
+.plane-btn.active .plane-label > :first-child {
+  font-weight: 700;
+  color: var(--text);
+}
+
+.plane-sector {
+  font-family: 'DM Mono', monospace;
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  color: #555;
+}
+
+.plane-btn.active .plane-sector {
+  color: var(--plane);
+}
+
+.plane-collapse-toggle {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  border: 1px solid #33333D;
+  border-radius: 5px;
+  background: #1A1A22;
+  cursor: pointer;
+  color: #999;
+  font-family: inherit;
+  font-size: 11px;
+  transition: border-color 150ms ease, color 150ms ease;
+}
+
+.plane-collapse-toggle:hover {
+  border-color: var(--plane-border);
+  color: var(--text-dim);
+}
+
+.plane-collapse-toggle kbd {
+  font-family: 'DM Mono', monospace;
+  font-size: 10px;
+  color: #666;
+}
+
+.plane-collapse-chevron {
+  font-size: 10px;
+}
+
+
+/* ==========================================================================
+   PlaneNav — Tier 2 (Page Tabs)
+   ========================================================================== */
+
+.plane-tier2 {
+  display: flex;
+  align-items: center;
+  padding: 0 28px;
+  background: #0E0E16;
+  border-bottom: 1px solid color-mix(in srgb, var(--plane), transparent 94%);
+}
+
+.plane-tier2-inner {
+  display: flex;
+  gap: 0;
+  flex: 1;
+}
+
+.plane-tab {
+  padding: 10px 16px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  border-radius: 4px 4px 0 0;
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  font-family: inherit;
+  color: inherit;
+  transition: all 150ms;
+}
+
+.plane-tab.active {
+  background: color-mix(in srgb, var(--plane), transparent 94%);
+  border-bottom-color: color-mix(in srgb, var(--plane), transparent 12%);
+  color: var(--text);
+}
+
+.plane-tab > span {
+  font-family: Rajdhani, sans-serif;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-muted);
+}
+
+.plane-tab.active > span {
+  font-weight: 600;
+  color: var(--text);
+  text-shadow: 0 0 12px var(--plane-glow);
+}
+
+.plane-tab-shortcut {
+  font-family: 'DM Mono', monospace;
+  font-size: 9px;
+  color: #2A2A33;
+}
+
+.plane-tab.active .plane-tab-shortcut {
+  color: color-mix(in srgb, var(--plane), transparent 45%);
+}
+
+.plane-accent-bar {
+  width: 32px;
+  height: 3px;
+  margin-left: auto;
+  border-radius: 2px;
+  background: linear-gradient(to right, transparent, color-mix(in srgb, var(--plane), transparent 34%));
+  box-shadow: 0 0 6px var(--plane-glow);
+  align-self: center;
+}
+
+
+/* ==========================================================================
+   PlaneNav — Collapsed Mini-Bar
+   ========================================================================== */
+
+.plane-collapsed-bar {
+  height: var(--collapsed-nav-height);
+  background: #101018;
+  border-bottom: 1px solid color-mix(in srgb, var(--plane), transparent 85%);
+  display: none;
+  align-items: center;
+  padding: 0 28px;
+  justify-content: space-between;
+}
+
+.plane-readout {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: Rajdhani, sans-serif;
+  font-size: 13px;
+  font-weight: 600;
+  color: #ddd;
+}
+
+.plane-readout-sep {
+  color: color-mix(in srgb, var(--plane), transparent 56%);
+  font-size: 10px;
+}
+
+.plane-collapsed-right {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.plane-pip {
+  min-width: 26px;
+  height: 20px;
+  padding: 0 5px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  clip-path: polygon(4px 0, 100% 0, calc(100% - 4px) 100%, 0 100%);
+  font-family: 'Orbitron', sans-serif;
+  font-weight: 700;
+  font-size: 11px;
+  background: #1A1A24;
+  color: #666;
+  border: none;
+  cursor: pointer;
+  transition: all 200ms ease;
+}
+
+.plane-pip.active {
+  background: var(--plane);
+  color: #fff;
+}
+
+
+/* ==========================================================================
+   PlaneNav — Flash Overlay
+   ========================================================================== */
+
+.flash-overlay {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 999;
+  opacity: 0.07;
+}
+
+
+/* ==========================================================================
+   PlaneNav — Shared Hover
+   ========================================================================== */
+
+.hv:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+
+/* ==========================================================================
+   PlaneNav — Pulse Animation
+   ========================================================================== */
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+
+/* ==========================================================================
+   PlaneNav — Responsive
+   ========================================================================== */
+
+@media (max-width: 768px) {
+  .plane-btn .plane-label { display: none; }
+  .plane-tier2 { overflow-x: auto; }
+  .plane-header-center { display: none; }
+}
+
+
+/* ==========================================================================
+   Account Shell (no tenant selected)
+   ========================================================================== */
+
+.account-shell {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
+}
+
+.account-header {
+  height: var(--header-height);
+  background: #101018;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  padding: 0 28px;
+  flex-shrink: 0;
+}
+
+.account-header-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.account-header-right {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.account-tabs {
+  display: flex;
+  gap: 0;
+  padding: 0 28px;
+  background: #0E0E16;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.account-tab {
+  padding: 10px 20px;
+  border: none;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--text-muted);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 150ms ease;
+}
+
+.account-tab:hover {
+  color: var(--text-dim);
+}
+
+.account-tab.active {
+  color: var(--text);
+  border-bottom-color: var(--accent);
+  font-weight: 600;
+}
+
+.account-stage {
+  flex: 1 1 auto;
+  overflow-y: auto;
+}
+
+/* ── Tenant Switcher ──────────────────────────────────────────────────── */
+
+.plane-tenant-switcher {
+  position: relative;
+  margin-left: 8px;
+  padding-left: 12px;
+  border-left: 1px solid var(--border);
+}
+
+.plane-tenant-trigger {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: transparent;
+  cursor: pointer;
+  font-family: inherit;
+  color: inherit;
+}
+
+.plane-tenant-name {
+  font-family: Rajdhani, sans-serif;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.plane-tenant-chevron {
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
+.plane-tenant-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  min-width: 240px;
+  max-height: 320px;
+  overflow-y: auto;
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px 0;
+  z-index: 100;
+  box-shadow: var(--shadow-lg);
+}
+
+.plane-tenant-menu-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 14px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 13px;
+  color: var(--text-dim);
+  text-align: left;
+}
+
+.plane-tenant-menu-item.active {
+  color: var(--plane);
+}
+
+.plane-tenant-menu-back {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.plane-tenant-menu-slug {
+  font-family: 'DM Mono', monospace;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
 
 /* ── Sidebar ──────────────────────────────────────────────────────────── */
 
@@ -1516,6 +2187,7 @@
   min-width: 0;
   overflow-y: auto;
   overflow-x: clip;
+  padding-bottom: var(--space-xl);
   position: relative;
   z-index: 1;
 }
@@ -1638,10 +2310,6 @@
    ========================================================================== */
 
 @media (max-width: 680px) {
-  .shell {
-    grid-template-columns: 1fr;
-  }
-
   .sidebar-rail,
   .sidebar-rail.collapsed {
     width: 100%;

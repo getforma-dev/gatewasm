@@ -35,10 +35,12 @@ test('auth reference lives inside integrate', async ({ browser }) => {
     await page.waitForTimeout(1500);
 
     await page.locator('.tenant-card').filter({ hasText: 'Smoke Tenant' }).first().click();
-    await expect(page.locator('.sidebar')).toBeVisible();
-    await expect(page.locator('.sidebar').getByText('Auth Sandbox')).toHaveCount(0);
 
-    await page.locator('.sidebar').getByText('Integrate').click();
+    // Switch to Operator plane and navigate to Integrate tab
+    await page.getByRole('button', { name: 'Operator' }).click();
+    await page.waitForTimeout(500);
+
+    await page.getByRole('tab', { name: 'Integrate' }).click();
     await page.waitForTimeout(1000);
 
     await expect(page.getByRole('tab', { name: 'Getting Started' })).toBeVisible();
@@ -97,13 +99,16 @@ test('users view shows active session count', async ({ browser }) => {
     await page.waitForTimeout(1500);
 
     await page.locator('.tenant-card').filter({ hasText: 'Session Test' }).first().click();
-    await expect(page.locator('.sidebar')).toBeVisible();
 
-    await page.locator('.sidebar').getByText('Users').click();
+    // Switch to Organization plane and navigate to Members tab
+    await page.getByRole('button', { name: 'Organization' }).click();
+    await page.waitForTimeout(500);
+
+    await page.getByRole('tab', { name: 'Members' }).click();
     await page.waitForTimeout(1000);
 
-    // Users view should render (may be empty for a new tenant)
-    await expect(page.getByText('Users')).toBeVisible();
+    // Members view should render (may be empty for a new tenant)
+    await expect(page.getByText('Members')).toBeVisible();
   } finally {
     if (tenantId) {
       const refresh = await context.request.post(BASE + '/t/platform/auth/token', {

@@ -1257,9 +1257,10 @@
    ========================================================================== */
 
 .console-view {
-  max-width: 1160px;
+  max-width: 1240px;
   margin: 0 auto;
   padding: var(--space-xl) var(--space-xl) calc(var(--space-xl) + var(--space-md));
+  width: 100%;
   display: flex;
   flex-direction: column;
   gap: var(--space-xl);
@@ -2967,4 +2968,68 @@
 
 .text-muted {
   color: var(--text-muted);
+}
+
+
+/* ── Activity Timeline ────────────────────────────────────────────── */
+
+.activity-timeline {
+  display: grid;
+  gap: 0;
+}
+
+.activity-entry {
+  display: grid;
+  grid-template-columns: 24px 1fr auto;
+  gap: var(--space-sm);
+  padding: var(--space-sm) 0;
+  border-bottom: 1px solid var(--border);
+  align-items: start;
+}
+
+.activity-entry:last-child {
+  border-bottom: none;
+}
+
+.activity-dot-col {
+  display: flex;
+  justify-content: center;
+  padding-top: 4px;
+}
+
+.activity-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.activity-dot-success {
+  background: var(--success);
+  box-shadow: 0 0 4px rgba(74, 222, 128, 0.3);
+}
+
+.activity-dot-fail {
+  background: var(--danger);
+  box-shadow: 0 0 4px rgba(248, 113, 113, 0.3);
+}
+
+.activity-content {
+  min-width: 0;
+}
+
+.activity-desc {
+  font-size: 0.82rem;
+  color: var(--text);
+}
+
+.activity-detail {
+  font-size: 0.72rem;
+  margin-top: 2px;
+}
+
+.activity-time {
+  font-family: 'DM Mono', monospace;
+  font-size: 0.68rem;
+  white-space: nowrap;
+  padding-top: 2px;
 }

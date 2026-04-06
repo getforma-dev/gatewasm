@@ -398,8 +398,76 @@ fn create_router_inner(state: AppState, rate_limit_enabled: bool) -> Router {
             get(onboarding::list_tenant_user_sessions),
         )
         .route(
+            "/platform/self-serve/tenants/{id}/audit-log",
+            get(onboarding::list_tenant_audit_log),
+        )
+        .route(
+            "/platform/self-serve/tenants/{id}/sessions",
+            get(onboarding::list_tenant_sessions),
+        )
+        .route(
+            "/platform/self-serve/tenants/{id}/passkeys",
+            get(onboarding::list_tenant_passkeys),
+        )
+        .route(
+            "/platform/self-serve/tenants/{id}/roles",
+            get(onboarding::list_tenant_roles).post(onboarding::create_tenant_role),
+        )
+        .route(
+            "/platform/self-serve/tenants/{id}/roles/{role_id}",
+            patch(onboarding::update_tenant_role).delete(onboarding::delete_tenant_role),
+        )
+        .route(
+            "/platform/self-serve/tenants/{id}/security-config",
+            get(onboarding::get_tenant_security_config).patch(onboarding::update_tenant_security_config),
+        )
+        .route(
             "/platform/self-serve/tenants/{id}/hosted-page",
             get(onboarding::get_hosted_page).put(onboarding::update_hosted_page),
+        )
+        .route(
+            "/platform/self-serve/tenants/{id}/invites",
+            get(onboarding::list_tenant_invites_selfserve).post(onboarding::create_tenant_invite_selfserve),
+        )
+        .route(
+            "/platform/self-serve/tenants/{id}/invites/{invite_id}/revoke",
+            post(onboarding::revoke_tenant_invite_selfserve),
+        )
+        .route(
+            "/platform/self-serve/tenants/{id}/organizations",
+            get(onboarding::list_tenant_organizations).post(onboarding::create_tenant_organization),
+        )
+        .route(
+            "/platform/self-serve/tenants/{id}/organizations/{org_id}",
+            get(onboarding::get_tenant_organization).patch(onboarding::update_tenant_organization).delete(onboarding::delete_tenant_organization),
+        )
+        .route(
+            "/platform/self-serve/tenants/{id}/organizations/{org_id}/members",
+            get(onboarding::list_organization_members).post(onboarding::add_organization_member),
+        )
+        .route(
+            "/platform/self-serve/tenants/{id}/organizations/{org_id}/members/{user_id}",
+            delete(onboarding::remove_organization_member),
+        )
+        .route(
+            "/platform/self-serve/tenants/{id}/users/{user_id}/detail",
+            get(onboarding::get_tenant_user_detail),
+        )
+        .route(
+            "/platform/self-serve/tenants/{id}/webhooks",
+            get(onboarding::list_tenant_webhooks).post(onboarding::create_tenant_webhook),
+        )
+        .route(
+            "/platform/self-serve/tenants/{id}/webhooks/{webhook_id}",
+            get(onboarding::get_tenant_webhook).patch(onboarding::update_tenant_webhook).delete(onboarding::delete_tenant_webhook),
+        )
+        .route(
+            "/platform/self-serve/tenants/{id}/webhooks/{webhook_id}/deliveries",
+            get(onboarding::list_webhook_deliveries),
+        )
+        .route(
+            "/platform/self-serve/tenants/{id}/webhooks/{webhook_id}/test",
+            post(onboarding::test_tenant_webhook),
         )
         .layer(middleware::from_fn_with_state(
             state.clone(),
