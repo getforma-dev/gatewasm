@@ -1486,7 +1486,7 @@ export async function init(): Promise<void> {
     await auth.silentRefresh();
     await Promise.all([loadTenants(), loadCurrentUser()]);
 
-    // Check URL for tenant slug — takes priority over localStorage
+    // URL determines mode — no localStorage override
     const urlMatch = window.location.pathname.match(/^\/platform\/console\/([^/]+)/);
     if (urlMatch) {
       const slug = urlMatch[1];
@@ -1496,17 +1496,12 @@ export async function init(): Promise<void> {
         auth.startAutoRefresh();
         return;
       }
-      // Slug not found — clean up the URL
+      // Slug not found — clean up the URL, stay in account mode
       history.replaceState(null, '', '/platform/console');
     }
 
-    await restoreWorkspaceState();
-
-    // After restore, sync URL with restored state
-    const sel = selectedTenant();
-    if (sel && mode() === 'workspace') {
-      history.replaceState({ slug: sel.slug }, '', '/platform/console/' + sel.slug);
-    }
+    // /platform/console (no slug) = account mode, always
+    // Don't restore workspace state from localStorage — URL is the source of truth
 
     auth.startAutoRefresh();
   } catch {
