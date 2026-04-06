@@ -224,7 +224,7 @@ export function ConsoleApp() {
       h('header', { class: 'account-header' },
         h('div', { class: 'account-header-left' },
           h('div', { class: 'plane-logo-mark' }, FAuthMark(28)),
-          h('span', { class: 'plane-product-name' }, 'GateWASM'),
+          h('span', { class: 'plane-product-name' }, 'fAuth'),
         ),
         h('div', { class: 'account-header-right' },
           h('button', {

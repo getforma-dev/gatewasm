@@ -231,7 +231,7 @@ export function TenantLoginCard() {
       createShow(() => mode() === 'login' || mode() === 'register', AuthFormView),
       h('div', { class: 'tl-powered' },
         'Secured by ',
-        h('a', { href: 'https://gatewasm.dev', target: '_blank', rel: 'noopener' }, 'GateWASM'),
+        h('a', { href: 'https://getforma.dev', target: '_blank', rel: 'noopener' }, 'Forma Auth'),
       ),
     ),
   );

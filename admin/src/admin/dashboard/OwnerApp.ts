@@ -9,6 +9,7 @@ import { LoadingBar } from '../../core/components/ui/LoadingBar';
 import { ToastView } from '../../core/components/ui/Toast';
 import { Topbar } from '../../core/components/ui/Topbar';
 import { Icon } from '../../core/components/ui/Icon';
+import { FAuthMark } from '../../platform/console/helpers';
 import { OverviewView } from './views/OverviewView';
 import { CustomersView } from './views/CustomersView';
 import { CustomerDrawer } from './views/CustomerDrawer';
@@ -32,7 +33,7 @@ export function OwnerApp(ownerStore: OwnerStore, toast: ToastController, onSigno
 
   return h('div', { class: 'shell' },
     Sidebar({
-      brand: { name: 'Forma Auth', mark: '\u25C7', subtitle: 'CONTROL PLANE' },
+      brand: { name: 'Forma Auth', mark: FAuthMark(20), subtitle: 'CONTROL PLANE' },
       items: [
         { id: 'overview', label: 'Overview', icon: iconSvg('overview-grid') },
         { id: 'customers', label: 'Customers', icon: iconSvg('customers') },

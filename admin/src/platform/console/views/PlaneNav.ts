@@ -168,7 +168,7 @@ export function PlaneNav(props: PlaneNavProps) {
 
   const headerLeft = h('div', { class: 'plane-header-left' },
     h('div', { class: 'plane-logo-mark' }, FAuthMark(28)),
-    h('span', { class: 'plane-product-name' }, 'GateWASM'),
+    h('span', { class: 'plane-product-name' }, 'fAuth'),
     h('span', { class: 'plane-domain' }, () => window.location.hostname),
     tenantSwitcher,
   );
