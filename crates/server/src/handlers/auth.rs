@@ -1685,6 +1685,16 @@ pub async fn me(
             .flatten()
             .unwrap_or((claims.name.clone(), None, false, false));
 
+    let platform_role: Option<String> = sqlx::query_as::<_, (String,)>(
+        "SELECT role FROM platform_members WHERE user_id = $1 AND status = 'active'"
+    )
+    .bind(&claims.sub)
+    .fetch_optional(&state.db)
+    .await
+    .ok()
+    .flatten()
+    .map(|(r,)| r);
+
     Ok(Json(serde_json::json!({
         "id": claims.sub,
         "email": claims.email,
@@ -1696,6 +1706,7 @@ pub async fn me(
         "auth_method": claims.auth_method,
         "mfa_verified": claims.mfa_verified,
         "mfa_enabled": mfa_enabled,
+        "platform_role": platform_role,
     })))
 }
 

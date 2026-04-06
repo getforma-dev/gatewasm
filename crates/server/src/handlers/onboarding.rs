@@ -489,17 +489,43 @@ pub async fn list_my_tenants(
             message: "Not authenticated".into(),
         })?;
 
-    let rows = sqlx::query(
-        "SELECT id, name, slug, status, allowed_providers, max_users, \
-         COALESCE(plan, 'trial') AS plan, trial_ends_at, created_at, \
-         onboarding_completed, onboarding_step, preferred_tab, \
-         branding_primary_color, login_redirect_url \
-         FROM tenants WHERE owner_user_id = $1 AND status != 'deleted' \
-         ORDER BY created_at DESC",
+    let member = sqlx::query_as::<_, (String, String)>(
+        "SELECT id, role FROM platform_members WHERE user_id = $1 AND status = 'active'"
     )
     .bind(&user.user_id)
-    .fetch_all(&state.db)
+    .fetch_optional(&state.db)
     .await?;
+
+    let is_scoped = member.as_ref().map_or(false, |(_, role)| role == "editor" || role == "viewer");
+
+    let rows = if is_scoped {
+        let (member_id, _) = member.unwrap();
+        sqlx::query(
+            "SELECT t.id, t.name, t.slug, t.status, t.allowed_providers, t.max_users, \
+             COALESCE(t.plan, 'trial') AS plan, t.trial_ends_at, t.created_at, \
+             t.onboarding_completed, t.onboarding_step, t.preferred_tab, \
+             t.branding_primary_color, t.login_redirect_url \
+             FROM tenants t \
+             JOIN platform_member_tenants pmt ON pmt.tenant_id = t.id \
+             WHERE pmt.member_id = $1 AND t.status != 'deleted' \
+             ORDER BY t.created_at DESC",
+        )
+        .bind(&member_id)
+        .fetch_all(&state.db)
+        .await?
+    } else {
+        sqlx::query(
+            "SELECT id, name, slug, status, allowed_providers, max_users, \
+             COALESCE(plan, 'trial') AS plan, trial_ends_at, created_at, \
+             onboarding_completed, onboarding_step, preferred_tab, \
+             branding_primary_color, login_redirect_url \
+             FROM tenants WHERE owner_user_id = $1 AND status != 'deleted' \
+             ORDER BY created_at DESC",
+        )
+        .bind(&user.user_id)
+        .fetch_all(&state.db)
+        .await?
+    };
 
     let items: Vec<serde_json::Value> = rows
         .into_iter()
