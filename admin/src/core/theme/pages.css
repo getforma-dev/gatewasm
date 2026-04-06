@@ -2096,30 +2096,8 @@
 
 .tenant-card-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(260px, 320px));
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
   gap: var(--space-lg);
-}
-
-.tenant-hub-grid {
-  display: grid;
-  grid-template-columns: minmax(320px, 380px) minmax(0, 1fr);
-  gap: var(--space-lg);
-  align-items: start;
-}
-
-.tenant-list-stack {
-  display: grid;
-  gap: var(--space-lg);
-  align-content: start;
-}
-
-.tenant-list-head {
-  max-width: 32rem;
-}
-
-.tenant-create-panel {
-  position: sticky;
-  top: calc(var(--topbar-height, 52px) + var(--space-lg));
 }
 
 .tenant-create-form {
@@ -2136,9 +2114,20 @@
   background: var(--surface-raised);
 }
 
-.tenant-empty-state {
-  min-height: 180px;
+.tenant-empty-hero {
+  display: flex;
+  align-items: center;
   justify-content: center;
+  min-height: 300px;
+  text-align: center;
+}
+
+.tenant-empty-content {
+  max-width: 420px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-sm);
 }
 
 .tenant-card {
@@ -2867,12 +2856,6 @@
   width: fit-content;
 }
 
-@media (min-width: 1100px) {
-  .tenant-card-grid {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-}
-
 @media (max-width: 960px) {
   .view-header-split,
   .zone-head-split,
@@ -2881,8 +2864,7 @@
   .integrate-guide-layout,
   .list-shell-head,
   .hosted-layout,
-  .settings-layout,
-  .tenant-hub-grid {
+  .settings-layout {
     grid-template-columns: 1fr;
   }
 
@@ -2905,8 +2887,7 @@
   .hosted-summary-card,
   .hosted-summary-rail,
   .integrate-aside,
-  .settings-sidebar,
-  .tenant-create-panel {
+  .settings-sidebar {
     position: static;
   }
 

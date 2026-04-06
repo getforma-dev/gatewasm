@@ -2528,23 +2528,38 @@
 .modal-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.5);
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(4px);
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 100;
+  z-index: 200;
   padding: 1rem;
+  animation: modal-fade-in 150ms ease;
 }
+
+@keyframes modal-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
 .modal-content {
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-md, 8px);
   width: 100%;
-  max-width: 520px;
-  max-height: 80vh;
+  max-width: 480px;
+  max-height: 90vh;
   overflow-y: auto;
-  animation: modal-in var(--duration-normal, 200ms) var(--ease-spring, cubic-bezier(0.34, 1.56, 0.64, 1));
+  box-shadow: var(--shadow-lg);
+  animation: modal-slide-up 200ms ease;
 }
+
+@keyframes modal-slide-up {
+  from { transform: translateY(16px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
 .modal-header {
   display: flex;
   align-items: center;
@@ -2552,23 +2567,37 @@
   padding: 1rem 1.25rem;
   border-bottom: 1px solid var(--border);
 }
+.modal-header .section-title {
+  margin: 0;
+}
 .modal-title {
   font-size: var(--text-md, 14px);
   font-weight: 500;
   color: var(--text);
 }
 .modal-close {
-  background: none;
-  border: none;
-  color: var(--text-dim);
-  cursor: pointer;
-  padding: 4px;
-  border-radius: var(--radius-sm);
+  width: 28px;
+  height: 28px;
   display: flex;
-  transition: color var(--duration-fast, 120ms) ease;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 16px;
+  cursor: pointer;
+  transition: color 150ms ease;
 }
 .modal-close:hover { color: var(--text); }
 .modal-body { padding: 1.25rem; }
+.modal-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-sm);
+  margin-top: var(--space-lg);
+}
 
 .command-palette-modal {
   max-width: 760px;

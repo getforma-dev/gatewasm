@@ -1,4 +1,4 @@
-import { h, createSignal, createSwitch } from 'formajs';
+import { h, createSignal, createShow, createSwitch } from 'formajs';
 import { Field } from '../../core/components/ui/Field';
 import { LoadingBar } from '../../core/components/ui/LoadingBar';
 import { ToastView } from '../../core/components/ui/Toast';
@@ -32,74 +32,85 @@ import {
 } from './store';
 
 function TenantsList() {
+  const [showCreate, setShowCreate] = createSignal(false);
+
   const tenantCountLabel = () => {
     const count = tenants().length;
-    if (count === 0) {
-      return 'Create your first tenant to open the workspace';
-    }
-    return count === 1
-      ? '1 tenant ready to manage'
-      : count + ' tenants ready to manage';
+    if (count === 0) return 'Create your first workspace to get started';
+    return count === 1 ? '1 workspace' : count + ' workspaces';
   };
 
   return h('div', { class: 'console-view console-view-tenants' },
     h('div', { class: 'view-header view-header-split' },
       h('div', { class: 'view-header-body' },
-        h('div', { class: 'view-eyebrow' }, 'Platform Console'),
-        h('h2', { class: 'view-title' }, 'Your Tenants'),
+        h('div', { class: 'view-eyebrow' }, 'Account'),
+        h('h2', { class: 'view-title' }, 'Your Workspaces'),
         h('p', { class: 'view-subtitle text-muted' }, tenantCountLabel),
       ),
-      h('p', { class: 'view-header-note' },
-        'Create a tenant with the URL you actually want, then jump straight into overview, users, integrations, hosted page controls, and the auth reference.',
+      h('div', { class: 'view-header-actions' },
+        h('button', {
+          type: 'button',
+          class: 'clip-btn',
+          onClick: () => setShowCreate(true),
+        }, '+ New Workspace'),
       ),
     ),
-    h('div', { class: 'tenant-hub-grid' },
-      TenantCreatePanel(),
-      h('section', { class: 'tenant-list-stack' },
-        h('div', { class: 'tenant-list-head' },
-          h('div', { class: 'card-label' }, 'Existing Workspaces'),
+
+    // Empty state
+    createShow(
+      () => tenants().length === 0,
+      () => h('div', { class: 'console-card tenant-empty-hero' },
+        h('div', { class: 'tenant-empty-content' },
+          h('div', { class: 'diamond-label' }, 'Getting Started'),
+          h('h3', { class: 'section-title' }, 'Create your first workspace'),
           h('p', { class: 'card-copy' },
-            () => tenants().length === 0
-              ? 'Your first tenant will appear here as soon as you create it.'
-              : 'Select a tenant to jump directly into its workspace.',
+            'A workspace is a tenant with its own users, login flow, roles, and security configuration. Choose a name and slug, and you\'re ready to integrate.',
           ),
+          h('button', {
+            type: 'button',
+            class: 'clip-btn',
+            onClick: () => setShowCreate(true),
+            style: 'margin-top: var(--space-md)',
+          }, '+ Create Workspace'),
         ),
-        () => tenants().length === 0
-          ? h('div', { class: 'console-card tenant-empty-state' },
-              h('div', { class: 'card-label' }, 'No tenants yet'),
-              h('h3', { class: 'section-title' }, 'Start by naming the workspace you want people to visit'),
-              h('p', { class: 'card-copy' },
-                'Your tenant slug becomes part of every hosted URL, so choosing it explicitly here is clearer than inheriting a generated suffix.',
+      ),
+    ),
+
+    // Workspace card grid (full width)
+    createShow(
+      () => tenants().length > 0,
+      () => h('div', { class: 'tenant-card-grid' },
+        () => tenants().map((tenant) =>
+          h('button', {
+            type: 'button',
+            class: 'tenant-card',
+            key: tenant.id,
+            onClick: () => selectTenant(tenant),
+          },
+            h('div', { class: 'tenant-card-top' },
+              h('div', { class: 'tenant-card-copy' },
+                h('div', { class: 'tenant-card-title' }, tenant.name),
+                h('div', { class: 'tenant-card-path' }, '/t/' + tenant.slug),
               ),
-            )
-          : null,
-        h('div', { class: 'tenant-card-grid' },
-          () => tenants().map((tenant) =>
-            h('button', {
-              type: 'button',
-              class: 'tenant-card',
-              key: tenant.id,
-              onClick: () => selectTenant(tenant),
-            },
-              h('div', { class: 'tenant-card-top' },
-                h('div', { class: 'tenant-card-copy' },
-                  h('div', { class: 'tenant-card-title' }, tenant.name),
-                  h('div', { class: 'tenant-card-path' }, '/t/' + tenant.slug),
-                ),
-                h('span', {
-                  class: 'tenant-card-badge' + (tenant.onboarding_completed ? '' : ' tenant-card-badge-pending'),
-                }, tenant.onboarding_completed ? 'Ready' : 'Setup'),
-              ),
-              h('div', { class: 'tenant-card-meta' },
-                TenantMeta('Plan', tenant.plan),
-                TenantMeta('Status', tenant.status),
-                TenantMeta('Surface', tenant.onboarding_completed ? 'Workspace' : 'Setup'),
-              ),
-              h('div', { class: 'tenant-card-footer' }, 'Open workspace'),
+              h('span', {
+                class: 'tenant-card-badge' + (tenant.onboarding_completed ? '' : ' tenant-card-badge-pending'),
+              }, tenant.onboarding_completed ? 'Ready' : 'Setup'),
             ),
+            h('div', { class: 'tenant-card-meta' },
+              TenantMeta('Plan', tenant.plan),
+              TenantMeta('Status', tenant.status),
+              TenantMeta('Surface', tenant.onboarding_completed ? 'Workspace' : 'Setup'),
+            ),
+            h('div', { class: 'tenant-card-footer' }, 'Open workspace'),
           ),
         ),
       ),
+    ),
+
+    // Create modal
+    createShow(
+      () => showCreate(),
+      () => CreateTenantModal(() => setShowCreate(false)),
     ),
   );
 }
@@ -111,7 +122,7 @@ function TenantMeta(label: string, value: string) {
   );
 }
 
-function TenantCreatePanel() {
+function CreateTenantModal(onClose: () => void) {
   const [name, setName] = createSignal('');
   const [slug, setSlug] = createSignal('');
   const [slugEdited, setSlugEdited] = createSignal(false);
@@ -131,70 +142,70 @@ function TenantCreatePanel() {
 
   async function handleSubmit(event: Event) {
     event.preventDefault();
-
     const nextName = name().trim();
     const nextSlug = slug().trim();
-
-    if (!nextName) {
-      toast.show('App name is required', 'error');
-      return;
-    }
-    if (!nextSlug) {
-      toast.show('Tenant slug is required', 'error');
-      return;
-    }
-
+    if (!nextName) { toast.show('App name is required', 'error'); return; }
+    if (!nextSlug) { toast.show('Tenant slug is required', 'error'); return; }
     setSaving(true);
     const created = await createTenant({ name: nextName, slug: nextSlug });
     setSaving(false);
-
-    if (!created) {
-      return;
-    }
-
-    setName('');
-    setSlug('');
-    setSlugEdited(false);
+    if (!created) return;
+    onClose();
     selectTenant(created);
   }
 
-  return h('section', { class: 'console-card tenant-create-panel' },
-    h('div', { class: 'card-label' }, tenants().length === 0 ? 'Create your first tenant' : 'Create another tenant'),
-    h('h3', { class: 'section-title' }, tenants().length === 0 ? 'Choose the name and URL you want' : 'Add a new workspace'),
-    h('p', { class: 'card-copy' },
-      'This slug becomes part of your hosted login, site, and developer URLs, so it should feel intentional and easy to share.',
-    ),
-    h('form', { class: 'tenant-create-form', onSubmit: handleSubmit },
-      Field({
-        label: 'App Name',
-        name: 'tenant-name',
-        value: name,
-        onChange: handleNameChange,
-        placeholder: 'Acme Workspace',
-        hint: 'This appears in the console and the hosted tenant experience.',
-        required: true,
-      }),
-      Field({
-        label: 'Tenant Slug',
-        name: 'tenant-slug',
-        value: slug,
-        onChange: handleSlugChange,
-        placeholder: 'acme-workspace',
-        hint: 'Lowercase letters, numbers, and hyphens only.',
-        required: true,
-      }),
-      h('div', { class: 'tenant-create-preview' },
-        h('span', { class: 'detail-label' }, 'Tenant URL'),
-        h('code', { class: 'code-block code-inline-block break-all' },
-          () => slug() ? '/t/' + slug() : '/t/your-slug',
-        ),
-      ),
-      h('div', { class: 'card-actions' },
+  return h('div', { class: 'modal-overlay', onClick: (e: Event) => {
+    if ((e.target as HTMLElement).classList.contains('modal-overlay')) onClose();
+  }},
+    h('div', { class: 'modal-content' },
+      h('div', { class: 'modal-header' },
+        h('h3', { class: 'section-title' }, 'Create Workspace'),
         h('button', {
-          type: 'submit',
-          class: 'btn btn-primary btn-sm',
-          disabled: () => saving() || !name().trim() || !slug().trim(),
-        }, () => saving() ? 'Creating...' : 'Create Tenant'),
+          type: 'button',
+          class: 'modal-close',
+          onClick: onClose,
+        }, '\u00D7'),
+      ),
+      h('p', { class: 'card-copy', style: 'padding: 0 var(--space-lg)' },
+        'Choose a name and slug for your new workspace. The slug becomes part of your hosted URLs.',
+      ),
+      h('form', { class: 'tenant-create-form', style: 'padding: var(--space-md) var(--space-lg) var(--space-lg)', onSubmit: handleSubmit },
+        Field({
+          label: 'App Name',
+          name: 'tenant-name',
+          value: name,
+          onChange: handleNameChange,
+          placeholder: 'Acme Workspace',
+          hint: 'This appears in the console and the hosted tenant experience.',
+          required: true,
+        }),
+        Field({
+          label: 'Tenant Slug',
+          name: 'tenant-slug',
+          value: slug,
+          onChange: handleSlugChange,
+          placeholder: 'acme-workspace',
+          hint: 'Lowercase letters, numbers, and hyphens only.',
+          required: true,
+        }),
+        h('div', { class: 'tenant-create-preview' },
+          h('span', { class: 'detail-label' }, 'Tenant URL'),
+          h('code', { class: 'code-block code-inline-block break-all' },
+            () => slug() ? '/t/' + slug() : '/t/your-slug',
+          ),
+        ),
+        h('div', { class: 'modal-actions' },
+          h('button', {
+            type: 'button',
+            class: 'btn btn-ghost btn-sm',
+            onClick: onClose,
+          }, 'Cancel'),
+          h('button', {
+            type: 'submit',
+            class: 'clip-btn',
+            disabled: () => saving() || !name().trim() || !slug().trim(),
+          }, () => saving() ? 'Creating...' : 'Create Workspace'),
+        ),
       ),
     ),
   );
