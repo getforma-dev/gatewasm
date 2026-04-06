@@ -1148,20 +1148,22 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 26px;
-  height: 22px;
-  clip-path: polygon(4px 0, 100% 0, calc(100% - 4px) 100%, 0 100%);
-  font-family: Orbitron, sans-serif;
+  min-width: 28px;
+  height: 24px;
+  padding: 0 6px;
+  clip-path: polygon(5px 0, 100% 0, calc(100% - 5px) 100%, 0 100%);
+  font-family: 'Orbitron', sans-serif;
   font-weight: 700;
   font-size: 12px;
-  background: #15151D;
-  color: #555;
+  background: #1A1A24;
+  color: #666;
+  transition: all 200ms ease;
 }
 
 .plane-btn.active .plane-num {
-  background: var(--plane-muted);
-  color: var(--plane);
-  text-shadow: 0 0 8px var(--plane-glow);
+  background: var(--plane);
+  color: #fff;
+  text-shadow: 0 0 10px var(--plane-glow);
 }
 
 .plane-label {
@@ -1185,9 +1187,9 @@
 
 .plane-sector {
   font-family: 'DM Mono', monospace;
-  font-size: 9px;
+  font-size: 10px;
   letter-spacing: 0.1em;
-  color: #333;
+  color: #555;
 }
 
 .plane-btn.active .plane-sector {
@@ -1196,20 +1198,33 @@
 
 .plane-collapse-toggle {
   margin-left: auto;
-  width: 28px;
-  height: 28px;
   display: flex;
   align-items: center;
-  justify-content: center;
-  border: 1px solid #22222A;
+  gap: 4px;
+  padding: 4px 8px;
+  border: 1px solid #33333D;
   border-radius: 5px;
-  background: transparent;
+  background: #1A1A22;
   cursor: pointer;
-  color: #888;
+  color: #999;
+  font-family: inherit;
+  font-size: 11px;
+  transition: border-color 150ms ease, color 150ms ease;
+}
+
+.plane-collapse-toggle:hover {
+  border-color: var(--plane-border);
+  color: var(--text-dim);
+}
+
+.plane-collapse-toggle kbd {
+  font-family: 'DM Mono', monospace;
+  font-size: 10px;
+  color: #666;
 }
 
 .plane-collapse-chevron {
-  font-size: 12px;
+  font-size: 10px;
 }
 
 
@@ -1322,25 +1337,26 @@
 }
 
 .plane-pip {
-  width: 22px;
-  height: 18px;
+  min-width: 26px;
+  height: 20px;
+  padding: 0 5px;
   display: flex;
   align-items: center;
   justify-content: center;
-  clip-path: polygon(3px 0, 100% 0, calc(100% - 3px) 100%, 0 100%);
-  font-family: Orbitron, sans-serif;
+  clip-path: polygon(4px 0, 100% 0, calc(100% - 4px) 100%, 0 100%);
+  font-family: 'Orbitron', sans-serif;
   font-weight: 700;
   font-size: 11px;
-  background: transparent;
-  color: #444;
+  background: #1A1A24;
+  color: #666;
   border: none;
   cursor: pointer;
+  transition: all 200ms ease;
 }
 
 .plane-pip.active {
-  background: var(--plane-muted);
-  color: var(--plane);
-  border: 1px solid var(--plane-border);
+  background: var(--plane);
+  color: #fff;
 }
 
 

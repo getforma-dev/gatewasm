@@ -224,17 +224,9 @@ export function PlaneNav(props: PlaneNavProps) {
       h('button', {
         type: 'button',
         class: () => 'plane-btn hv' + (props.plane() === pd.key ? ' active' : ''),
-        style: () => props.plane() === pd.key
-          ? 'border-bottom-color:' + PLANE_ACCENTS[pd.key] + ';background:' + PLANE_ACCENTS[pd.key] + '14'
-          : '',
         onClick: () => switchPlane(pd.key),
       },
-        h('span', {
-          class: 'plane-num',
-          style: () => props.plane() === pd.key
-            ? 'background:' + PLANE_ACCENTS[pd.key]
-            : '',
-        }, String(pd.num)),
+        h('span', { class: 'plane-num' }, String(pd.num)),
         h('span', { class: 'plane-label' },
           h('span', null, pd.label),
           h('span', { class: 'plane-sector' }, pd.sector),
@@ -261,9 +253,6 @@ export function PlaneNav(props: PlaneNavProps) {
         h('button', {
           type: 'button',
           class: () => 'plane-tab hv' + (props.view() === tab.id ? ' active' : ''),
-          style: () => props.view() === tab.id
-            ? 'border-bottom-color:' + accent() + ';background:' + accent() + '0F'
-            : '',
           onClick: () => props.onTabSwitch(tab.id as ConsoleView),
         },
           h('span', null, tab.label),
@@ -272,10 +261,7 @@ export function PlaneNav(props: PlaneNavProps) {
       );
       return h('div', { class: 'plane-tier2-inner' },
         ...tabs,
-        h('span', {
-          class: 'plane-accent-bar',
-          style: () => 'background:linear-gradient(90deg,' + accent() + ',' + accent() + '00)',
-        }),
+        h('span', { class: 'plane-accent-bar' }),
       );
     },
   );
@@ -296,9 +282,6 @@ export function PlaneNav(props: PlaneNavProps) {
         h('button', {
           type: 'button',
           class: () => 'plane-pip hv' + (props.plane() === pd.key ? ' active' : ''),
-          style: () => props.plane() === pd.key
-            ? 'background:' + PLANE_ACCENTS[pd.key]
-            : '',
           onClick: () => switchPlane(pd.key),
         }, String(pd.num)),
       ),
