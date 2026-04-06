@@ -106,6 +106,17 @@ export interface TenantSession {
   mfa_verified: boolean;
 }
 
+export interface Passkey {
+  id: string;
+  name: string;
+  is_synced: boolean;
+  user_id: string;
+  email: string;
+  aaguid: string | null;
+  created_at: string;
+  last_used_at: string | null;
+}
+
 export interface HostedPageData {
   headline: string;
   body: string;
@@ -210,6 +221,8 @@ export const [auditLog, setAuditLog] = createSignal<AuditLogEntry[]>([]);
 export const [auditLogLoading, setAuditLogLoading] = createSignal(false);
 export const [allSessions, setAllSessions] = createSignal<TenantSession[]>([]);
 export const [allSessionsLoading, setAllSessionsLoading] = createSignal(false);
+export const [passkeys, setPasskeys] = createSignal<Passkey[]>([]);
+export const [passkeysLoading, setPasskeysLoading] = createSignal(false);
 export const [integrateSection, setIntegrateSectionSignal] = createSignal<IntegrateSection>('guide');
 export const [overviewWindow, setOverviewWindowSignal] = createSignal<OverviewWindow>('7d');
 export const [currentUser, setCurrentUser] = createSignal<PlatformUser | null>(null);
@@ -257,6 +270,8 @@ function resetTenantScopedState(): void {
     setAuditLogLoading(false);
     setAllSessions([]);
     setAllSessionsLoading(false);
+    setPasskeys([]);
+    setPasskeysLoading(false);
     setIntegrateSectionSignal('guide');
     setOverviewWindowSignal('7d');
   });
@@ -620,6 +635,21 @@ export async function loadAllSessions(tenantId: string): Promise<void> {
   }
 }
 
+export async function loadPasskeys(tenantId: string): Promise<void> {
+  setPasskeysLoading(true);
+  try {
+    const data = await api.get<{ passkeys: Passkey[] }>(
+      '/platform/self-serve/tenants/' + encodeURIComponent(tenantId) + '/passkeys',
+    );
+    if (selectedTenant()?.id !== tenantId) return;
+    setPasskeys(data.passkeys || []);
+  } catch (e) {
+    toast.show(e instanceof Error ? e.message : 'Failed to load passkeys', 'error');
+  } finally {
+    setPasskeysLoading(false);
+  }
+}
+
 export async function loadHostedPage(tenantId: string): Promise<void> {
   const requestSeq = ++hostedPageRequestSeq;
   try {
@@ -780,6 +810,8 @@ async function hydrateTenantView(nextView: TenantWorkspaceView, tenant: Tenant):
     tasks.push(loadAuditLog(tenant.id));
   } else if (nextView === 'sessions') {
     tasks.push(loadAllSessions(tenant.id));
+  } else if (nextView === 'passkeys') {
+    tasks.push(loadPasskeys(tenant.id));
   }
 
   await Promise.all(tasks);

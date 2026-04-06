@@ -1651,6 +1651,64 @@ pub async fn list_tenant_sessions(
     Ok(Json(serde_json::json!({ "sessions": sessions })))
 }
 
+/// GET /platform/self-serve/tenants/{id}/passkeys
+pub async fn list_tenant_passkeys(
+    State(state): State<AppState>,
+    Path(tenant_id): Path<String>,
+    req: axum::extract::Request,
+) -> Result<impl IntoResponse, AppError> {
+    let platform_user = req
+        .extensions()
+        .get::<PlatformUser>()
+        .cloned()
+        .ok_or(AppError::Unauthorized {
+            error: "unauthorized",
+            message: "Not authenticated".into(),
+        })?;
+
+    sqlx::query_scalar::<_, String>(
+        "SELECT id FROM tenants WHERE id = $1 AND owner_user_id = $2 AND status != 'deleted'",
+    )
+    .bind(&tenant_id)
+    .bind(&platform_user.user_id)
+    .fetch_optional(&state.db)
+    .await?
+    .ok_or(AppError::NotFound {
+        error: "tenant_not_found",
+        message: "Tenant not found".into(),
+    })?;
+
+    let rows = sqlx::query(
+        "SELECT wc.id, wc.name, wc.is_synced, wc.user_id, u.email, \
+         wc.created_at, wc.last_used_at, wc.aaguid \
+         FROM webauthn_credentials wc \
+         JOIN users u ON u.id = wc.user_id \
+         WHERE wc.tenant_id = $1 \
+         ORDER BY wc.created_at DESC LIMIT 100",
+    )
+    .bind(&tenant_id)
+    .fetch_all(&state.db)
+    .await?;
+
+    let passkeys: Vec<serde_json::Value> = rows
+        .iter()
+        .map(|r| {
+            serde_json::json!({
+                "id": r.get::<String, _>("id"),
+                "name": r.get::<String, _>("name"),
+                "is_synced": r.get::<bool, _>("is_synced"),
+                "user_id": r.get::<String, _>("user_id"),
+                "email": r.get::<String, _>("email"),
+                "aaguid": r.get::<Option<String>, _>("aaguid"),
+                "created_at": r.get::<chrono::DateTime<Utc>, _>("created_at").to_rfc3339(),
+                "last_used_at": r.get::<Option<chrono::DateTime<Utc>>, _>("last_used_at").map(|d| d.to_rfc3339()),
+            })
+        })
+        .collect();
+
+    Ok(Json(serde_json::json!({ "passkeys": passkeys })))
+}
+
 // ── Hosted Page Management ─────────────────────────────────────────────
 
 /// GET /platform/self-serve/tenants/{id}/hosted-page
