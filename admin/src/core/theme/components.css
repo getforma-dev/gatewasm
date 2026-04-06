@@ -2020,6 +2020,7 @@
   min-width: 0;
   overflow-y: auto;
   overflow-x: clip;
+  padding-bottom: var(--space-xl);
   position: relative;
   z-index: 1;
 }
