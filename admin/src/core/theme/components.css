@@ -971,11 +971,16 @@
 }
 
 .plane-logo-mark {
-  width: 32px;
-  height: 32px;
-  clip-path: polygon(0 0, calc(100% - 6px) 0, 100% 6px, 100% 100%, 6px 100%, 0 calc(100% - 6px));
-  background: linear-gradient(135deg, var(--plane), color-mix(in srgb, var(--plane), transparent 30%));
-  transition: background 400ms;
+  width: 28px;
+  height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.plane-logo-mark svg {
+  display: block;
 }
 
 .plane-product-name {

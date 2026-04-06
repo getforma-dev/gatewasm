@@ -20,6 +20,7 @@ import type { TenantAdminView } from '../../core/types';
 
 import { h, createSignal, createShow, createSwitch } from 'formajs';
 import { Icon } from '../../core/components/ui/Icon';
+import { FAuthMark } from '../../platform/console/helpers';
 
 /** Render an Icon component and return its outerHTML for Sidebar innerHTML usage. */
 function iconSvg(name: string, size = 18): string {
@@ -537,7 +538,7 @@ export function TenantAdmin(
 
   return h('div', { class: 'shell' },
     Sidebar({
-      brand: { name: 'Admin Console', mark: '\u25C7', subtitle: 'TENANT ADMIN' },
+      brand: { name: 'Admin Console', mark: FAuthMark(20), subtitle: 'TENANT ADMIN' },
       items: [
         { id: 'stats', label: 'Stats', icon: iconSvg('overview-grid') },
         { id: 'users', label: 'Users', icon: iconSvg('customers') },

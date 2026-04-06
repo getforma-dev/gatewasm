@@ -60,7 +60,9 @@ export function Sidebar(props: SidebarProps): HTMLElement {
       },
         h('div', { class: 'sidebar-top' },
           h('div', { class: 'brand' },
-            markupSpan('brand-mark', props.brand.mark),
+            typeof props.brand.mark === 'string'
+              ? markupSpan('brand-mark', props.brand.mark)
+              : h('span', { class: 'brand-mark' }, props.brand.mark),
             h('div', { class: 'brand-text' },
               h('span', { class: 'brand-name' }, props.brand.name),
               h('small', null, props.brand.subtitle),

@@ -1,11 +1,11 @@
 import { h, createSignal, createShow, onCleanup } from 'formajs';
 import { PLANES, type Plane, type ConsoleView, type PlatformUser, type Tenant } from '../store';
-import { userDisplayName, userInitials } from '../helpers';
+import { userDisplayName, userInitials, FAuthMark } from '../helpers';
 
 // ── Accent colors per plane ────────────────────────────────────────────────
 
 const PLANE_ACCENTS: Record<Plane, string> = {
-  operator: '#F05A3A',
+  operator: '#c4a265',
   organization: '#2E9BFF',
   enduser: '#1EDC82',
 };
@@ -56,7 +56,6 @@ export function PlaneNav(props: PlaneNavProps) {
 
   // ── Derived state ──────────────────────────────────────────────────────
 
-  const accent = () => PLANE_ACCENTS[props.plane()];
   const planeDef = () => PLANES.find((p) => p.key === props.plane()) || PLANES[0];
   const currentTabDef = () => {
     const pd = planeDef();
@@ -168,11 +167,8 @@ export function PlaneNav(props: PlaneNavProps) {
   const tenantSwitcherEl = tenantSwitcher as HTMLElement;
 
   const headerLeft = h('div', { class: 'plane-header-left' },
-    h('div', {
-      class: 'plane-logo-mark',
-      style: () => 'background:linear-gradient(135deg,' + accent() + ',' + accent() + '88)',
-    }),
-    h('span', { class: 'plane-product-name' }, 'GateWASM'),
+    h('div', { class: 'plane-logo-mark' }, FAuthMark(28)),
+    h('span', { class: 'plane-product-name' }, 'fAuth'),
     h('span', { class: 'plane-domain' }, () => window.location.hostname),
     tenantSwitcher,
   );

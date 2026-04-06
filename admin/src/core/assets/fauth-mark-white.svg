@@ -1,0 +1,11 @@
+<svg width="200" height="240" viewBox="0 0 100 120" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="wg" x1="50" y1="0" x2="50" y2="120" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.10"/>
+      <stop offset="100%" stop-color="#ffffff" stop-opacity="0.02"/>
+    </linearGradient>
+  </defs>
+  <path d="M6 4 L94 4 L100 10 L100 78 L50 118 L0 78 L0 10 Z" fill="url(#wg)"/>
+  <path d="M6 4 L94 4 L100 10 L100 78 L50 118 L0 78 L0 10 Z" fill="none" stroke="#ffffff" stroke-width="2.5"/>
+  <text x="50" y="72" text-anchor="middle" font-family="Orbitron, sans-serif" font-weight="900" font-size="50" fill="#ffffff">F</text>
+</svg>

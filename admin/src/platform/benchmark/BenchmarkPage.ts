@@ -8,6 +8,7 @@ import { h } from 'formajs';
 import { BenchmarkFilterBar } from './BenchmarkFilterBar';
 import { BenchmarkDataTable } from './BenchmarkDataTable';
 import { PerfPanel } from './PerfPanel';
+import { FAuthMark } from '../console/helpers';
 
 // ── Page component ──────────────────────────────────────────────────────
 // Static shell (header, layout, footer) + island function calls.
@@ -19,7 +20,7 @@ export function BenchmarkPage() {
 
     // ── Brand header (pure static — rendered as opcodes) ──────────
     h('div', { class: 'brand-header' },
-      h('span', { class: 'brand-mark' }, '\u25C7'),
+      FAuthMark(18),
       h('span', null, 'Forma Auth'),
       h('span', { class: 'brand-separator' }, '/'),
       h('span', { class: 'brand-page-title' }, 'Benchmark'),
@@ -35,7 +36,7 @@ export function BenchmarkPage() {
     // ── Footer (pure static) ──────────────────────────────────────
     h('footer', { class: 'page-footer text-center pt-sm' },
       h('div', { class: 'footer-badge inline-flex-center gap-xs text-xxs footer-muted' },
-        h('span', { class: 'brand-mark-gradient' }, '\u25C7'),
+        FAuthMark(16),
         'Forma Auth',
       ),
     ),

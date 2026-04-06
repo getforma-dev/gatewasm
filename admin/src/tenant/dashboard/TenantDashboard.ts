@@ -20,6 +20,7 @@ import type { TenantDashboardView } from '../../core/types';
 
 import { h, createSignal, createSwitch, createShow } from 'formajs';
 import { Icon } from '../../core/components/ui/Icon';
+import { FAuthMark } from '../../platform/console/helpers';
 
 /** Render an Icon component and return its outerHTML for Sidebar innerHTML usage. */
 function iconSvg(name: string, size = 18): string {
@@ -218,7 +219,7 @@ function IntegrationView() {
       Panel(undefined,
         h('h3', { class: 'heading-sm mb-md' }, 'Quick Start'),
         h('p', { class: 'text-muted text-sm mb-md' },
-          'Add GateWASM authentication to your app in under 5 minutes.',
+          'Add Forma Auth to your app in under 5 minutes.',
         ),
         CodeBlock(quickstartCode),
       ),
@@ -291,7 +292,7 @@ export function TenantDashboard(
 
   return h('div', { class: 'shell' },
     Sidebar({
-      brand: { name: appName, mark: '\u25C7', subtitle: 'DASHBOARD' },
+      brand: { name: appName, mark: FAuthMark(20), subtitle: 'DASHBOARD' },
       items: [
         { id: 'profile', label: 'Profile', icon: iconSvg('profile') },
         { id: 'history', label: 'Login History', icon: iconSvg('timeline') },

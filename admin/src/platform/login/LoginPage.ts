@@ -7,6 +7,7 @@
 import { h } from 'formajs';
 import { AuthCard } from './AuthCard';
 import { MfaPanel } from './MfaPanel';
+import { FAuthMark } from '../console/helpers';
 
 // ── Page component ──────────────────────────────────────────────────────
 // Static shell (hero, card head, footer) + island function calls.
@@ -71,7 +72,7 @@ export function LoginPage() {
     // ── Footer (pure static) ──────────────────────────────────────
     h('footer', { class: 'page-footer' },
       h('div', { class: 'footer-badge' },
-        h('span', { class: 'brand-mark brand-mark-gradient' }, '\u25C7'),
+        FAuthMark(16),
         'Forma Auth',
       ),
     ),

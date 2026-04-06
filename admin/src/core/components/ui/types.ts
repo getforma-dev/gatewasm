@@ -9,7 +9,7 @@ export interface PageState {
 }
 
 export interface SidebarProps {
-  brand: { name: string; mark: string; subtitle: string };
+  brand: { name: string; mark: string | HTMLElement; subtitle: string };
   items?: NavItem[] | (() => NavItem[]);
   groups?: NavGroup[] | (() => NavGroup[]);
   footer: NavItem[];
