@@ -1004,12 +1004,19 @@
 }
 
 .plane-status-dot {
-  width: 5px;
-  height: 5px;
+  width: 6px;
+  height: 6px;
   border-radius: 50%;
-  background: #1EDC82;
+  background: var(--success);
   box-shadow: 0 0 6px rgba(30, 220, 130, 0.5);
   animation: pulse 2s infinite;
+  transition: background 300ms ease, box-shadow 300ms ease;
+}
+
+.plane-status-dot-offline {
+  background: var(--danger);
+  box-shadow: 0 0 6px rgba(248, 113, 113, 0.5);
+  animation: none;
 }
 
 .plane-tenant-indicator {

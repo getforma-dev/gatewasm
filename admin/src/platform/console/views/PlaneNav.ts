@@ -37,23 +37,6 @@ export function PlaneNav(props: PlaneNavProps) {
   const [flashing, setFlashing] = createSignal(false);
   const [flashAccent, setFlashAccent] = createSignal(PLANE_ACCENTS.operator);
 
-  // ── Uptime ticker ──────────────────────────────────────────────────────
-
-  const startTime = Date.now();
-  const [uptime, setUptime] = createSignal('00:00:00');
-  const uptimeTimer = setInterval(() => {
-    const elapsed = Date.now() - startTime;
-    const hrs = Math.floor(elapsed / 3600000);
-    const min = Math.floor((elapsed % 3600000) / 60000);
-    const sec = Math.floor((elapsed % 60000) / 1000);
-    setUptime(
-      String(hrs).padStart(2, '0') + ':' +
-      String(min).padStart(2, '0') + ':' +
-      String(sec).padStart(2, '0'),
-    );
-  }, 1000);
-  onCleanup(() => clearInterval(uptimeTimer));
-
   // ── Derived state ──────────────────────────────────────────────────────
 
   const planeDef = () => PLANES.find((p) => p.key === props.plane()) || PLANES[0];
@@ -173,10 +156,30 @@ export function PlaneNav(props: PlaneNavProps) {
     tenantSwitcher,
   );
 
+  // ── Real health check ──────────────────────────────────────────────────
+
+  const [healthStatus, setHealthStatus] = createSignal<'online' | 'offline' | 'checking'>('checking');
+
+  async function checkHealth() {
+    try {
+      const res = await fetch('/health', { signal: AbortSignal.timeout(5000) });
+      setHealthStatus(res.ok ? 'online' : 'offline');
+    } catch {
+      setHealthStatus('offline');
+    }
+  }
+
+  // Check immediately, then every 30s
+  void checkHealth();
+  const healthTimer = setInterval(() => void checkHealth(), 30000);
+  onCleanup(() => clearInterval(healthTimer));
+
   const headerCenter = h('div', { class: 'plane-header-center' },
-    h('span', { class: 'plane-status-dot', 'aria-label': 'System status: online' }),
-    h('span', { class: 'plane-status' }, 'ONLINE'),
-    h('span', { class: 'plane-status', 'aria-live': 'off', 'aria-label': 'Session uptime' }, uptime),
+    h('span', {
+      class: () => 'plane-status-dot' + (healthStatus() === 'online' ? '' : ' plane-status-dot-offline'),
+      'aria-label': () => 'System status: ' + healthStatus(),
+    }),
+    h('span', { class: 'plane-status' }, () => healthStatus() === 'online' ? 'ONLINE' : healthStatus() === 'offline' ? 'OFFLINE' : 'CHECKING'),
   );
 
   const avatarMenu = createShow(
@@ -241,7 +244,6 @@ export function PlaneNav(props: PlaneNavProps) {
   ) as HTMLElement;
 
   const headerRight = h('div', { class: 'plane-header-right' },
-    h('span', { class: 'plane-version' }, 'v0.44'),
     avatarShell,
   );
 
