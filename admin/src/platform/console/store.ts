@@ -151,8 +151,10 @@ export interface PlatformUser {
 export type ConsoleView =
   | 'overview'
   | 'integrate'
+  | 'security'
   | 'members'
   | 'hosted-page'
+  | 'organizations'
   | 'roles'
   | 'audit-log'
   | 'sessions'
@@ -181,6 +183,7 @@ export const PLANES: { key: Plane; label: string; sector: string; num: number; t
     tabs: [
       { id: 'overview', label: 'Overview', shortcut: '\u2325\u0031' },
       { id: 'integrate', label: 'Integrate', shortcut: '\u2325\u0032' },
+      { id: 'security', label: 'Security', shortcut: '\u2325\u0033' },
     ],
   },
   {
@@ -188,8 +191,9 @@ export const PLANES: { key: Plane; label: string; sector: string; num: number; t
     tabs: [
       { id: 'members', label: 'Members', shortcut: '\u2325\u0031' },
       { id: 'hosted-page', label: 'Hosted Page', shortcut: '\u2325\u0032' },
-      { id: 'roles', label: 'Roles', shortcut: '\u2325\u0033' },
-      { id: 'audit-log', label: 'Audit Log', shortcut: '\u2325\u0034' },
+      { id: 'organizations', label: 'Organizations', shortcut: '\u2325\u0033' },
+      { id: 'roles', label: 'Roles', shortcut: '\u2325\u0034' },
+      { id: 'audit-log', label: 'Audit Log', shortcut: '\u2325\u0035' },
     ],
   },
   {
@@ -358,8 +362,8 @@ function readWorkspaceState(): PersistedConsoleWorkspace | null {
     const nextView = parsed.view;
     const nextSection = parsed.integrateSection;
     const validViews: ConsoleView[] = [
-      'overview', 'integrate',
-      'members', 'hosted-page', 'roles', 'audit-log',
+      'overview', 'integrate', 'security',
+      'members', 'hosted-page', 'organizations', 'roles', 'audit-log',
       'sessions', 'passkeys', 'tokens', 'activity',
     ];
     if (typeof nextView !== 'string' || !validViews.includes(nextView as ConsoleView)) {
