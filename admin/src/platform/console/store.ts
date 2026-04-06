@@ -223,6 +223,7 @@ export const [allSessions, setAllSessions] = createSignal<TenantSession[]>([]);
 export const [allSessionsLoading, setAllSessionsLoading] = createSignal(false);
 export const [passkeys, setPasskeys] = createSignal<Passkey[]>([]);
 export const [passkeysLoading, setPasskeysLoading] = createSignal(false);
+export const [jwks, setJwks] = createSignal<any>(null);
 export const [integrateSection, setIntegrateSectionSignal] = createSignal<IntegrateSection>('guide');
 export const [overviewWindow, setOverviewWindowSignal] = createSignal<OverviewWindow>('7d');
 export const [currentUser, setCurrentUser] = createSignal<PlatformUser | null>(null);
@@ -272,6 +273,7 @@ function resetTenantScopedState(): void {
     setAllSessionsLoading(false);
     setPasskeys([]);
     setPasskeysLoading(false);
+    setJwks(null);
     setIntegrateSectionSignal('guide');
     setOverviewWindowSignal('7d');
   });
@@ -650,6 +652,13 @@ export async function loadPasskeys(tenantId: string): Promise<void> {
   }
 }
 
+export async function loadJwks(slug: string): Promise<void> {
+  try {
+    const res = await fetch('/t/' + encodeURIComponent(slug) + '/auth/jwks');
+    if (res.ok) setJwks(await res.json());
+  } catch { /* ignore */ }
+}
+
 export async function loadHostedPage(tenantId: string): Promise<void> {
   const requestSeq = ++hostedPageRequestSeq;
   try {
@@ -812,6 +821,8 @@ async function hydrateTenantView(nextView: TenantWorkspaceView, tenant: Tenant):
     tasks.push(loadAllSessions(tenant.id));
   } else if (nextView === 'passkeys') {
     tasks.push(loadPasskeys(tenant.id));
+  } else if (nextView === 'tokens') {
+    tasks.push(loadJwks(tenant.slug));
   }
 
   await Promise.all(tasks);
