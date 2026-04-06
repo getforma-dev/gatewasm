@@ -940,7 +940,7 @@
 
 .plane-header {
   height: var(--header-height);
-  background: #101018;
+  background: var(--surface);
   border-bottom: 1px solid color-mix(in srgb, var(--plane), transparent 82%);
   display: flex;
   align-items: center;
@@ -989,7 +989,7 @@
 .plane-domain {
   font-family: 'DM Mono', monospace;
   font-size: 11px;
-  color: #555;
+  color: var(--text-muted);
 }
 
 .plane-status {
@@ -1011,7 +1011,7 @@
   font-family: Rajdhani, sans-serif;
   font-size: 13px;
   font-weight: 600;
-  color: #ddd;
+  color: var(--text);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1043,7 +1043,7 @@
   width: 32px;
   height: 32px;
   border-radius: 6px;
-  background: #1A1A22;
+  background: var(--surface-raised);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1115,13 +1115,15 @@
   align-items: flex-end;
   gap: 4px;
   padding: 6px 28px 0;
-  background: #101018;
+  background: var(--surface);
   border-bottom: 1px solid color-mix(in srgb, var(--plane), transparent 88%);
 }
 
 .plane-btn {
+  flex: 1;
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 10px;
   padding: 8px 16px;
   border: none;
@@ -1151,8 +1153,8 @@
   font-family: 'Orbitron', sans-serif;
   font-weight: 700;
   font-size: 12px;
-  background: #1A1A24;
-  color: #666;
+  background: var(--surface-raised);
+  color: var(--text-muted);
   transition: all 200ms ease;
 }
 
@@ -1173,7 +1175,7 @@
   font-family: Rajdhani, sans-serif;
   font-size: 14px;
   font-weight: 500;
-  color: #777;
+  color: var(--text-dim);
 }
 
 .plane-btn.active .plane-label > :first-child {
@@ -1185,7 +1187,7 @@
   font-family: 'DM Mono', monospace;
   font-size: 10px;
   letter-spacing: 0.1em;
-  color: #555;
+  color: var(--text-muted);
 }
 
 .plane-btn.active .plane-sector {
@@ -1193,30 +1195,26 @@
 }
 
 .plane-collapse-toggle {
-  margin-left: auto;
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 4px;
-  padding: 4px 8px;
-  border: 1px solid #33333D;
-  border-radius: 5px;
-  background: #1A1A22;
+  margin: 0 auto;
+  padding: 2px 16px;
+  border: 1px solid var(--border);
+  border-top: none;
+  border-radius: 0 0 6px 6px;
+  background: var(--surface-raised);
   cursor: pointer;
-  color: #999;
+  color: var(--text-muted);
   font-family: inherit;
   font-size: 11px;
-  transition: border-color 150ms ease, color 150ms ease;
+  transition: color 150ms ease, background 150ms ease;
 }
 
 .plane-collapse-toggle:hover {
-  border-color: var(--plane-border);
   color: var(--text-dim);
-}
-
-.plane-collapse-toggle kbd {
-  font-family: 'DM Mono', monospace;
-  font-size: 10px;
-  color: #666;
+  background: var(--surface-overlay, var(--surface-raised));
 }
 
 .plane-collapse-chevron {
@@ -1232,7 +1230,7 @@
   display: flex;
   align-items: center;
   padding: 0 28px;
-  background: #0E0E16;
+  background: var(--bg);
   border-bottom: 1px solid color-mix(in srgb, var(--plane), transparent 94%);
 }
 
@@ -1243,6 +1241,7 @@
 }
 
 .plane-tab {
+  flex: 1;
   padding: 10px 16px;
   border: none;
   background: transparent;
@@ -1251,6 +1250,7 @@
   border-radius: 4px 4px 0 0;
   display: flex;
   align-items: baseline;
+  justify-content: center;
   gap: 6px;
   font-family: inherit;
   color: inherit;
@@ -1279,7 +1279,7 @@
 .plane-tab-shortcut {
   font-family: 'DM Mono', monospace;
   font-size: 9px;
-  color: #2A2A33;
+  color: var(--text-muted);
 }
 
 .plane-tab.active .plane-tab-shortcut {
@@ -1303,7 +1303,7 @@
 
 .plane-collapsed-bar {
   height: var(--collapsed-nav-height);
-  background: #101018;
+  background: var(--surface);
   border-bottom: 1px solid color-mix(in srgb, var(--plane), transparent 85%);
   display: none;
   align-items: center;
@@ -1318,7 +1318,7 @@
   font-family: Rajdhani, sans-serif;
   font-size: 13px;
   font-weight: 600;
-  color: #ddd;
+  color: var(--text);
 }
 
 .plane-readout-sep {
@@ -1343,8 +1343,8 @@
   font-family: 'Orbitron', sans-serif;
   font-weight: 700;
   font-size: 11px;
-  background: #1A1A24;
-  color: #666;
+  background: var(--surface-raised);
+  color: var(--text-muted);
   border: none;
   cursor: pointer;
   transition: all 200ms ease;
@@ -1412,7 +1412,7 @@
 
 .account-header {
   height: var(--header-height);
-  background: #101018;
+  background: var(--surface);
   border-bottom: 1px solid var(--border);
   display: flex;
   align-items: center;
@@ -1437,7 +1437,7 @@
   display: flex;
   gap: 0;
   padding: 0 28px;
-  background: #0E0E16;
+  background: var(--bg);
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
 }

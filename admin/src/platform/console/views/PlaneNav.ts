@@ -271,15 +271,6 @@ export function PlaneNav(props: PlaneNavProps) {
         ),
       ),
     ),
-    h('button', {
-      type: 'button',
-      class: 'plane-collapse-toggle hv',
-      title: 'Toggle navigation (` or Esc)',
-      onClick: () => setCollapsed(!collapsed()),
-    },
-      h('span', { class: 'plane-collapse-chevron' }, () => collapsed() ? '\u25B8' : '\u25BE'),
-      h('kbd', null, '`'),
-    ),
   );
 
   // ── Tier 2 — Page tabs ─────────────────────────────────────────────────
@@ -323,15 +314,6 @@ export function PlaneNav(props: PlaneNavProps) {
           onClick: () => switchPlane(pd.key),
         }, String(pd.num)),
       ),
-      h('button', {
-        type: 'button',
-        class: 'plane-collapse-toggle hv',
-        title: 'Expand navigation (` or Esc)',
-        onClick: () => setCollapsed(false),
-      },
-        h('span', { class: 'plane-collapse-chevron' }, '\u25B4'),
-        h('kbd', null, '`'),
-      ),
     ),
   );
 
@@ -354,6 +336,15 @@ export function PlaneNav(props: PlaneNavProps) {
     createShow(
       () => !collapsed(),
       () => h('div', { class: 'plane-nav-expanded' }, tier1, tier2),
+    ),
+    // Drawer handle — always visible, centered
+    h('button', {
+      type: 'button',
+      class: 'plane-collapse-toggle',
+      title: () => collapsed() ? 'Expand navigation (`)' : 'Collapse navigation (`)',
+      onClick: () => setCollapsed(!collapsed()),
+    },
+      h('span', { class: 'plane-collapse-chevron' }, () => collapsed() ? '\u25BC' : '\u25B2'),
     ),
     createShow(
       collapsed,
