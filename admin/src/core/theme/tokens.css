@@ -120,10 +120,10 @@
   --accent-border:  rgba(196, 162, 101, 0.25);
 
   /* ── Plane Accents ─────────────────────────────────────────────── */
-  --plane1: #F05A3A;
-  --plane1-glow: rgba(240, 90, 58, 0.25);
-  --plane1-muted: rgba(240, 90, 58, 0.08);
-  --plane1-border: rgba(240, 90, 58, 0.25);
+  --plane1: #c4a265;
+  --plane1-glow: rgba(196, 162, 101, 0.25);
+  --plane1-muted: rgba(196, 162, 101, 0.08);
+  --plane1-border: rgba(196, 162, 101, 0.25);
   --plane2: #2E9BFF;
   --plane2-glow: rgba(46, 155, 255, 0.25);
   --plane2-muted: rgba(46, 155, 255, 0.08);
@@ -224,10 +224,10 @@
   --accent-border:  rgba(184, 134, 11, 0.2);
 
   /* ── Plane Accents ─────────────────────────────────────────────── */
-  --plane1: #F05A3A;
-  --plane1-glow: rgba(240, 90, 58, 0.25);
-  --plane1-muted: rgba(240, 90, 58, 0.08);
-  --plane1-border: rgba(240, 90, 58, 0.25);
+  --plane1: #c4a265;
+  --plane1-glow: rgba(196, 162, 101, 0.25);
+  --plane1-muted: rgba(196, 162, 101, 0.08);
+  --plane1-border: rgba(196, 162, 101, 0.25);
   --plane2: #2E9BFF;
   --plane2-glow: rgba(46, 155, 255, 0.25);
   --plane2-muted: rgba(46, 155, 255, 0.08);

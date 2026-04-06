@@ -6,6 +6,7 @@
 
 import { h } from "formajs";
 import { RegistrationForm } from "./RegistrationForm";
+import { FAuthMark } from "../console/helpers";
 
 // ── Capability card data ────────────────────────────────────────────────
 
@@ -44,7 +45,7 @@ export function OnboardingPage() {
     h(
       "div",
       { class: "brand-header" },
-      h("span", { class: "brand-mark" }, "\u25C7"),
+      FAuthMark(18),
       h("span", null, "Forma Auth"),
     ),
 
@@ -132,7 +133,7 @@ export function OnboardingPage() {
         {
           class: "footer-badge inline-flex-center gap-xs text-xxs footer-muted",
         },
-        h("span", { class: "brand-mark-gradient" }, "\u25C7"),
+        FAuthMark(16),
         "Forma Auth",
       ),
     ),

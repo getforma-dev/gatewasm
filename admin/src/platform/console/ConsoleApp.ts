@@ -7,7 +7,7 @@ import { getThemeMode, toggleThemeMode, type ThemeMode } from '../../core/utils'
 import { normalizeTenantSlugInput } from '../tenantSlug';
 import { CommandPalette, type CommandPaletteSection } from './CommandPalette';
 import { PlaneNav } from './views/PlaneNav';
-import { userDisplayName, userInitials } from './helpers';
+import { userDisplayName, userInitials, FAuthMark } from './helpers';
 import { OverviewView } from './views/OverviewView';
 import { UsersView } from './views/UsersView';
 import { IntegrateView } from './views/IntegrateView';
@@ -223,7 +223,7 @@ export function ConsoleApp() {
     return h('div', { class: 'account-shell' },
       h('header', { class: 'account-header' },
         h('div', { class: 'account-header-left' },
-          h('div', { class: 'plane-logo-mark' }),
+          h('div', { class: 'plane-logo-mark' }, FAuthMark(28)),
           h('span', { class: 'plane-product-name' }, 'GateWASM'),
         ),
         h('div', { class: 'account-header-right' },
