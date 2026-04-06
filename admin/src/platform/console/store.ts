@@ -93,6 +93,19 @@ export interface AuditLogEntry {
   created_at: string;
 }
 
+export interface TenantSession {
+  id: string;
+  user_id: string;
+  email: string;
+  created_at: string;
+  expires_at: string;
+  auth_method: string;
+  auth_provider: string | null;
+  last_activity_at: string | null;
+  login_ip: string | null;
+  mfa_verified: boolean;
+}
+
 export interface HostedPageData {
   headline: string;
   body: string;
@@ -195,6 +208,8 @@ export const [userSessions, setUserSessions] = createSignal<UserSession[]>([]);
 export const [userSessionsLoading, setUserSessionsLoading] = createSignal(false);
 export const [auditLog, setAuditLog] = createSignal<AuditLogEntry[]>([]);
 export const [auditLogLoading, setAuditLogLoading] = createSignal(false);
+export const [allSessions, setAllSessions] = createSignal<TenantSession[]>([]);
+export const [allSessionsLoading, setAllSessionsLoading] = createSignal(false);
 export const [integrateSection, setIntegrateSectionSignal] = createSignal<IntegrateSection>('guide');
 export const [overviewWindow, setOverviewWindowSignal] = createSignal<OverviewWindow>('7d');
 export const [currentUser, setCurrentUser] = createSignal<PlatformUser | null>(null);
@@ -240,6 +255,8 @@ function resetTenantScopedState(): void {
     setUserSessionsLoading(false);
     setAuditLog([]);
     setAuditLogLoading(false);
+    setAllSessions([]);
+    setAllSessionsLoading(false);
     setIntegrateSectionSignal('guide');
     setOverviewWindowSignal('7d');
   });
@@ -588,6 +605,21 @@ export async function loadAuditLog(tenantId: string): Promise<void> {
   }
 }
 
+export async function loadAllSessions(tenantId: string): Promise<void> {
+  setAllSessionsLoading(true);
+  try {
+    const data = await api.get<{ sessions: TenantSession[] }>(
+      '/platform/self-serve/tenants/' + encodeURIComponent(tenantId) + '/sessions',
+    );
+    if (selectedTenant()?.id !== tenantId) return;
+    setAllSessions(data.sessions || []);
+  } catch (e) {
+    toast.show(e instanceof Error ? e.message : 'Failed to load sessions', 'error');
+  } finally {
+    setAllSessionsLoading(false);
+  }
+}
+
 export async function loadHostedPage(tenantId: string): Promise<void> {
   const requestSeq = ++hostedPageRequestSeq;
   try {
@@ -746,6 +778,8 @@ async function hydrateTenantView(nextView: TenantWorkspaceView, tenant: Tenant):
     tasks.push(loadHostedPage(tenant.id));
   } else if (nextView === 'audit-log' || nextView === 'activity') {
     tasks.push(loadAuditLog(tenant.id));
+  } else if (nextView === 'sessions') {
+    tasks.push(loadAllSessions(tenant.id));
   }
 
   await Promise.all(tasks);

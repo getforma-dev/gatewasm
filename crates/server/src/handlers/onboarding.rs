@@ -1591,6 +1591,66 @@ pub async fn list_tenant_audit_log(
     })))
 }
 
+/// GET /platform/self-serve/tenants/{id}/sessions
+pub async fn list_tenant_sessions(
+    State(state): State<AppState>,
+    Path(tenant_id): Path<String>,
+    req: axum::extract::Request,
+) -> Result<impl IntoResponse, AppError> {
+    let platform_user = req
+        .extensions()
+        .get::<PlatformUser>()
+        .cloned()
+        .ok_or(AppError::Unauthorized {
+            error: "unauthorized",
+            message: "Not authenticated".into(),
+        })?;
+
+    sqlx::query_scalar::<_, String>(
+        "SELECT id FROM tenants WHERE id = $1 AND owner_user_id = $2 AND status != 'deleted'",
+    )
+    .bind(&tenant_id)
+    .bind(&platform_user.user_id)
+    .fetch_optional(&state.db)
+    .await?
+    .ok_or(AppError::NotFound {
+        error: "tenant_not_found",
+        message: "Tenant not found".into(),
+    })?;
+
+    let rows = sqlx::query(
+        "SELECT rt.id, rt.user_id, u.email, rt.created_at, rt.expires_at, \
+         rt.auth_method, rt.auth_provider, rt.last_activity_at, rt.login_ip, rt.mfa_verified \
+         FROM refresh_tokens rt \
+         JOIN users u ON u.id = rt.user_id \
+         WHERE rt.tenant_id = $1 AND rt.revoked = FALSE AND rt.expires_at > NOW() \
+         ORDER BY rt.created_at DESC LIMIT 100",
+    )
+    .bind(&tenant_id)
+    .fetch_all(&state.db)
+    .await?;
+
+    let sessions: Vec<serde_json::Value> = rows
+        .iter()
+        .map(|r| {
+            serde_json::json!({
+                "id": r.get::<String, _>("id"),
+                "user_id": r.get::<String, _>("user_id"),
+                "email": r.get::<String, _>("email"),
+                "created_at": r.get::<chrono::DateTime<Utc>, _>("created_at").to_rfc3339(),
+                "expires_at": r.get::<chrono::DateTime<Utc>, _>("expires_at").to_rfc3339(),
+                "auth_method": r.get::<String, _>("auth_method"),
+                "auth_provider": r.get::<Option<String>, _>("auth_provider"),
+                "last_activity_at": r.get::<Option<chrono::DateTime<Utc>>, _>("last_activity_at").map(|d| d.to_rfc3339()),
+                "login_ip": r.get::<Option<String>, _>("login_ip"),
+                "mfa_verified": r.get::<bool, _>("mfa_verified"),
+            })
+        })
+        .collect();
+
+    Ok(Json(serde_json::json!({ "sessions": sessions })))
+}
+
 // ── Hosted Page Management ─────────────────────────────────────────────
 
 /// GET /platform/self-serve/tenants/{id}/hosted-page

@@ -402,6 +402,10 @@ fn create_router_inner(state: AppState, rate_limit_enabled: bool) -> Router {
             get(onboarding::list_tenant_audit_log),
         )
         .route(
+            "/platform/self-serve/tenants/{id}/sessions",
+            get(onboarding::list_tenant_sessions),
+        )
+        .route(
             "/platform/self-serve/tenants/{id}/hosted-page",
             get(onboarding::get_hosted_page).put(onboarding::update_hosted_page),
         )
