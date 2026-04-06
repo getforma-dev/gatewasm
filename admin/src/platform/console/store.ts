@@ -196,6 +196,29 @@ export interface UserDetail {
   created_at: string;
 }
 
+export interface Webhook {
+  id: string;
+  url: string;
+  events: string[];
+  active: boolean;
+  description: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface WebhookDelivery {
+  id: string;
+  event_type: string;
+  payload: any;
+  response_status: number | null;
+  response_body: string | null;
+  attempt: number;
+  max_attempts: number;
+  status: string;
+  delivered_at: string | null;
+  created_at: string;
+}
+
 export interface PlatformUser {
   id: string;
   email: string;
@@ -232,7 +255,7 @@ export type ConsoleView =
   | 'activity';
 
 export type TenantWorkspaceView = ConsoleView;
-export type IntegrateSection = 'guide' | 'session-inspector';
+export type IntegrateSection = 'guide' | 'session-inspector' | 'webhooks';
 export type OverviewWindow = '24h' | '7d' | '30d';
 
 export type Plane = 'operator' | 'organization' | 'enduser';
@@ -324,6 +347,8 @@ export const [organizations, setOrganizations] = createSignal<Organization[]>([]
 export const [organizationsLoading, setOrganizationsLoading] = createSignal(false);
 export const [userDetail, setUserDetail] = createSignal<UserDetail | null>(null);
 export const [myPasskeys, setMyPasskeys] = createSignal<MyPasskey[]>([]);
+export const [webhooks, setWebhooks] = createSignal<Webhook[]>([]);
+export const [webhooksLoading, setWebhooksLoading] = createSignal(false);
 
 let tenantDetailRequestSeq = 0;
 let usersRequestSeq = 0;
@@ -378,6 +403,8 @@ function resetTenantScopedState(): void {
     setOrganizations([]);
     setOrganizationsLoading(false);
     setUserDetail(null);
+    setWebhooks([]);
+    setWebhooksLoading(false);
     setIntegrateSectionSignal('guide');
     setOverviewWindowSignal('7d');
   });
@@ -460,7 +487,7 @@ function readWorkspaceState(): PersistedConsoleWorkspace | null {
     return {
       tenantId: typeof parsed.tenantId === 'string' ? parsed.tenantId : null,
       view: nextView as ConsoleView,
-      integrateSection: nextSection === 'session-inspector' ? 'session-inspector' : 'guide',
+      integrateSection: nextSection === 'session-inspector' ? 'session-inspector' : nextSection === 'webhooks' ? 'webhooks' : 'guide',
       plane: (typeof nextPlane === 'string' && validPlanes.includes(nextPlane as Plane))
         ? (nextPlane as Plane)
         : planeForView(nextView as ConsoleView),
@@ -977,6 +1004,101 @@ export async function loadUserDetail(tenantId: string, userId: string): Promise<
   } catch { setUserDetail(null); }
 }
 
+export async function loadWebhooks(tenantId: string): Promise<void> {
+  setWebhooksLoading(true);
+  try {
+    const data = await api.get<{ webhooks: Webhook[] }>(
+      '/platform/self-serve/tenants/' + encodeURIComponent(tenantId) + '/webhooks',
+    );
+    if (selectedTenant()?.id !== tenantId) return;
+    setWebhooks(data.webhooks || []);
+  } catch (e) {
+    toast.show(e instanceof Error ? e.message : 'Failed to load webhooks', 'error');
+  } finally {
+    setWebhooksLoading(false);
+  }
+}
+
+export async function createWebhook(
+  tenantId: string,
+  payload: { url: string; events: string[]; description?: string },
+): Promise<{ webhook: Webhook & { secret: string } } | null> {
+  try {
+    const data = await api.post<{ webhook: Webhook & { secret: string } }>(
+      '/platform/self-serve/tenants/' + encodeURIComponent(tenantId) + '/webhooks',
+      payload,
+    );
+    toast.show('Webhook created', 'success');
+    await loadWebhooks(tenantId);
+    return data;
+  } catch (e) {
+    toast.show(e instanceof Error ? e.message : 'Failed to create webhook', 'error');
+    return null;
+  }
+}
+
+export async function updateWebhook(
+  tenantId: string,
+  webhookId: string,
+  patch: { url?: string; events?: string[]; active?: boolean; description?: string },
+): Promise<boolean> {
+  try {
+    await api.request(
+      '/platform/self-serve/tenants/' + encodeURIComponent(tenantId) + '/webhooks/' + encodeURIComponent(webhookId),
+      { method: 'PATCH', body: patch },
+    );
+    toast.show('Webhook updated', 'success');
+    await loadWebhooks(tenantId);
+    return true;
+  } catch (e) {
+    toast.show(e instanceof Error ? e.message : 'Failed to update webhook', 'error');
+    return false;
+  }
+}
+
+export async function deleteWebhook(tenantId: string, webhookId: string): Promise<void> {
+  try {
+    await api.del(
+      '/platform/self-serve/tenants/' + encodeURIComponent(tenantId) + '/webhooks/' + encodeURIComponent(webhookId),
+    );
+    toast.show('Webhook deleted', 'success');
+    await loadWebhooks(tenantId);
+  } catch (e) {
+    toast.show(e instanceof Error ? e.message : 'Failed to delete webhook', 'error');
+  }
+}
+
+export async function loadWebhookDeliveries(
+  tenantId: string,
+  webhookId: string,
+): Promise<WebhookDelivery[]> {
+  try {
+    const data = await api.get<{ deliveries: WebhookDelivery[] }>(
+      '/platform/self-serve/tenants/' + encodeURIComponent(tenantId) + '/webhooks/' + encodeURIComponent(webhookId) + '/deliveries',
+    );
+    return data.deliveries || [];
+  } catch {
+    return [];
+  }
+}
+
+export async function testWebhook(
+  tenantId: string,
+  webhookId: string,
+): Promise<{ delivery_id: string; status: string; response_status: number | null } | null> {
+  try {
+    const data = await api.post<{ delivery_id: string; status: string; response_status: number | null }>(
+      '/platform/self-serve/tenants/' + encodeURIComponent(tenantId) + '/webhooks/' + encodeURIComponent(webhookId) + '/test',
+      {},
+    );
+    toast.show(data.status === 'delivered' ? 'Test delivered' : 'Test failed', data.status === 'delivered' ? 'success' : 'error');
+    return data;
+  } catch (e) {
+    toast.show(e instanceof Error ? e.message : 'Failed to send test', 'error');
+    return null;
+  }
+}
+
 export async function loadJwks(slug: string): Promise<void> {
   try {
     const res = await fetch('/t/' + encodeURIComponent(slug) + '/auth/jwks');
@@ -1187,6 +1309,8 @@ async function hydrateTenantView(nextView: TenantWorkspaceView, tenant: Tenant):
     tasks.push(loadRoles(tenant.id));
   } else if (nextView === 'tokens') {
     tasks.push(loadJwks(tenant.slug));
+  } else if (nextView === 'integrate') {
+    tasks.push(loadWebhooks(tenant.id));
   }
 
   await Promise.all(tasks);
@@ -1254,6 +1378,8 @@ export function setIntegrateSection(nextSection: IntegrateSection): void {
 
   if (nextSection === 'session-inspector') {
     void hydrateTenantView('integrate', tenant);
+  } else if (nextSection === 'webhooks') {
+    void loadWebhooks(tenant.id);
   }
 }
 

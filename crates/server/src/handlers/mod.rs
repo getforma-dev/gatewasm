@@ -453,6 +453,22 @@ fn create_router_inner(state: AppState, rate_limit_enabled: bool) -> Router {
             "/platform/self-serve/tenants/{id}/users/{user_id}/detail",
             get(onboarding::get_tenant_user_detail),
         )
+        .route(
+            "/platform/self-serve/tenants/{id}/webhooks",
+            get(onboarding::list_tenant_webhooks).post(onboarding::create_tenant_webhook),
+        )
+        .route(
+            "/platform/self-serve/tenants/{id}/webhooks/{webhook_id}",
+            get(onboarding::get_tenant_webhook).patch(onboarding::update_tenant_webhook).delete(onboarding::delete_tenant_webhook),
+        )
+        .route(
+            "/platform/self-serve/tenants/{id}/webhooks/{webhook_id}/deliveries",
+            get(onboarding::list_webhook_deliveries),
+        )
+        .route(
+            "/platform/self-serve/tenants/{id}/webhooks/{webhook_id}/test",
+            post(onboarding::test_tenant_webhook),
+        )
         .layer(middleware::from_fn_with_state(
             state.clone(),
             require_platform_user,

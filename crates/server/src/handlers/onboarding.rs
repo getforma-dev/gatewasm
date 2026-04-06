@@ -3056,6 +3056,547 @@ pub async fn get_tenant_user_detail(
     })))
 }
 
+// ── Webhook Self-Serve Proxy Endpoints ────────────────────────────────
+
+/// GET /platform/self-serve/tenants/{id}/webhooks
+pub async fn list_tenant_webhooks(
+    State(state): State<AppState>,
+    Path(tenant_id): Path<String>,
+    req: axum::extract::Request,
+) -> Result<impl IntoResponse, AppError> {
+    let platform_user = req
+        .extensions()
+        .get::<PlatformUser>()
+        .cloned()
+        .ok_or(AppError::Unauthorized {
+            error: "unauthorized",
+            message: "Not authenticated".into(),
+        })?;
+
+    sqlx::query_scalar::<_, String>(
+        "SELECT id FROM tenants WHERE id = $1 AND owner_user_id = $2 AND status != 'deleted'",
+    )
+    .bind(&tenant_id)
+    .bind(&platform_user.user_id)
+    .fetch_optional(&state.db)
+    .await?
+    .ok_or(AppError::NotFound {
+        error: "tenant_not_found",
+        message: "Tenant not found".into(),
+    })?;
+
+    let rows = sqlx::query(
+        "SELECT id, url, events, active, description, created_at, updated_at \
+         FROM webhooks WHERE tenant_id = $1 ORDER BY created_at DESC",
+    )
+    .bind(&tenant_id)
+    .fetch_all(&state.db)
+    .await?;
+
+    let webhooks: Vec<serde_json::Value> = rows
+        .iter()
+        .map(|r| {
+            serde_json::json!({
+                "id": r.get::<String, _>("id"),
+                "url": r.get::<String, _>("url"),
+                "events": r.get::<serde_json::Value, _>("events"),
+                "active": r.get::<bool, _>("active"),
+                "description": r.get::<Option<String>, _>("description"),
+                "created_at": r.get::<chrono::DateTime<Utc>, _>("created_at").to_rfc3339(),
+                "updated_at": r.get::<chrono::DateTime<Utc>, _>("updated_at").to_rfc3339(),
+            })
+        })
+        .collect();
+
+    Ok(Json(serde_json::json!({ "webhooks": webhooks })))
+}
+
+/// POST /platform/self-serve/tenants/{id}/webhooks
+pub async fn create_tenant_webhook(
+    State(state): State<AppState>,
+    Path(tenant_id): Path<String>,
+    req: axum::extract::Request,
+) -> Result<impl IntoResponse, AppError> {
+    let platform_user = req
+        .extensions()
+        .get::<PlatformUser>()
+        .cloned()
+        .ok_or(AppError::Unauthorized {
+            error: "unauthorized",
+            message: "Not authenticated".into(),
+        })?;
+
+    sqlx::query_scalar::<_, String>(
+        "SELECT id FROM tenants WHERE id = $1 AND owner_user_id = $2 AND status != 'deleted'",
+    )
+    .bind(&tenant_id)
+    .bind(&platform_user.user_id)
+    .fetch_optional(&state.db)
+    .await?
+    .ok_or(AppError::NotFound {
+        error: "tenant_not_found",
+        message: "Tenant not found".into(),
+    })?;
+
+    let body: serde_json::Value = axum::Json::from_request(req, &state)
+        .await
+        .map_err(|_| AppError::BadRequest {
+            error: "invalid_body",
+            message: "Invalid JSON body. Required: url, events".into(),
+        })?
+        .0;
+
+    let url = body["url"].as_str().ok_or(AppError::BadRequest {
+        error: "missing_url",
+        message: "Webhook URL is required".into(),
+    })?;
+
+    if !url.starts_with("http://") && !url.starts_with("https://") {
+        return Err(AppError::BadRequest {
+            error: "invalid_url",
+            message: "Webhook URL must start with http:// or https://".into(),
+        });
+    }
+    if super::webhooks::is_private_url(url) {
+        return Err(AppError::BadRequest {
+            error: "invalid_url",
+            message: "URL must not target private/internal addresses".into(),
+        });
+    }
+
+    let events = body["events"]
+        .as_array()
+        .ok_or(AppError::BadRequest {
+            error: "missing_events",
+            message: "Events array is required".into(),
+        })?;
+
+    if events.is_empty() {
+        return Err(AppError::BadRequest {
+            error: "no_events",
+            message: "At least one event type is required".into(),
+        });
+    }
+
+    let event_strings: Vec<String> = events
+        .iter()
+        .filter_map(|v| v.as_str().map(String::from))
+        .collect();
+
+    for ev in &event_strings {
+        if !super::webhooks::WEBHOOK_EVENTS.contains(&ev.as_str()) {
+            return Err(AppError::BadRequest {
+                error: "invalid_event",
+                message: format!(
+                    "Unknown event type '{}'. Valid events: {:?}",
+                    ev,
+                    super::webhooks::WEBHOOK_EVENTS
+                ),
+            });
+        }
+    }
+
+    let webhook_id = format!("wh_{}", uuid::Uuid::new_v4());
+
+    use rand::RngCore;
+    let mut secret_bytes = [0u8; 32];
+    rand::thread_rng().fill_bytes(&mut secret_bytes);
+    let secret = format!(
+        "whsec_{}",
+        base64::Engine::encode(&base64::engine::general_purpose::STANDARD, secret_bytes)
+    );
+
+    let events_json = serde_json::to_value(&event_strings).unwrap_or_default();
+    let description = body["description"].as_str().unwrap_or("");
+
+    sqlx::query(
+        "INSERT INTO webhooks (id, tenant_id, url, secret, events, active, description) \
+         VALUES ($1, $2, $3, $4, $5, TRUE, $6)",
+    )
+    .bind(&webhook_id)
+    .bind(&tenant_id)
+    .bind(url)
+    .bind(&secret)
+    .bind(&events_json)
+    .bind(description)
+    .execute(&state.db)
+    .await?;
+
+    tracing::info!(webhook_id = %webhook_id, tenant = %tenant_id, "Self-serve webhook created");
+
+    Ok((
+        StatusCode::CREATED,
+        Json(serde_json::json!({
+            "webhook": {
+                "id": webhook_id,
+                "url": url,
+                "events": event_strings,
+                "active": true,
+                "description": description,
+                "secret": secret,
+            }
+        })),
+    ))
+}
+
+/// GET /platform/self-serve/tenants/{id}/webhooks/{webhook_id}
+pub async fn get_tenant_webhook(
+    State(state): State<AppState>,
+    Path((tenant_id, webhook_id)): Path<(String, String)>,
+    req: axum::extract::Request,
+) -> Result<impl IntoResponse, AppError> {
+    let platform_user = req
+        .extensions()
+        .get::<PlatformUser>()
+        .cloned()
+        .ok_or(AppError::Unauthorized {
+            error: "unauthorized",
+            message: "Not authenticated".into(),
+        })?;
+
+    sqlx::query_scalar::<_, String>(
+        "SELECT id FROM tenants WHERE id = $1 AND owner_user_id = $2 AND status != 'deleted'",
+    )
+    .bind(&tenant_id)
+    .bind(&platform_user.user_id)
+    .fetch_optional(&state.db)
+    .await?
+    .ok_or(AppError::NotFound {
+        error: "tenant_not_found",
+        message: "Tenant not found".into(),
+    })?;
+
+    let row = sqlx::query(
+        "SELECT id, url, events, active, description, created_at, updated_at \
+         FROM webhooks WHERE id = $1 AND tenant_id = $2",
+    )
+    .bind(&webhook_id)
+    .bind(&tenant_id)
+    .fetch_optional(&state.db)
+    .await?
+    .ok_or(AppError::NotFound {
+        error: "webhook_not_found",
+        message: "Webhook not found".into(),
+    })?;
+
+    Ok(Json(serde_json::json!({
+        "webhook": {
+            "id": row.get::<String, _>("id"),
+            "url": row.get::<String, _>("url"),
+            "events": row.get::<serde_json::Value, _>("events"),
+            "active": row.get::<bool, _>("active"),
+            "description": row.get::<Option<String>, _>("description"),
+            "created_at": row.get::<chrono::DateTime<Utc>, _>("created_at").to_rfc3339(),
+            "updated_at": row.get::<chrono::DateTime<Utc>, _>("updated_at").to_rfc3339(),
+        }
+    })))
+}
+
+/// PATCH /platform/self-serve/tenants/{id}/webhooks/{webhook_id}
+pub async fn update_tenant_webhook(
+    State(state): State<AppState>,
+    Path((tenant_id, webhook_id)): Path<(String, String)>,
+    req: axum::extract::Request,
+) -> Result<impl IntoResponse, AppError> {
+    let platform_user = req
+        .extensions()
+        .get::<PlatformUser>()
+        .cloned()
+        .ok_or(AppError::Unauthorized {
+            error: "unauthorized",
+            message: "Not authenticated".into(),
+        })?;
+
+    sqlx::query_scalar::<_, String>(
+        "SELECT id FROM tenants WHERE id = $1 AND owner_user_id = $2 AND status != 'deleted'",
+    )
+    .bind(&tenant_id)
+    .bind(&platform_user.user_id)
+    .fetch_optional(&state.db)
+    .await?
+    .ok_or(AppError::NotFound {
+        error: "tenant_not_found",
+        message: "Tenant not found".into(),
+    })?;
+
+    // Verify webhook belongs to tenant
+    sqlx::query_scalar::<_, String>(
+        "SELECT id FROM webhooks WHERE id = $1 AND tenant_id = $2",
+    )
+    .bind(&webhook_id)
+    .bind(&tenant_id)
+    .fetch_optional(&state.db)
+    .await?
+    .ok_or(AppError::NotFound {
+        error: "webhook_not_found",
+        message: "Webhook not found".into(),
+    })?;
+
+    let body: serde_json::Value = axum::Json::from_request(req, &state)
+        .await
+        .map_err(|_| AppError::BadRequest {
+            error: "invalid_body",
+            message: "Invalid JSON body".into(),
+        })?
+        .0;
+
+    if let Some(url) = body.get("url").and_then(|v| v.as_str()) {
+        if !url.starts_with("http://") && !url.starts_with("https://") {
+            return Err(AppError::BadRequest {
+                error: "invalid_url",
+                message: "Webhook URL must start with http:// or https://".into(),
+            });
+        }
+        if super::webhooks::is_private_url(url) {
+            return Err(AppError::BadRequest {
+                error: "invalid_url",
+                message: "URL must not target private/internal addresses".into(),
+            });
+        }
+        sqlx::query("UPDATE webhooks SET url = $1, updated_at = NOW() WHERE id = $2")
+            .bind(url)
+            .bind(&webhook_id)
+            .execute(&state.db)
+            .await?;
+    }
+
+    if let Some(events) = body.get("events").and_then(|v| v.as_array()) {
+        let event_strings: Vec<String> = events
+            .iter()
+            .filter_map(|v| v.as_str().map(String::from))
+            .collect();
+        for ev in &event_strings {
+            if !super::webhooks::WEBHOOK_EVENTS.contains(&ev.as_str()) {
+                return Err(AppError::BadRequest {
+                    error: "invalid_event",
+                    message: format!("Unknown event type '{}'", ev),
+                });
+            }
+        }
+        let json = serde_json::to_value(&event_strings).unwrap_or_default();
+        sqlx::query("UPDATE webhooks SET events = $1, updated_at = NOW() WHERE id = $2")
+            .bind(&json)
+            .bind(&webhook_id)
+            .execute(&state.db)
+            .await?;
+    }
+
+    if let Some(desc) = body.get("description").and_then(|v| v.as_str()) {
+        sqlx::query("UPDATE webhooks SET description = $1, updated_at = NOW() WHERE id = $2")
+            .bind(desc)
+            .bind(&webhook_id)
+            .execute(&state.db)
+            .await?;
+    }
+
+    if let Some(active) = body.get("active").and_then(|v| v.as_bool()) {
+        sqlx::query("UPDATE webhooks SET active = $1, updated_at = NOW() WHERE id = $2")
+            .bind(active)
+            .bind(&webhook_id)
+            .execute(&state.db)
+            .await?;
+    }
+
+    Ok(Json(serde_json::json!({ "message": "Webhook updated" })))
+}
+
+/// DELETE /platform/self-serve/tenants/{id}/webhooks/{webhook_id}
+pub async fn delete_tenant_webhook(
+    State(state): State<AppState>,
+    Path((tenant_id, webhook_id)): Path<(String, String)>,
+    req: axum::extract::Request,
+) -> Result<impl IntoResponse, AppError> {
+    let platform_user = req
+        .extensions()
+        .get::<PlatformUser>()
+        .cloned()
+        .ok_or(AppError::Unauthorized {
+            error: "unauthorized",
+            message: "Not authenticated".into(),
+        })?;
+
+    sqlx::query_scalar::<_, String>(
+        "SELECT id FROM tenants WHERE id = $1 AND owner_user_id = $2 AND status != 'deleted'",
+    )
+    .bind(&tenant_id)
+    .bind(&platform_user.user_id)
+    .fetch_optional(&state.db)
+    .await?
+    .ok_or(AppError::NotFound {
+        error: "tenant_not_found",
+        message: "Tenant not found".into(),
+    })?;
+
+    let result = sqlx::query("DELETE FROM webhooks WHERE id = $1 AND tenant_id = $2")
+        .bind(&webhook_id)
+        .bind(&tenant_id)
+        .execute(&state.db)
+        .await?;
+
+    if result.rows_affected() == 0 {
+        return Err(AppError::NotFound {
+            error: "webhook_not_found",
+            message: "Webhook not found".into(),
+        });
+    }
+
+    tracing::info!(webhook_id = %webhook_id, tenant = %tenant_id, "Self-serve webhook deleted");
+
+    Ok(Json(serde_json::json!({ "message": "Webhook deleted" })))
+}
+
+/// GET /platform/self-serve/tenants/{id}/webhooks/{webhook_id}/deliveries
+pub async fn list_webhook_deliveries(
+    State(state): State<AppState>,
+    Path((tenant_id, webhook_id)): Path<(String, String)>,
+    req: axum::extract::Request,
+) -> Result<impl IntoResponse, AppError> {
+    let platform_user = req
+        .extensions()
+        .get::<PlatformUser>()
+        .cloned()
+        .ok_or(AppError::Unauthorized {
+            error: "unauthorized",
+            message: "Not authenticated".into(),
+        })?;
+
+    sqlx::query_scalar::<_, String>(
+        "SELECT id FROM tenants WHERE id = $1 AND owner_user_id = $2 AND status != 'deleted'",
+    )
+    .bind(&tenant_id)
+    .bind(&platform_user.user_id)
+    .fetch_optional(&state.db)
+    .await?
+    .ok_or(AppError::NotFound {
+        error: "tenant_not_found",
+        message: "Tenant not found".into(),
+    })?;
+
+    // Verify webhook belongs to tenant
+    sqlx::query_scalar::<_, String>(
+        "SELECT id FROM webhooks WHERE id = $1 AND tenant_id = $2",
+    )
+    .bind(&webhook_id)
+    .bind(&tenant_id)
+    .fetch_optional(&state.db)
+    .await?
+    .ok_or(AppError::NotFound {
+        error: "webhook_not_found",
+        message: "Webhook not found".into(),
+    })?;
+
+    let rows = sqlx::query(
+        "SELECT id, event_type, payload, response_status, response_body, attempt, max_attempts, \
+         status, delivered_at, created_at \
+         FROM webhook_deliveries WHERE webhook_id = $1 \
+         ORDER BY created_at DESC LIMIT 50",
+    )
+    .bind(&webhook_id)
+    .fetch_all(&state.db)
+    .await?;
+
+    let deliveries: Vec<serde_json::Value> = rows
+        .iter()
+        .map(|r| {
+            serde_json::json!({
+                "id": r.get::<String, _>("id"),
+                "event_type": r.get::<String, _>("event_type"),
+                "payload": r.get::<serde_json::Value, _>("payload"),
+                "response_status": r.get::<Option<i32>, _>("response_status"),
+                "response_body": r.get::<Option<String>, _>("response_body"),
+                "attempt": r.get::<i32, _>("attempt"),
+                "max_attempts": r.get::<i32, _>("max_attempts"),
+                "status": r.get::<String, _>("status"),
+                "delivered_at": r.get::<Option<chrono::DateTime<Utc>>, _>("delivered_at")
+                    .map(|t| t.to_rfc3339()),
+                "created_at": r.get::<chrono::DateTime<Utc>, _>("created_at").to_rfc3339(),
+            })
+        })
+        .collect();
+
+    Ok(Json(serde_json::json!({ "deliveries": deliveries })))
+}
+
+/// POST /platform/self-serve/tenants/{id}/webhooks/{webhook_id}/test
+pub async fn test_tenant_webhook(
+    State(state): State<AppState>,
+    Path((tenant_id, webhook_id)): Path<(String, String)>,
+    req: axum::extract::Request,
+) -> Result<impl IntoResponse, AppError> {
+    let platform_user = req
+        .extensions()
+        .get::<PlatformUser>()
+        .cloned()
+        .ok_or(AppError::Unauthorized {
+            error: "unauthorized",
+            message: "Not authenticated".into(),
+        })?;
+
+    sqlx::query_scalar::<_, String>(
+        "SELECT id FROM tenants WHERE id = $1 AND owner_user_id = $2 AND status != 'deleted'",
+    )
+    .bind(&tenant_id)
+    .bind(&platform_user.user_id)
+    .fetch_optional(&state.db)
+    .await?
+    .ok_or(AppError::NotFound {
+        error: "tenant_not_found",
+        message: "Tenant not found".into(),
+    })?;
+
+    let row = sqlx::query(
+        "SELECT id, url, secret, events FROM webhooks WHERE id = $1 AND tenant_id = $2",
+    )
+    .bind(&webhook_id)
+    .bind(&tenant_id)
+    .fetch_optional(&state.db)
+    .await?
+    .ok_or(AppError::NotFound {
+        error: "webhook_not_found",
+        message: "Webhook not found".into(),
+    })?;
+
+    let url: String = row.get("url");
+    let secret: String = row.get("secret");
+
+    let payload = serde_json::json!({
+        "event": "test",
+        "tenant_id": tenant_id,
+        "timestamp": Utc::now().to_rfc3339(),
+        "data": {
+            "message": "This is a test webhook delivery from GateWASM"
+        }
+    });
+
+    let delivery_id = format!("whd_{}", uuid::Uuid::new_v4());
+
+    let result = super::webhook_engine::deliver_single(&url, &secret, &payload).await;
+
+    let (status_str, response_status, response_body) = match result {
+        Ok((code, body)) => ("delivered".to_string(), Some(code as i32), Some(body)),
+        Err(e) => ("failed".to_string(), None, Some(e.to_string())),
+    };
+
+    sqlx::query(
+        "INSERT INTO webhook_deliveries (id, webhook_id, event_type, payload, response_status, response_body, status, delivered_at, attempt) \
+         VALUES ($1, $2, 'test', $3, $4, $5, $6, NOW(), 1)",
+    )
+    .bind(&delivery_id)
+    .bind(&webhook_id)
+    .bind(&payload)
+    .bind(response_status)
+    .bind(response_body.as_deref())
+    .bind(&status_str)
+    .execute(&state.db)
+    .await?;
+
+    Ok(Json(serde_json::json!({
+        "delivery_id": delivery_id,
+        "status": status_str,
+        "response_status": response_status,
+    })))
+}
+
 /// GET /platform/login — Returning platform users sign in here.
 /// After authentication they always land in /platform/console, where
 /// tenant creation and setup now live.
