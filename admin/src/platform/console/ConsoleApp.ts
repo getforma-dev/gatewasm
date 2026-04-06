@@ -1,4 +1,4 @@
-import { h, createSignal, createShow, createSwitch } from 'formajs';
+import { h, createSignal, createShow, createSwitch, onCleanup } from 'formajs';
 import { Field } from '../../core/components/ui/Field';
 import { LoadingBar } from '../../core/components/ui/LoadingBar';
 import { ToastView } from '../../core/components/ui/Toast';
@@ -29,6 +29,7 @@ import {
   plane, setPlane, type Plane, type ConsoleView,
   type TenantWorkspaceView,
   mode, accountTab, setAccountTab, type AccountTab,
+  serverUrl,
 } from './store';
 
 function TenantsList() {
@@ -364,7 +365,7 @@ function AccountTabBtn(id: AccountTab, label: string) {
 }
 
 export function ConsoleApp() {
-  const serverUrl: string = (window as any).__FORMA_SERVER_URL__ || window.location.origin;
+
   const [themeMode, setThemeMode] = createSignal<ThemeMode>(getThemeMode());
   const [paletteOpen, setPaletteOpen] = createSignal(false);
   const shortcutLabel = /Mac|iPhone|iPad/.test(navigator.platform) ? 'Cmd K' : 'Ctrl K';
@@ -420,6 +421,7 @@ export function ConsoleApp() {
       if (!accountAvatarShell.contains(e.target as Node)) setAccountMenuOpen(false);
     }
     document.addEventListener('click', handleAccountMenuClick);
+    onCleanup(() => document.removeEventListener('click', handleAccountMenuClick));
 
     return h('div', { class: 'account-shell' },
       h('header', { class: 'account-header' },

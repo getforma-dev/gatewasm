@@ -6,7 +6,7 @@ import type { IntrospectData } from '../../core/types';
 
 // ── Module-level singletons (shared across ConsoleApp island) ───────────
 
-const serverUrl: string = (window as any).__FORMA_SERVER_URL__ || window.location.origin;
+export const serverUrl: string = (window as any).__FORMA_SERVER_URL__ || window.location.origin;
 const auth = createAuth({ serverUrl, tenant: 'platform' });
 const api = createApi(auth);
 export const toast = createToast();
@@ -59,7 +59,7 @@ export interface TenantActivityItem {
   created_at: string;
 }
 
-export interface TenantUser {
+interface TenantUser {
   id: string;
   email: string;
   name: string | null;
@@ -127,7 +127,7 @@ export interface Role {
   created_at: string;
 }
 
-export interface HostedPageData {
+interface HostedPageData {
   headline: string;
   body: string;
   cta_text: string;
@@ -263,7 +263,7 @@ export type Plane = 'operator' | 'organization' | 'enduser';
 export type AppMode = 'account' | 'workspace';
 export type AccountTab = 'tenants' | 'api-keys' | 'account-settings';
 
-export interface PlaneTab {
+interface PlaneTab {
   id: string;
   label: string;
   shortcut: string;
@@ -299,56 +299,83 @@ export const PLANES: { key: Plane; label: string; sector: string; num: number; t
   },
 ];
 
-interface PersistedConsoleWorkspace {
-  tenantId: string | null;
-  view: ConsoleView;
-  integrateSection: IntegrateSection;
-  plane: Plane;
-  mode: AppMode;
-  accountTab: AccountTab;
-}
-
 // ── State ───────────────────────────────────────────────────────────────
 
 export const [tenants, setTenants] = createSignal<Tenant[]>([]);
 export const [selectedTenant, setSelectedTenant] = createSignal<Tenant | null>(null);
-export const [selectedTenantStats, setSelectedTenantStats] = createSignal<TenantStats | null>(null);
-export const [loading, setLoading] = createSignal(false);
-export const [view, setView] = createSignal<ConsoleView>('overview');
-export const [users, setUsers] = createSignal<TenantUser[]>([]);
-export const [usersLoading, setUsersLoading] = createSignal(false);
-export const [hostedPage, setHostedPage] = createSignal<HostedPageData | null>(null);
-export const [introspectData, setIntrospectData] = createSignal<IntrospectData | null>(null);
-export const [introspectToken, setIntrospectToken] = createSignal<string | null>(null);
-export const [introspectUnavailable, setIntrospectUnavailable] = createSignal(false);
-export const [userSessions, setUserSessions] = createSignal<UserSession[]>([]);
-export const [userSessionsLoading, setUserSessionsLoading] = createSignal(false);
-export const [auditLog, setAuditLog] = createSignal<AuditLogEntry[]>([]);
-export const [auditLogLoading, setAuditLogLoading] = createSignal(false);
-export const [allSessions, setAllSessions] = createSignal<TenantSession[]>([]);
-export const [allSessionsLoading, setAllSessionsLoading] = createSignal(false);
-export const [passkeys, setPasskeys] = createSignal<Passkey[]>([]);
-export const [passkeysLoading, setPasskeysLoading] = createSignal(false);
-export const [roles, setRoles] = createSignal<Role[]>([]);
-export const [rolesLoading, setRolesLoading] = createSignal(false);
-export const [jwks, setJwks] = createSignal<any>(null);
-export const [integrateSection, setIntegrateSectionSignal] = createSignal<IntegrateSection>('guide');
-export const [overviewWindow, setOverviewWindowSignal] = createSignal<OverviewWindow>('7d');
-export const [currentUser, setCurrentUser] = createSignal<PlatformUser | null>(null);
-export const [plane, setPlaneSignal] = createSignal<Plane>('operator');
-export const [mode, setMode] = createSignal<AppMode>('account');
+const [selectedTenantStats, setSelectedTenantStats] = createSignal<TenantStats | null>(null);
+export { selectedTenantStats };
+const [loading, setLoading] = createSignal(false);
+export { loading };
+const [view, setView] = createSignal<ConsoleView>('overview');
+export { view };
+const [users, setUsers] = createSignal<TenantUser[]>([]);
+export { users };
+const [usersLoading, setUsersLoading] = createSignal(false);
+export { usersLoading };
+const [hostedPage, setHostedPage] = createSignal<HostedPageData | null>(null);
+export { hostedPage };
+const [introspectData, setIntrospectData] = createSignal<IntrospectData | null>(null);
+export { introspectData };
+const [introspectToken, setIntrospectToken] = createSignal<string | null>(null);
+export { introspectToken };
+const [introspectUnavailable, setIntrospectUnavailable] = createSignal(false);
+export { introspectUnavailable };
+const [userSessions, setUserSessions] = createSignal<UserSession[]>([]);
+export { userSessions, setUserSessions };
+const [userSessionsLoading, setUserSessionsLoading] = createSignal(false);
+export { userSessionsLoading };
+const [auditLog, setAuditLog] = createSignal<AuditLogEntry[]>([]);
+export { auditLog };
+const [auditLogLoading, setAuditLogLoading] = createSignal(false);
+export { auditLogLoading };
+const [allSessions, setAllSessions] = createSignal<TenantSession[]>([]);
+export { allSessions };
+const [allSessionsLoading, setAllSessionsLoading] = createSignal(false);
+export { allSessionsLoading };
+const [passkeys, setPasskeys] = createSignal<Passkey[]>([]);
+export { passkeys };
+const [passkeysLoading, setPasskeysLoading] = createSignal(false);
+export { passkeysLoading };
+const [roles, setRoles] = createSignal<Role[]>([]);
+export { roles };
+const [rolesLoading, setRolesLoading] = createSignal(false);
+export { rolesLoading };
+const [jwks, setJwks] = createSignal<any>(null);
+export { jwks };
+const [integrateSection, setIntegrateSectionSignal] = createSignal<IntegrateSection>('guide');
+export { integrateSection };
+const [overviewWindow, setOverviewWindowSignal] = createSignal<OverviewWindow>('7d');
+export { overviewWindow };
+const [currentUser, setCurrentUser] = createSignal<PlatformUser | null>(null);
+export { currentUser };
+const [plane, setPlaneSignal] = createSignal<Plane>('operator');
+export { plane };
+const [mode, setMode] = createSignal<AppMode>('account');
+export { mode };
 export const [accountTab, setAccountTab] = createSignal<AccountTab>('tenants');
-export const [securityConfig, setSecurityConfig] = createSignal<SecurityConfig | null>(null);
-export const [securityConfigLoading, setSecurityConfigLoading] = createSignal(false);
-export const [tenantPlan, setTenantPlan] = createSignal<string>('trial');
-export const [invites, setInvites] = createSignal<TenantInvite[]>([]);
-export const [invitesLoading, setInvitesLoading] = createSignal(false);
-export const [organizations, setOrganizations] = createSignal<Organization[]>([]);
-export const [organizationsLoading, setOrganizationsLoading] = createSignal(false);
-export const [userDetail, setUserDetail] = createSignal<UserDetail | null>(null);
-export const [myPasskeys, setMyPasskeys] = createSignal<MyPasskey[]>([]);
-export const [webhooks, setWebhooks] = createSignal<Webhook[]>([]);
-export const [webhooksLoading, setWebhooksLoading] = createSignal(false);
+const [securityConfig, setSecurityConfig] = createSignal<SecurityConfig | null>(null);
+export { securityConfig };
+const [securityConfigLoading, setSecurityConfigLoading] = createSignal(false);
+export { securityConfigLoading };
+const [tenantPlan, setTenantPlan] = createSignal<string>('trial');
+export { tenantPlan };
+const [invites, setInvites] = createSignal<TenantInvite[]>([]);
+export { invites };
+const [invitesLoading, setInvitesLoading] = createSignal(false);
+export { invitesLoading };
+const [organizations, setOrganizations] = createSignal<Organization[]>([]);
+export { organizations };
+const [organizationsLoading, setOrganizationsLoading] = createSignal(false);
+export { organizationsLoading };
+const [userDetail, setUserDetail] = createSignal<UserDetail | null>(null);
+export { userDetail, setUserDetail };
+const [myPasskeys, setMyPasskeys] = createSignal<MyPasskey[]>([]);
+export { myPasskeys };
+const [webhooks, setWebhooks] = createSignal<Webhook[]>([]);
+export { webhooks };
+const [webhooksLoading, setWebhooksLoading] = createSignal(false);
+export { webhooksLoading };
 
 let tenantDetailRequestSeq = 0;
 let usersRequestSeq = 0;
@@ -356,7 +383,6 @@ let hostedPageRequestSeq = 0;
 let introspectRequestSeq = 0;
 let sessionRequestSeq = 0;
 let stopOverviewRefresh: (() => void) | null = null;
-const WORKSPACE_STORAGE_PREFIX = 'forma-console-workspace:';
 
 function withTransientTenantFields(nextTenant: Tenant, existingTenant?: Tenant | null): Tenant {
   if (nextTenant.management_api_key || !existingTenant?.management_api_key) {
@@ -410,15 +436,7 @@ function resetTenantScopedState(): void {
   });
 }
 
-function workspaceStorageKey(): string | null {
-  const user = currentUser();
-  if (!user || typeof window === 'undefined') {
-    return null;
-  }
-  return WORKSPACE_STORAGE_PREFIX + user.id;
-}
-
-export function planeForView(v: ConsoleView): Plane {
+function planeForView(v: ConsoleView): Plane {
   for (const p of PLANES) {
     if (p.tabs.some((t) => t.id === v)) return p.key;
   }
@@ -432,27 +450,6 @@ export function setPlane(nextPlane: Plane): void {
   if (planeDef) {
     const firstTab = planeDef.tabs[0].id as ConsoleView;
     navigateTenantView(firstTab as TenantWorkspaceView);
-  }
-}
-
-function persistWorkspaceState(): void {
-  const storageKey = workspaceStorageKey();
-  if (!storageKey) {
-    return;
-  }
-
-  try {
-    const snapshot: PersistedConsoleWorkspace = {
-      tenantId: selectedTenant()?.id || null,
-      view: view(),
-      integrateSection: integrateSection(),
-      plane: plane(),
-      mode: mode(),
-      accountTab: accountTab(),
-    };
-    window.localStorage.setItem(storageKey, JSON.stringify(snapshot));
-  } catch {
-    // Ignore storage failures.
   }
 }
 
@@ -490,7 +487,7 @@ export async function rotateTenantKey(tenantId: string): Promise<string | null> 
   }
 }
 
-export async function loadCurrentUser(): Promise<void> {
+async function loadCurrentUser(): Promise<void> {
   try {
     const data = await api.get<PlatformUser>('/auth/me');
     setCurrentUser(data);
@@ -547,7 +544,7 @@ export async function deleteMyPasskey(id: string): Promise<void> {
   }
 }
 
-export async function loadTenantDetail(id: string, window: OverviewWindow = overviewWindow()): Promise<void> {
+async function loadTenantDetail(id: string, statsWindow: OverviewWindow = overviewWindow()): Promise<void> {
   if (!id) return;
   const requestSeq = ++tenantDetailRequestSeq;
   setLoading(true);
@@ -555,7 +552,7 @@ export async function loadTenantDetail(id: string, window: OverviewWindow = over
     const encodedId = encodeURIComponent(id);
     const [tenant, stats] = await Promise.all([
       api.get<Tenant>('/platform/self-serve/tenants/' + encodedId),
-      api.get<TenantStats>('/platform/self-serve/tenants/' + encodedId + '/stats', { window }),
+      api.get<TenantStats>('/platform/self-serve/tenants/' + encodedId + '/stats', { window: statsWindow }),
     ]);
     if (requestSeq !== tenantDetailRequestSeq || selectedTenant()?.id !== id) {
       return;
@@ -628,12 +625,6 @@ export async function checkSlugAvailability(slug: string): Promise<boolean> {
   return data.available;
 }
 
-export async function pollTenantStats(id: string): Promise<TenantStats> {
-  return api.get<TenantStats>(
-    '/platform/self-serve/tenants/' + encodeURIComponent(id) + '/stats',
-    { window: overviewWindow() },
-  );
-}
 
 export async function loadUsers(tenantId: string): Promise<void> {
   const requestSeq = ++usersRequestSeq;
@@ -1014,7 +1005,7 @@ export async function loadJwks(slug: string): Promise<void> {
   } catch { /* ignore */ }
 }
 
-export async function loadHostedPage(tenantId: string): Promise<void> {
+async function loadHostedPage(tenantId: string): Promise<void> {
   const requestSeq = ++hostedPageRequestSeq;
   try {
     const data = await api.get<HostedPageData>(
@@ -1079,21 +1070,8 @@ export async function saveSecurityConfig(tenantId: string, patch: Partial<Securi
   }
 }
 
-export async function deleteTenant(tenantId: string, confirmSlug: string): Promise<boolean> {
-  try {
-    await api.request('/platform/self-serve/tenants/' + encodeURIComponent(tenantId), {
-      method: 'DELETE',
-      body: { confirm_slug: confirmSlug },
-    });
-    toast.show('Tenant deleted', 'success');
-    return true;
-  } catch (e) {
-    toast.show(e instanceof Error ? e.message : 'Failed to delete tenant', 'error');
-    return false;
-  }
-}
 
-export async function loadIntrospect(slug: string): Promise<void> {
+async function loadIntrospect(slug: string): Promise<void> {
   const requestSeq = ++introspectRequestSeq;
   try {
     // Plane 3 introspect: uses tenant's refresh cookie (same-origin, sent automatically)
@@ -1161,7 +1139,7 @@ export async function loadIntrospect(slug: string): Promise<void> {
   }
 }
 
-export function startVisibilityRefresh(slug: string): () => void {
+function startVisibilityRefresh(slug: string): () => void {
   const handler = () => {
     if (document.visibilityState === 'visible') {
       loadIntrospect(slug);
@@ -1198,13 +1176,11 @@ async function hydrateTenantView(nextView: TenantWorkspaceView, tenant: Tenant):
     tasks.push(loadTenantDetail(tenant.id, overviewWindow()));
   }
 
-  // Only load introspect for integrate view (Auth Reference live preview)
   if (nextView === 'integrate') {
     tasks.push(loadIntrospect(tenant.slug));
+    tasks.push(loadWebhooks(tenant.id));
     syncIntrospectRefresh(tenant.slug);
-  }
-
-  if (nextView === 'members') {
+  } else if (nextView === 'members') {
     tasks.push(loadUsers(tenant.id));
     tasks.push(loadInvites(tenant.id));
   } else if (nextView === 'security') {
@@ -1223,8 +1199,6 @@ async function hydrateTenantView(nextView: TenantWorkspaceView, tenant: Tenant):
     tasks.push(loadRoles(tenant.id));
   } else if (nextView === 'tokens') {
     tasks.push(loadJwks(tenant.slug));
-  } else if (nextView === 'integrate') {
-    tasks.push(loadWebhooks(tenant.id));
   }
 
   await Promise.all(tasks);
@@ -1236,7 +1210,7 @@ export function navigateTenantView(nextView: TenantWorkspaceView): void {
 
   setView(nextView);
   setPlaneSignal(planeForView(nextView));
-  persistWorkspaceState();
+
   void hydrateTenantView(nextView, tenant);
 }
 
@@ -1257,7 +1231,7 @@ export function changeOverviewWindow(nextWindow: OverviewWindow): void {
 
 export function openIntegrateGuide(): void {
   setIntegrateSectionSignal('guide');
-  persistWorkspaceState();
+
   navigateTenantView('integrate');
 }
 
@@ -1265,7 +1239,7 @@ export function openSessionInspector(): void {
   const tenant = selectedTenant();
 
   setIntegrateSectionSignal('session-inspector');
-  persistWorkspaceState();
+
 
   if (!tenant) return;
 
@@ -1283,7 +1257,7 @@ export function setIntegrateSection(nextSection: IntegrateSection): void {
   }
 
   setIntegrateSectionSignal(nextSection);
-  persistWorkspaceState();
+
 
   const tenant = selectedTenant();
   if (!tenant || view() !== 'integrate') {
@@ -1325,7 +1299,7 @@ function switchToWorkspaceInternal(tenant: Tenant): void {
     setPlaneSignal(planeForView(nextView));
     setMode('workspace');
   });
-  persistWorkspaceState();
+
   // hydrateTenantView handles all data loading (including loadTenantDetail for overview)
   void hydrateTenantView(nextView, tenant);
 }
@@ -1338,13 +1312,14 @@ function switchToAccountInternal(): void {
     usersRequestSeq += 1;
     hostedPageRequestSeq += 1;
     introspectRequestSeq += 1;
+    sessionRequestSeq += 1;
     setLoading(false);
     setSelectedTenant(null);
     resetTenantScopedState();
     setMode('account');
     setAccountTab('tenants');
   });
-  persistWorkspaceState();
+
 }
 
 export function selectTenant(tenant: Tenant): void {

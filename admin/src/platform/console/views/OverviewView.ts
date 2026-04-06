@@ -215,7 +215,7 @@ function TimeWindowPicker(activeWindow: () => OverviewWindowValue, busy: () => b
         role: 'tab',
         class: () => 'overview-window-chip' + (activeWindow() === windowValue ? ' active' : ''),
         'aria-selected': () => String(activeWindow() === windowValue),
-        disabled: busy(),
+        disabled: busy,
         onClick: () => changeOverviewWindow(windowValue),
       }, windowValue),
     ),
@@ -525,7 +525,7 @@ function QuickAction(title: string, description: string, onClick: () => void, ac
 function StatCard(label: string | (() => string), value: () => string) {
   return h('div', { class: 'stat-card' },
     h('div', { class: 'stat-value' }, value),
-    h('div', { class: 'stat-label' }, typeof label === 'function' ? label : label),
+    h('div', { class: 'stat-label' }, label),
   );
 }
 

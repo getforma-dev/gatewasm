@@ -13,13 +13,13 @@ import {
   type IntegrateSection,
   type Webhook,
   type WebhookDelivery,
+  serverUrl,
 } from '../store';
 import { SessionInspectorPanel } from './SessionInspectorPanel';
 import { CopyButton } from '../../../core/components/ui/CopyButton';
 
 export function IntegrateView() {
   const tenant = selectedTenant()!;
-  const serverUrl: string = (window as any).__FORMA_SERVER_URL__ || window.location.origin;
   const tenantState = () => selectedTenant() || tenant;
 
   const loginUrl = () => serverUrl + '/t/' + tenantState().slug + '/login';
