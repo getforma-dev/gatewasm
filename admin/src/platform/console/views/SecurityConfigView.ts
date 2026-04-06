@@ -1,4 +1,4 @@
-import { h } from 'formajs';
+import { h, createSignal, createShow } from 'formajs';
 import { Skeleton } from '../../../core/components/ui/Skeleton';
 import {
   selectedTenant, securityConfig, securityConfigLoading, tenantPlan,
@@ -62,6 +62,8 @@ export function SecurityConfigView() {
   };
   const isCompliance = () => plan() === 'compliance';
 
+  const [showAdvanced, setShowAdvanced] = createSignal(false);
+
   function patch(field: keyof SecurityConfig, value: SecurityConfig[keyof SecurityConfig]) {
     void saveSecurityConfig(tenantId(), { [field]: value } as Partial<SecurityConfig>);
   }
@@ -111,71 +113,83 @@ export function SecurityConfigView() {
               ),
             ]),
 
-            // ── Pro ────────────────────────────────────────────────
-            SectionCard('Pro', !isPro() ? 'Requires Pro plan' : null, [
-              ToggleRow(
-                'WebAuthn / Passkeys',
-                () => config()!.webauthn_enabled,
-                () => patch('webauthn_enabled', !config()!.webauthn_enabled),
-                !isPro(),
-              ),
-              ToggleRow(
-                'FedCM',
-                () => config()!.fedcm_enabled,
-                () => patch('fedcm_enabled', !config()!.fedcm_enabled),
-                !isPro(),
-              ),
-            ]),
+            // ── Advanced tiers toggle ──────────────────────────────
+            h('button', {
+              type: 'button',
+              class: 'btn btn-ghost btn-sm',
+              onClick: () => setShowAdvanced(!showAdvanced()),
+              style: 'margin: var(--space-sm) 0',
+            }, () => showAdvanced() ? 'Hide advanced tiers' : 'Show Pro \u00b7 Enterprise \u00b7 Compliance'),
 
-            // ── Enterprise ─────────────────────────────────────────
-            SectionCard('Enterprise', !isEnterprise() ? 'Requires Enterprise plan' : null, [
-              ToggleRow(
-                'DPoP Required',
-                () => config()!.dpop_required,
-                () => patch('dpop_required', !config()!.dpop_required),
-                !isEnterprise(),
-              ),
-              ToggleRow(
-                'PAR Required',
-                () => config()!.par_required,
-                () => patch('par_required', !config()!.par_required),
-                !isEnterprise(),
-              ),
-              ToggleRow(
-                'mTLS',
-                () => config()!.mtls_enabled,
-                () => patch('mtls_enabled', !config()!.mtls_enabled),
-                !isEnterprise(),
-              ),
-              ToggleRow(
-                'Token Introspection',
-                () => config()!.introspection_enabled,
-                () => patch('introspection_enabled', !config()!.introspection_enabled),
-                !isEnterprise(),
-              ),
-            ]),
+            // ── Pro / Enterprise / Compliance (collapsed by default) ─
+            createShow(showAdvanced, () => h('div', { class: 'stack-sm' },
 
-            // ── Compliance ─────────────────────────────────────────
-            SectionCard('Compliance', !isCompliance() ? 'Requires Compliance plan' : null, [
-              ToggleRow(
-                'CAEP (Continuous Access Evaluation)',
-                () => config()!.caep_enabled,
-                () => patch('caep_enabled', !config()!.caep_enabled),
-                !isCompliance(),
-              ),
-              ToggleRow(
-                'Impossible Travel Detection',
-                () => config()!.impossible_travel_enabled,
-                () => patch('impossible_travel_enabled', !config()!.impossible_travel_enabled),
-                !isCompliance(),
-              ),
-              NumberRow(
-                'Travel Speed Threshold (km/h)',
-                () => config()!.impossible_travel_speed_threshold_kmh,
-                (v) => patch('impossible_travel_speed_threshold_kmh', v),
-                !isCompliance(),
-              ),
-            ]),
+              // ── Pro ────────────────────────────────────────────────
+              SectionCard('Pro', !isPro() ? 'Requires Pro plan' : null, [
+                ToggleRow(
+                  'WebAuthn / Passkeys',
+                  () => config()!.webauthn_enabled,
+                  () => patch('webauthn_enabled', !config()!.webauthn_enabled),
+                  !isPro(),
+                ),
+                ToggleRow(
+                  'FedCM',
+                  () => config()!.fedcm_enabled,
+                  () => patch('fedcm_enabled', !config()!.fedcm_enabled),
+                  !isPro(),
+                ),
+              ]),
+
+              // ── Enterprise ─────────────────────────────────────────
+              SectionCard('Enterprise', !isEnterprise() ? 'Requires Enterprise plan' : null, [
+                ToggleRow(
+                  'DPoP Required',
+                  () => config()!.dpop_required,
+                  () => patch('dpop_required', !config()!.dpop_required),
+                  !isEnterprise(),
+                ),
+                ToggleRow(
+                  'PAR Required',
+                  () => config()!.par_required,
+                  () => patch('par_required', !config()!.par_required),
+                  !isEnterprise(),
+                ),
+                ToggleRow(
+                  'mTLS',
+                  () => config()!.mtls_enabled,
+                  () => patch('mtls_enabled', !config()!.mtls_enabled),
+                  !isEnterprise(),
+                ),
+                ToggleRow(
+                  'Token Introspection',
+                  () => config()!.introspection_enabled,
+                  () => patch('introspection_enabled', !config()!.introspection_enabled),
+                  !isEnterprise(),
+                ),
+              ]),
+
+              // ── Compliance ─────────────────────────────────────────
+              SectionCard('Compliance', !isCompliance() ? 'Requires Compliance plan' : null, [
+                ToggleRow(
+                  'CAEP (Continuous Access Evaluation)',
+                  () => config()!.caep_enabled,
+                  () => patch('caep_enabled', !config()!.caep_enabled),
+                  !isCompliance(),
+                ),
+                ToggleRow(
+                  'Impossible Travel Detection',
+                  () => config()!.impossible_travel_enabled,
+                  () => patch('impossible_travel_enabled', !config()!.impossible_travel_enabled),
+                  !isCompliance(),
+                ),
+                NumberRow(
+                  'Travel Speed Threshold (km/h)',
+                  () => config()!.impossible_travel_speed_threshold_kmh,
+                  (v) => patch('impossible_travel_speed_threshold_kmh', v),
+                  !isCompliance(),
+                ),
+              ]),
+            )),
           )
         : h('div', { class: 'console-view-body' },
             SectionCard('Foundation (Defaults)', null, [

@@ -700,6 +700,25 @@
   color: var(--text);
 }
 
+.secured-badge {
+  text-align: center;
+  margin-top: 1.5rem;
+  font-size: 0.68rem;
+  color: var(--text-muted);
+  font-family: 'DM Mono', monospace;
+  letter-spacing: 0.05em;
+}
+
+.secured-badge-link {
+  color: #c4a265;
+  text-decoration: none;
+  font-weight: 600;
+}
+
+.secured-badge-link:hover {
+  text-decoration: underline;
+}
+
 
 /* ── Tenant Login — Responsive ─────────────────────────────────────────── */
 

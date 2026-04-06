@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>fAuth — Brand Guide</title>
+<link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=Orbitron:wght@500;600;700;800;900&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #0A0A0F; color: #F0F0F0; font-family: 'Rajdhani', sans-serif; }
+
+  .page { max-width: 1100px; margin: 0 auto; padding: 40px 32px 80px; }
+
+  .cover { text-align: center; padding: 80px 0 60px; border-bottom: 1px solid #1E1E28; margin-bottom: 60px; }
+  .cover h1 { font-family: 'Orbitron', sans-serif; font-weight: 900; font-size: 48px; color: #c4a265; letter-spacing: 4px; margin-bottom: 8px; }
+  .cover p { font-size: 16px; color: #888; font-weight: 400; }
+  .cover .version { font-family: 'DM Mono', monospace; font-size: 11px; color: #555; margin-top: 16px; letter-spacing: 0.1em; }
+
+  .section { margin-bottom: 64px; }
+  .section-label { font-family: 'DM Mono', monospace; font-size: 11px; color: #c4a265; letter-spacing: 0.15em; text-transform: uppercase; margin-bottom: 8px; }
+  .section-title { font-size: 28px; font-weight: 700; color: #F0F0F0; margin-bottom: 6px; }
+  .section-desc { font-size: 14px; color: #888; line-height: 1.6; margin-bottom: 28px; max-width: 640px; }
+
+  .grid { display: flex; gap: 16px; flex-wrap: wrap; }
+  .card { background: #111118; border: 1px solid #1E1E28; border-radius: 12px; padding: 24px; display: flex; flex-direction: column; align-items: center; gap: 12px; }
+  .card-label { font-family: 'DM Mono', monospace; font-size: 10px; color: #555; letter-spacing: 0.08em; text-transform: uppercase; }
+  .card-sub { font-family: 'DM Mono', monospace; font-size: 10px; color: #444; }
+
+  .bg-dark { background: #0A0A0F; }
+  .bg-card { background: #111118; }
+  .bg-elevated { background: #1A1A24; }
+  .bg-white { background: #FFFFFF; border-color: #ddd; }
+  .bg-cream { background: #F5F3EF; border-color: #ddd; }
+  .bg-slate { background: #1E293B; }
+  .bg-navy { background: #0F172A; }
+  .bg-brand { background: #c4a265; }
+
+  .swatch-row { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
+  .swatch { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+  .swatch-block { width: 64px; height: 64px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.06); }
+  .swatch-name { font-family: 'DM Mono', monospace; font-size: 10px; color: #999; }
+  .swatch-hex { font-family: 'DM Mono', monospace; font-size: 9px; color: #555; }
+
+  .type-row { margin-bottom: 20px; padding-bottom: 20px; border-bottom: 1px solid #1E1E28; }
+  .type-label { font-family: 'DM Mono', monospace; font-size: 10px; color: #555; letter-spacing: 0.08em; margin-bottom: 8px; }
+
+  .rule { display: flex; gap: 32px; margin-bottom: 20px; align-items: flex-start; }
+  .rule-do { border-left: 3px solid #1EDC82; padding-left: 16px; flex: 1; }
+  .rule-dont { border-left: 3px solid #E85D3A; padding-left: 16px; flex: 1; }
+  .rule-label { font-family: 'DM Mono', monospace; font-size: 10px; letter-spacing: 0.1em; margin-bottom: 6px; }
+  .rule-label.do { color: #1EDC82; }
+  .rule-label.dont { color: #E85D3A; }
+  .rule-text { font-size: 13px; color: #999; line-height: 1.5; }
+
+  .divider { height: 1px; background: #1E1E28; margin: 48px 0; }
+
+  .clearspace-demo { position: relative; display: inline-block; border: 1px dashed #c4a26544; padding: 40px; margin: 16px 0; }
+  .clearspace-label { position: absolute; font-family: 'DM Mono', monospace; font-size: 9px; color: #c4a265; opacity: 0.6; }
+
+  .size-ladder { display: flex; gap: 16px; align-items: flex-end; flex-wrap: wrap; }
+
+  .tab-sim { background: #2A2A36; border-radius: 8px 8px 0 0; padding: 8px 16px 8px 10px; display: inline-flex; align-items: center; gap: 8px; }
+  .app-icon { width: 60px; height: 60px; border-radius: 14px; background: #111118; border: 1px solid #1E1E28; display: flex; align-items: center; justify-content: center; }
+
+  @media print {
+    body { background: white; color: #111; }
+    .card { border-color: #ddd; }
+  }
+</style>
+</head>
+<body>
+
+<div class="page">
+
+  <!-- COVER -->
+  <div class="cover">
+    <svg width="80" height="96" viewBox="0 0 100 120" fill="none" style="margin-bottom: 24px;">
+      <defs><linearGradient id="csg" x1="50" y1="0" x2="50" y2="120" gradientUnits="userSpaceOnUse"><stop offset="0%" stop-color="#c4a265" stop-opacity="0.14"/><stop offset="100%" stop-color="#c4a265" stop-opacity="0.03"/></linearGradient></defs>
+      <path d="M6 4 L94 4 L100 10 L100 78 L50 118 L0 78 L0 10 Z" fill="url(#csg)"/>
+      <path d="M6 4 L94 4 L100 10 L100 78 L50 118 L0 78 L0 10 Z" fill="none" stroke="#c4a265" stroke-width="2.5"/>
+      <text x="50" y="72" text-anchor="middle" font-family="Orbitron, sans-serif" font-weight="900" font-size="50" fill="#c4a265">F</text>
+    </svg>
+    <h1>fAuth</h1>
+    <p>Brand Identity Guide</p>
+    <div class="version">Version 1.0 · April 2026 · FormaStack</div>
+  </div>
+
+  <!-- 1. LOGO MARK -->
+  <div class="section">
+    <div class="section-label">01 · Logo Mark</div>
+    <div class="section-title">The Shield</div>
+    <div class="section-desc">The fAuth mark is an angular shield containing an Orbitron Black "F". The shield uses a gradient fill (14% to 3% opacity) with a 2.5px stroke. Four variants cover all background contexts.</div>
+
+    <div class="grid">
+      <div class="card" style="min-width: 160px;">
+        <div class="card-label">Primary · Gold</div>
+        <div style="background: #0A0A0F; padding: 24px; border-radius: 8px;">
+          <svg width="80" height="96" viewBox="0 0 100 120" fill="none"><defs><linearGradient id="s1" x1="50" y1="0" x2="50" y2="120" gradientUnits="userSpaceOnUse"><stop offset="0%" stop-color="#c4a265" stop-opacity="0.14"/><stop offset="100%" stop-color="#c4a265" stop-opacity="0.03"/></linearGradient></defs><path d="M6 4 L94 4 L100 10 L100 78 L50 118 L0 78 L0 10 Z" fill="url(#s1)"/><path d="M6 4 L94 4 L100 10 L100 78 L50 118 L0 78 L0 10 Z" fill="none" stroke="#c4a265" stroke-width="2.5"/><text x="50" y="72" text-anchor="middle" font-family="Orbitron, sans-serif" font-weight="900" font-size="50" fill="#c4a265">F</text></svg>
+        </div>
+        <div class="card-sub">On dark backgrounds</div>
+      </div>
+
+      <div class="card" style="min-width: 160px;">
+        <div class="card-label">Inverted · Solid Gold</div>
+        <div style="background: #0A0A0F; padding: 24px; border-radius: 8px;">
+          <svg width="80" height="96" viewBox="0 0 100 120" fill="none"><defs><linearGradient id="s2" x1="50" y1="0" x2="50" y2="120" gradientUnits="userSpaceOnUse"><stop offset="0%" stop-color="#d4b87a"/><stop offset="100%" stop-color="#9a7d45"/></linearGradient></defs><path d="M6 4 L94 4 L100 10 L100 78 L50 118 L0 78 L0 10 Z" fill="url(#s2)"/><text x="50" y="72" text-anchor="middle" font-family="Orbitron, sans-serif" font-weight="900" font-size="50" fill="#0C0C11">F</text></svg>
+        </div>
+        <div class="card-sub">App icons, high contrast</div>
+      </div>
+
+      <div class="card" style="min-width: 160px;">
+        <div class="card-label">Dark</div>
+        <div style="background: #FFFFFF; padding: 24px; border-radius: 8px;">
+          <svg width="80" height="96" viewBox="0 0 100 120" fill="none"><defs><linearGradient id="s3" x1="50" y1="0" x2="50" y2="120" gradientUnits="userSpaceOnUse"><stop offset="0%" stop-color="#1a1a24" stop-opacity="0.08"/><stop offset="100%" stop-color="#1a1a24" stop-opacity="0.02"/></linearGradient></defs><path d="M6 4 L94 4 L100 10 L100 78 L50 118 L0 78 L0 10 Z" fill="url(#s3)"/><path d="M6 4 L94 4 L100 10 L100 78 L50 118 L0 78 L0 10 Z" fill="none" stroke="#1a1a24" stroke-width="2.5"/><text x="50" y="72" text-anchor="middle" font-family="Orbitron, sans-serif" font-weight="900" font-size="50" fill="#1a1a24">F</text></svg>
+        </div>
+        <div class="card-sub">On white / light</div>
+      </div>
+
+      <div class="card" style="min-width: 160px;">
+        <div class="card-label">White</div>
+        <div style="background: #1E293B; padding: 24px; border-radius: 8px;">
+          <svg width="80" height="96" viewBox="0 0 100 120" fill="none"><defs><linearGradient id="s4" x1="50" y1="0" x2="50" y2="120" gradientUnits="userSpaceOnUse"><stop offset="0%" stop-color="#fff" stop-opacity="0.10"/><stop offset="100%" stop-color="#fff" stop-opacity="0.02"/></linearGradient></defs><path d="M6 4 L94 4 L100 10 L100 78 L50 118 L0 78 L0 10 Z" fill="url(#s4)"/><path d="M6 4 L94 4 L100 10 L100 78 L50 118 L0 78 L0 10 Z" fill="none" stroke="#fff" stroke-width="2.5"/><text x="50" y="72" text-anchor="middle" font-family="Orbitron, sans-serif" font-weight="900" font-size="50" fill="#fff">F</text></svg>
+        </div>
+        <div class="card-sub">On photos, colored bg</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="divider"></div>
+
+  <!-- 2. LOCKUPS -->
+  <div class="section">
+    <div class="section-label">02 · Lockups</div>
+    <div class="section-title">Logo + Wordmark</div>
+    <div class="section-desc">Three lockup configurations for different contexts. The compact "fAuth" uses Orbitron. The full "FormaAuth" uses Rajdhani with "Auth" in brand gold. Never recreate these — use the provided SVGs.</div>
+
+    <div class="grid">
+      <div class="card" style="min-width: 280px;">
+        <div class="card-label">Compact · Dark</div>
+        <div style="display: flex; align-items: center; gap: 12px;">
+          <svg width="36" height="43" viewBox="0 0 100 120" fill="none"><defs><linearGradient id="l1" x1="50" y1="0" x2="50" y2="120" gradientUnits="userSpaceOnUse"><stop offset="0%" stop-color="#c4a265" stop-opacity="0.14"/><stop offset="100%" stop-color="#c4a265" stop-opacity="0.03"/></linearGradient></defs><path d="M6 4 L94 4 L100 10 L100 78 L50 118 L0 78 L0 10 Z" fill="url(#l1)"/><path d="M6 4 L94 4 L100 10 L100 78 L50 118 L0 78 L0 10 Z" fill="none" stroke="#c4a265" stroke-width="2.5"/><text x="50" y="72" text-anchor="middle" font-family="Orbitron, sans-serif" font-weight="900" font-size="50" fill="#c4a265">F</text></svg>
+          <span style="font-family: 'Orbitron', sans-serif; font-weight: 700; font-size: 26px; color: #c4a265; letter-spacing: 1px;">fAuth</span>
+        </div>
+        <div class="card-sub">Headers, docs, nav</div>
+      </div>
+
+      <div class="card" style="min-width: 320px;">
+        <div class="card-label">Full Name · Dark</div>
+        <div style="display: flex; align-items: center; gap: 14px;">
+          <svg width="40" height="48" viewBox="0 0 100 120" fill="none"><defs><linearGradient id="l2" x1="50" y1="0" x2="50" y2="120" gradientUnits="userSpaceOnUse"><stop offset="0%" stop-color="#c4a265" stop-opacity="0.14"/><stop offset="100%" stop-color="#c4a265" stop-opacity="0.03"/></linearGradient></defs><path d="M6 4 L94 4 L100 10 L100 78 L50 118 L0 78 L0 10 Z" fill="url(#l2)"/><path d="M6 4 L94 4 L100 10 L100 78 L50 118 L0 78 L0 10 Z" fill="none" stroke="#c4a265" stroke-width="2.5"/><text x="50" y="72" text-anchor="middle" font-family="Orbitron, sans-serif" font-weight="900" font-size="50" fill="#c4a265">F</text></svg>
+          <div><span style="font-size: 26px; font-weight: 700; color: #F0F0F0;">Forma</span><span style="font-size: 26px; font-weight: 700; color: #c4a265;">Auth</span></div>
+        </div>
+        <div class="card-sub">Marketing, landing pages</div>
+      </div>
+
+      <div class="card" style="min-width: 160px;">
+        <div class="card-label">Stacked</div>
+        <div style="display: flex; flex-direction: column; align-items: center; gap: 8px;">
+          <svg width="56" height="67" viewBox="0 0 100 120" fill="none"><defs><linearGradient id="l3" x1="50" y1="0" x2="50" y2="120" gradientUnits="userSpaceOnUse"><stop offset="0%" stop-color="#c4a265" stop-opacity="0.14"/><stop offset="100%" stop-color="#c4a265" stop-opacity="0.03"/></linearGradient></defs><path d="M6 4 L94 4 L100 10 L100 78 L50 118 L0 78 L0 10 Z" fill="url(#l3)"/><path d="M6 4 L94 4 L100 10 L100 78 L50 118 L0 78 L0 10 Z" fill="none" stroke="#c4a265" stroke-width="2.5"/><text x="50" y="72" text-anchor="middle" font-family="Orbitron, sans-serif" font-weight="900" font-size="50" fill="#c4a265">F</text></svg>
+          <div><span style="font-size: 16px; font-weight: 700; color: #F0F0F0;">Forma</span><span style="font-size: 16px; font-weight: 700; color: #c4a265;">Auth</span></div>
+        </div>
+        <div class="card-sub">App stores, social</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="divider"></div>
+
+  <!-- 3. COLORS -->
+  <div class="section">
+    <div class="section-label">03 · Color Palette</div>
+    <div class="section-title">Brand Colors</div>
+    <div class="section-desc">The primary brand color is #c4a265 — a warm brass gold. The palette extends into lighter and darker tones for the gradient shield, plus a set of surface colors shared across all FormaStack products.</div>
+
+    <div style="margin-bottom: 32px;">
+      <div style="font-family: 'DM Mono', monospace; font-size: 10px; color: #555; letter-spacing: 0.1em; margin-bottom: 12px;">BRAND</div>
+      <div class="swatch-row">
+        <div class="swatch"><div class="swatch-block" style="background: #c4a265; width: 96px; height: 96px; box-shadow: 0 0 20px rgba(196,162,101,0.2);"></div><div class="swatch-name">Primary Gold</div><div class="swatch-hex">#c4a265</div></div>
+        <div class="swatch"><div class="swatch-block" style="background: #d4b87a;"></div><div class="swatch-name">Light Gold</div><div class="swatch-hex">#d4b87a</div></div>
+        <div class="swatch"><div class="swatch-block" style="background: #9a7d45;"></div><div class="swatch-name">Dark Gold</div><div class="swatch-hex">#9a7d45</div></div>
+        <div class="swatch"><div class="swatch-block" style="background: rgba(196,162,101,0.3); border: 1px solid #c4a26544;"></div><div class="swatch-name">Glow</div><div class="swatch-hex">rgba(196,162,101,0.3)</div></div>
+        <div class="swatch"><div class="swatch-block" style="background: rgba(196,162,101,0.08); border: 1px solid #c4a26522;"></div><div class="swatch-name">Muted</div><div class="swatch-hex">8% opacity</div></div>
+      </div>
+    </div>
+
+    <div>
+      <div style="font-family: 'DM Mono', monospace; font-size: 10px; color: #555; letter-spacing: 0.1em; margin-bottom: 12px;">SURFACES (SHARED ACROSS FORMASTACK)</div>
+      <div class="swatch-row">
+        <div class="swatch"><div class="swatch-block" style="background: #0A0A0F;"></div><div class="swatch-name">Root</div><div class="swatch-hex">#0A0A0F</div></div>
+        <div class="swatch"><div class="swatch-block" style="background: #0C0C11;"></div><div class="swatch-name">Background</div><div class="swatch-hex">#0C0C11</div></div>
+        <div class="swatch"><div class="swatch-block" style="background: #111118;"></div><div class="swatch-name">Card</div><div class="swatch-hex">#111118</div></div>
+        <div class="swatch"><div class="swatch-block" style="background: #1A1A24;"></div><div class="swatch-name">Elevated</div><div class="swatch-hex">#1A1A24</div></div>
+        <div class="swatch"><div class="swatch-block" style="background: #1E1E28;"></div><div class="swatch-name">Border</div><div class="swatch-hex">#1E1E28</div></div>
+        <div class="swatch"><div class="swatch-block" style="background: #101018;"></div><div class="swatch-name">Header</div><div class="swatch-hex">#101018</div></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="divider"></div>
+
+  <!-- 4. TYPOGRAPHY -->
+  <div class="section">
+    <div class="section-label">04 · Typography</div>
+    <div class="section-title">Type System</div>
+    <div class="section-desc">Three fonts, strict roles. Never swap them — Orbitron for accent numerals and the logo wordmark, Rajdhani for UI and body, DM Mono for data and technical content.</div>
+
+    <div class="type-row">
+      <div class="type-label">DISPLAY · Orbitron 900 (Black)</div>
+      <div style="font-family: 'Orbitron', sans-serif; font-weight: 900; font-size: 36px; color: #c4a265; letter-spacing: 2px;">fAuth</div>
+      <div style="font-family: 'DM Mono', monospace; font-size: 10px; color: #555; margin-top: 6px;">Logo wordmark, stat values, plane numbers, badge numbers</div>
+    </div>
+
+    <div class="type-row">
+      <div class="type-label">UI · Rajdhani 700</div>
+      <div style="font-family: 'Rajdhani', sans-serif; font-weight: 700; font-size: 28px; color: #F0F0F0;">FormaAuth Dashboard</div>
+      <div style="font-family: 'DM Mono', monospace; font-size: 10px; color: #555; margin-top: 6px;">Headings, nav labels, button text, view titles</div>
+    </div>
+
+    <div class="type-row">
+      <div class="type-label">BODY · Rajdhani 400–500</div>
+      <div style="font-family: 'Rajdhani', sans-serif; font-weight: 400; font-size: 16px; color: #999; line-height: 1.6;">Authentication infrastructure for applications that take security seriously. Configure password policies, enforce MFA, manage sessions, and monitor your tenant's auth posture from a single dashboard.</div>
+      <div style="font-family: 'DM Mono', monospace; font-size: 10px; color: #555; margin-top: 6px;">Paragraphs, descriptions, form labels</div>
+    </div>
+
+    <div class="type-row" style="border: none;">
+      <div class="type-label">DATA · DM Mono 400</div>
+      <div style="font-family: 'DM Mono', monospace; font-size: 14px; color: #999;">SEC-01 · auth.getforma.dev · mgmt_k3x9f2a · 2026-04-06T08:17:00Z</div>
+      <div style="font-family: 'DM Mono', monospace; font-size: 10px; color: #555; margin-top: 6px;">Sector labels, slugs, API keys, timestamps, code, table data</div>
+    </div>
+  </div>
+
+  <div class="divider"></div>
+
+  <!-- 5. BACKGROUNDS -->
+  <div class="section">
+    <div class="section-label">05 · On Backgrounds</div>
+    <div class="section-title">Context Usage</div>
+    <div class="section-desc">The primary gold mark is for dark backgrounds. Use the dark variant on light surfaces. Use inverted (solid gold) for app icons. Use white on photos or colored backgrounds where gold lacks contrast.</div>
+
+    <div class="grid">
+      <div class="card bg-dark" style="min-width: 120px;"><div class="card-label" style="color: #555;">App Dark</div><svg width="56" height="67" viewBox="0 0 100 120" fill="none"><defs><linearGradient id="b1" x1="50" y1="0" x2="50" y2="120" gradientUnits="userSpaceOnUse"><stop offset="0%" stop-color="#c4a265" stop-opacity="0.14"/><stop offset="100%" stop-color="#c4a265" stop-opacity="0.03"/></linearGradient></defs><path d="M6 4 L94 4 L100 10 L100 78 L50 118 L0 78 L0 10 Z" fill="url(#b1)"/><path d="M6 4 L94 4 L100 10 L100 78 L50 118 L0 78 L0 10 Z" fill="none" stroke="#c4a265" stroke-width="2.5"/><text x="50" y="72" text-anchor="middle" font-family="Orbitron, sans-serif" font-weight="900" font-size="50" fill="#c4a265">F</text></svg><div class="card-sub">#0A0A0F</div></div>
+
+      <div class="card bg-elevated" style="min-width: 120px;"><div class="card-label" style="color: #555;">Elevated</div><svg width="56" height="67" viewBox="0 0 100 120" fill="none"><defs><linearGradient id="b2" x1="50" y1="0" x2="50" y2="120" gradientUnits="userSpaceOnUse"><stop offset="0%" stop-color="#c4a265" stop-opacity="0.14"/><stop offset="100%" stop-color="#c4a265" stop-opacity="0.03"/></linearGradient></defs><path d="M6 4 L94 4 L100 10 L100 78 L50 118 L0 78 L0 10 Z" fill="url(#b2)"/><path d="M6 4 L94 4 L100 10 L100 78 L50 118 L0 78 L0 10 Z" fill="none" stroke="#c4a265" stroke-width="2.5"/><text x="50" y="72" text-anchor="middle" font-family="Orbitron, sans-serif" font-weight="900" font-size="50" fill="#c4a265">F</text></svg><div class="card-sub">#1A1A24</div></div>
+
+      <div class="card bg-white" style="min-width: 120px;"><div class="card-label" style="color: #999;">White</div><svg width="56" height="67" viewBox="0 0 100 120" fill="none"><defs><linearGradient id="b3" x1="50" y1="0" x2="50" y2="120" gradientUnits="userSpaceOnUse"><stop offset="0%" stop-color="#1a1a24" stop-opacity="0.08"/><stop offset="100%" stop-color="#1a1a24" stop-opacity="0.02"/></linearGradient></defs><path d="M6 4 L94 4 L100 10 L100 78 L50 118 L0 78 L0 10 Z" fill="url(#b3)"/><path d="M6 4 L94 4 L100 10 L100 78 L50 118 L0 78 L0 10 Z" fill="none" stroke="#1a1a24" stroke-width="2.5"/><text x="50" y="72" text-anchor="middle" font-family="Orbitron, sans-serif" font-weight="900" font-size="50" fill="#1a1a24">F</text></svg><div class="card-sub" style="color: #999;">#FFFFFF</div></div>
+
+      <div class="card bg-cream" style="min-width: 120px;"><div class="card-label" style="color: #999;">Cream</div><svg width="56" height="67" viewBox="0 0 100 120" fill="none"><defs><linearGradient id="b4" x1="50" y1="0" x2="50" y2="120" gradientUnits="userSpaceOnUse"><stop offset="0%" stop-color="#1a1a24" stop-opacity="0.08"/><stop offset="100%" stop-color="#1a1a24" stop-opacity="0.02"/></linearGradient></defs><path d="M6 4 L94 4 L100 10 L100 78 L50 118 L0 78 L0 10 Z" fill="url(#b4)"/><path d="M6 4 L94 4 L100 10 L100 78 L50 118 L0 78 L0 10 Z" fill="none" stroke="#1a1a24" stroke-width="2.5"/><text x="50" y="72" text-anchor="middle" font-family="Orbitron, sans-serif" font-weight="900" font-size="50" fill="#1a1a24">F</text></svg><div class="card-sub" style="color: #999;">#F5F3EF</div></div>
+
+      <div class="card bg-navy" style="min-width: 120px;"><div class="card-label" style="color: #555;">Navy</div><svg width="56" height="67" viewBox="0 0 100 120" fill="none"><defs><linearGradient id="b5" x1="50" y1="0" x2="50" y2="120" gradientUnits="userSpaceOnUse"><stop offset="0%" stop-color="#fff" stop-opacity="0.10"/><stop offset="100%" stop-color="#fff" stop-opacity="0.02"/></linearGradient></defs><path d="M6 4 L94 4 L100 10 L100 78 L50 118 L0 78 L0 10 Z" fill="url(#b5)"/><path d="M6 4 L94 4 L100 10 L100 78 L50 118 L0 78 L0 10 Z" fill="none" stroke="#fff" stroke-width="2.5"/><text x="50" y="72" text-anchor="middle" font-family="Orbitron, sans-serif" font-weight="900" font-size="50" fill="#fff">F</text></svg><div class="card-sub">#0F172A</div></div>
+
+      <div class="card bg-brand" style="min-width: 120px;"><div class="card-label" style="color: #0C0C11;">On Brand</div><svg width="56" height="67" viewBox="0 0 100 120" fill="none"><path d="M6 4 L94 4 L100 10 L100 78 L50 118 L0 78 L0 10 Z" fill="rgba(0,0,0,0.15)"/><path d="M6 4 L94 4 L100 10 L100 78 L50 118 L0 78 L0 10 Z" fill="none" stroke="#0C0C11" stroke-width="2.5"/><text x="50" y="72" text-anchor="middle" font-family="Orbitron, sans-serif" font-weight="900" font-size="50" fill="#0C0C11">F</text></svg><div class="card-sub" style="color: #6b5a30;">#c4a265</div></div>
+    </div>
+  </div>
+
+  <div class="divider"></div>
+
+  <!-- 6. USAGE RULES -->
+  <div class="section">
+    <div class="section-label">06 · Usage Rules</div>
+    <div class="section-title">Do's and Don'ts</div>
+
+    <div class="rule">
+      <div class="rule-do"><div class="rule-label do">✓ DO</div><div class="rule-text">Use the provided SVGs as-is. Maintain the gradient fill and stroke on the shield. Keep minimum clear space of 1x the shield width on all sides.</div></div>
+      <div class="rule-dont"><div class="rule-label dont">✗ DON'T</div><div class="rule-text">Don't rotate the shield. Don't change the F to a different font. Don't remove the gradient fill (flat color loses the depth). Don't add drop shadows — the glow is built into the gradient.</div></div>
+    </div>
+    <div class="rule">
+      <div class="rule-do"><div class="rule-label do">✓ DO</div><div class="rule-text">Use the gold mark on dark backgrounds (#0A0A0F through #1A1A24). Use the dark mark on white/cream. Use white on photos or colored surfaces where gold doesn't contrast.</div></div>
+      <div class="rule-dont"><div class="rule-label dont">✗ DON'T</div><div class="rule-text">Don't use the gold mark on light backgrounds — the gradient disappears. Don't place on busy backgrounds without sufficient contrast. Don't use the inverted solid-gold shield as the primary mark.</div></div>
+    </div>
+    <div class="rule">
+      <div class="rule-do"><div class="rule-label do">✓ DO</div><div class="rule-text">Minimum mark size: 16px wide. For sizes below 24px, the stroke and gradient are still legible because of the Orbitron Black weight.</div></div>
+      <div class="rule-dont"><div class="rule-label dont">✗ DON'T</div><div class="rule-text">Don't stretch or squash the shield. Don't outline the F separately from the shield. Don't add text inside the shield other than the F.</div></div>
+    </div>
+  </div>
+
+  <div class="divider"></div>
+
+  <!-- 7. FILE MANIFEST -->
+  <div class="section">
+    <div class="section-label">07 · File Manifest</div>
+    <div class="section-title">What's In This Package</div>
+
+    <div style="font-family: 'DM Mono', monospace; font-size: 12px; color: #999; line-height: 2.2;">
+      <div style="color: #c4a265; margin-bottom: 4px;">marks/</div>
+      <div style="padding-left: 20px;">fauth-mark-gold.svg <span style="color: #555;">— Primary mark, gold on dark</span></div>
+      <div style="padding-left: 20px;">fauth-mark-inverted.svg <span style="color: #555;">— Solid gold gradient, dark F</span></div>
+      <div style="padding-left: 20px;">fauth-mark-white.svg <span style="color: #555;">— White mark for photos/color</span></div>
+      <div style="padding-left: 20px;">fauth-mark-dark.svg <span style="color: #555;">— Dark mark for light backgrounds</span></div>
+      <div style="color: #c4a265; margin: 8px 0 4px;">lockups/</div>
+      <div style="padding-left: 20px;">fauth-compact-dark.svg <span style="color: #555;">— Shield + "fAuth" on dark</span></div>
+      <div style="padding-left: 20px;">fauth-compact-light.svg <span style="color: #555;">— Shield + "fAuth" on light</span></div>
+      <div style="padding-left: 20px;">formaauth-full-dark.svg <span style="color: #555;">— Shield + "FormaAuth" on dark</span></div>
+      <div style="padding-left: 20px;">formaauth-full-light.svg <span style="color: #555;">— Shield + "FormaAuth" on light</span></div>
+      <div style="padding-left: 20px;">formaauth-stacked-dark.svg <span style="color: #555;">— Shield over "FormaAuth"</span></div>
+      <div style="color: #c4a265; margin: 8px 0 4px;">usage/</div>
+      <div style="padding-left: 20px;">brand-guide.html <span style="color: #555;">— This file</span></div>
+    </div>
+  </div>
+
+  <!-- FOOTER -->
+  <div style="text-align: center; padding: 40px 0; border-top: 1px solid #1E1E28; margin-top: 40px;">
+    <div style="font-family: 'DM Mono', monospace; font-size: 10px; color: #444; letter-spacing: 0.1em;">fAuth · FormaAuth · FormaStack · April 2026</div>
+  </div>
+
+</div>
+</body>
+</html>

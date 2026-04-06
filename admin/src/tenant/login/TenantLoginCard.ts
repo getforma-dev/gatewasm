@@ -229,9 +229,9 @@ export function TenantLoginCard() {
       createShow(() => mode() === 'reset-done', ResetDoneView),
       createShow(() => mode() === 'reset', ResetView),
       createShow(() => mode() === 'login' || mode() === 'register', AuthFormView),
-      h('div', { class: 'tl-powered' },
+      h('div', { class: 'secured-badge' },
         'Secured by ',
-        h('a', { href: 'https://getforma.dev', target: '_blank', rel: 'noopener' }, 'Forma Auth'),
+        h('a', { href: 'https://getforma.dev', target: '_blank', rel: 'noopener', class: 'secured-badge-link' }, 'fAuth'),
       ),
     ),
   );
