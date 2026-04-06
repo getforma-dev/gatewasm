@@ -5,7 +5,6 @@ import {
   setIntegrateSection,
   webhooks,
   webhooksLoading,
-  loadWebhooks,
   createWebhook,
   updateWebhook,
   deleteWebhook,

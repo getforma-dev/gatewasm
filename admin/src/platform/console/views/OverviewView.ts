@@ -1,4 +1,4 @@
-import { h, createSignal } from 'formajs';
+import { h, createSignal, createShow } from 'formajs';
 import { Skeleton } from '../../../core/components/ui/Skeleton';
 import { CopyButton } from '../../../core/components/ui/CopyButton';
 import {
@@ -227,20 +227,20 @@ function OverviewStatsRow(
   activeWindow: () => OverviewWindowValue,
   isBootstrapping: () => boolean,
 ) {
-  if (isBootstrapping()) {
-    return h('div', { class: 'stats-grid' },
+  return createShow(
+    () => !isBootstrapping(),
+    () => h('div', { class: 'stats-grid stats-grid-four' },
+      StatCard('Total Users', () => String(stats()?.total_users ?? '-')),
+      StatCard('Active Sessions', () => String(stats()?.active_sessions ?? '-')),
+      StatCard(() => 'Logins (' + WINDOW_LABELS[activeWindow()] + ')', () => String(stats()?.logins_in_window ?? '-')),
+      StatCard(() => 'Failed Sign-Ins (' + WINDOW_LABELS[activeWindow()] + ')', () => String(stats()?.failed_logins_in_window ?? '-')),
+    ),
+    () => h('div', { class: 'stats-grid' },
       StatCardSkeleton(),
       StatCardSkeleton(),
       StatCardSkeleton(),
       StatCardSkeleton(),
-    );
-  }
-
-  return h('div', { class: 'stats-grid stats-grid-four' },
-    StatCard('Total Users', () => String(stats()?.total_users ?? '-')),
-    StatCard('Active Sessions', () => String(stats()?.active_sessions ?? '-')),
-    StatCard(() => 'Logins (' + WINDOW_LABELS[activeWindow()] + ')', () => String(stats()?.logins_in_window ?? '-')),
-    StatCard(() => 'Failed Sign-Ins (' + WINDOW_LABELS[activeWindow()] + ')', () => String(stats()?.failed_logins_in_window ?? '-')),
+    ),
   );
 }
 
@@ -249,40 +249,42 @@ function OverviewTrendCard(
   activeWindow: () => OverviewWindowValue,
   isBootstrapping: () => boolean,
 ) {
-  if (isBootstrapping()) {
-    return OverviewLoadingCard('Authentication Trend');
-  }
+  return createShow(
+    () => !isBootstrapping(),
+    () => {
+      const points = () => stats()?.series || [];
+      const hasTrendData = () => points().some((point) => point.logins > 0 || point.sessions_started > 0 || point.failed_logins > 0);
+      const maxValue = () => Math.max(1, ...points().map((point) => Math.max(point.logins, point.sessions_started)));
 
-  const points = () => stats()?.series || [];
-  const hasTrendData = () => points().some((point) => point.logins > 0 || point.sessions_started > 0 || point.failed_logins > 0);
-  const maxValue = () => Math.max(1, ...points().map((point) => Math.max(point.logins, point.sessions_started)));
-
-  return h('div', { class: 'console-card overview-chart-card overview-trend-card' },
-    h('div', { class: 'overview-card-head' },
-      h('div', { class: 'stack-sm' },
-        h('div', { class: 'card-label' }, 'Authentication Trend'),
-        h('h3', { class: 'section-title' }, () => 'Logins and session starts over ' + WINDOW_LABELS[activeWindow()]),
-        h('p', { class: 'card-copy' }, 'Track the moments where users successfully authenticate versus when browsers actually receive a tenant session.'),
-      ),
-      h('div', { class: 'overview-chart-summary' },
-        SummaryMetric('Successful', String(stats()?.logins_in_window ?? 0)),
-        SummaryMetric('Failed', String(stats()?.failed_logins_in_window ?? 0)),
-      ),
-    ),
-    !hasTrendData()
-      ? OverviewEmptyPanel(
-          'No auth traffic yet',
-          'As soon as people sign in or sessions start appearing, the trend chart will begin filling in automatically.',
-        )
-      : h('div', { class: 'overview-trend-shell' },
-          h('div', { class: 'overview-trend-legend' },
-            LegendSwatch('Logins', 'logins'),
-            LegendSwatch('Sessions Started', 'sessions'),
+      return h('div', { class: 'console-card overview-chart-card overview-trend-card' },
+        h('div', { class: 'overview-card-head' },
+          h('div', { class: 'stack-sm' },
+            h('div', { class: 'card-label' }, 'Authentication Trend'),
+            h('h3', { class: 'section-title' }, () => 'Logins and session starts over ' + WINDOW_LABELS[activeWindow()]),
+            h('p', { class: 'card-copy' }, 'Track the moments where users successfully authenticate versus when browsers actually receive a tenant session.'),
           ),
-          h('div', { class: 'overview-trend-chart' },
-            () => points().map((point, index) => TrendColumn(point, maxValue(), index, activeWindow())),
+          h('div', { class: 'overview-chart-summary' },
+            SummaryMetric('Successful', String(stats()?.logins_in_window ?? 0)),
+            SummaryMetric('Failed', String(stats()?.failed_logins_in_window ?? 0)),
           ),
         ),
+        !hasTrendData()
+          ? OverviewEmptyPanel(
+              'No auth traffic yet',
+              'As soon as people sign in or sessions start appearing, the trend chart will begin filling in automatically.',
+            )
+          : h('div', { class: 'overview-trend-shell' },
+              h('div', { class: 'overview-trend-legend' },
+                LegendSwatch('Logins', 'logins'),
+                LegendSwatch('Sessions Started', 'sessions'),
+              ),
+              h('div', { class: 'overview-trend-chart' },
+                () => points().map((point, index) => TrendColumn(point, maxValue(), index, activeWindow())),
+              ),
+            ),
+      );
+    },
+    () => OverviewLoadingCard('Authentication Trend'),
   );
 }
 
@@ -290,40 +292,42 @@ function ProviderMixCard(
   stats: () => TenantStats | null,
   isBootstrapping: () => boolean,
 ) {
-  if (isBootstrapping()) {
-    return OverviewLoadingCard('Provider Mix');
-  }
+  return createShow(
+    () => !isBootstrapping(),
+    () => {
+      const providers = () => Object.entries(stats()?.providers || {}).sort((a, b) => b[1] - a[1]);
+      const total = () => providers().reduce((sum, [, count]) => sum + count, 0);
+      const maxCount = () => Math.max(1, ...providers().map(([, count]) => count));
 
-  const providers = () => Object.entries(stats()?.providers || {}).sort((a, b) => b[1] - a[1]);
-  const total = () => providers().reduce((sum, [, count]) => sum + count, 0);
-  const maxCount = () => Math.max(1, ...providers().map(([, count]) => count));
-
-  return h('div', { class: 'console-card overview-chart-card overview-provider-card' },
-    h('div', { class: 'card-label' }, 'Provider Mix'),
-    h('h3', { class: 'section-title' }, 'How users are getting in'),
-    h('p', { class: 'card-copy' }, 'A quick read on whether this tenant is mostly email/password, social login, or a blend of both.'),
-    providers().length === 0
-      ? OverviewEmptyPanel(
-          'No provider data yet',
-          'Provider distribution appears after the first account is created or signs in to this tenant.',
-        )
-      : h('div', { class: 'provider-mix-list' },
-          () => providers().map(([provider, count]) =>
-            h('div', { class: 'provider-mix-row' },
-              h('div', { class: 'provider-mix-copy' },
-                h('span', { class: 'provider-mix-name' }, providerLabel(provider)),
-                h('span', { class: 'provider-mix-meta' }, Math.round((count / total()) * 100) + '%'),
+      return h('div', { class: 'console-card overview-chart-card overview-provider-card' },
+        h('div', { class: 'card-label' }, 'Provider Mix'),
+        h('h3', { class: 'section-title' }, 'How users are getting in'),
+        h('p', { class: 'card-copy' }, 'A quick read on whether this tenant is mostly email/password, social login, or a blend of both.'),
+        providers().length === 0
+          ? OverviewEmptyPanel(
+              'No provider data yet',
+              'Provider distribution appears after the first account is created or signs in to this tenant.',
+            )
+          : h('div', { class: 'provider-mix-list' },
+              () => providers().map(([provider, count]) =>
+                h('div', { class: 'provider-mix-row' },
+                  h('div', { class: 'provider-mix-copy' },
+                    h('span', { class: 'provider-mix-name' }, providerLabel(provider)),
+                    h('span', { class: 'provider-mix-meta' }, Math.round((count / total()) * 100) + '%'),
+                  ),
+                  h('div', { class: 'provider-mix-track' },
+                    h('span', {
+                      class: 'provider-mix-fill',
+                      style: () => 'width:' + Math.max(12, Math.round((count / maxCount()) * 100)) + '%',
+                    }),
+                  ),
+                  h('span', { class: 'provider-mix-count' }, String(count)),
+                ),
               ),
-              h('div', { class: 'provider-mix-track' },
-                h('span', {
-                  class: 'provider-mix-fill',
-                  style: () => 'width:' + Math.max(12, Math.round((count / maxCount()) * 100)) + '%',
-                }),
-              ),
-              h('span', { class: 'provider-mix-count' }, String(count)),
             ),
-          ),
-        ),
+      );
+    },
+    () => OverviewLoadingCard('Provider Mix'),
   );
 }
 
@@ -332,8 +336,34 @@ function ActivityFeedCard(
   activeWindow: () => OverviewWindowValue,
   isBootstrapping: () => boolean,
 ) {
-  if (isBootstrapping()) {
-    return h('div', { class: 'console-card overview-activity-card' },
+  return createShow(
+    () => !isBootstrapping(),
+    () => {
+      const items = () => stats()?.activity || [];
+      return h('div', { class: 'console-card overview-activity-card' },
+        h('div', { class: 'overview-card-head' },
+          h('div', { class: 'stack-sm' },
+            h('div', { class: 'card-label' }, 'Recent Activity'),
+            h('h3', { class: 'section-title' }, 'What changed most recently'),
+            h('p', { class: 'card-copy' }, () => 'A running feed of sign-ins, new accounts, and session issuance over the last ' + WINDOW_LABELS[activeWindow()] + '.'),
+          ),
+          h('button', {
+            type: 'button',
+            class: 'btn btn-sm btn-ghost',
+            onClick: () => navigateTenantView('members'),
+          }, 'Open Members'),
+        ),
+        items().length === 0
+          ? OverviewEmptyPanel(
+              'No activity in this window',
+              'Try a wider time range or create a fresh sign-in to watch the tenant activity feed come alive.',
+            )
+          : h('div', { class: 'activity-feed-list' },
+              () => items().map((item) => ActivityRow(item)),
+            ),
+      );
+    },
+    () => h('div', { class: 'console-card overview-activity-card' },
       h('div', { class: 'card-label' }, 'Recent Activity'),
       h('h3', { class: 'section-title' }, 'What changed most recently'),
       h('div', { class: 'activity-feed-list' },
@@ -341,109 +371,88 @@ function ActivityFeedCard(
         ActivitySkeletonRow(),
         ActivitySkeletonRow(),
       ),
-    );
-  }
-
-  const items = () => stats()?.activity || [];
-  return h('div', { class: 'console-card overview-activity-card' },
-    h('div', { class: 'overview-card-head' },
-      h('div', { class: 'stack-sm' },
-        h('div', { class: 'card-label' }, 'Recent Activity'),
-        h('h3', { class: 'section-title' }, 'What changed most recently'),
-        h('p', { class: 'card-copy' }, () => 'A running feed of sign-ins, new accounts, and session issuance over the last ' + WINDOW_LABELS[activeWindow()] + '.'),
-      ),
-      h('button', {
-        type: 'button',
-        class: 'btn btn-sm btn-ghost',
-        onClick: () => navigateTenantView('members'),
-      }, 'Open Members'),
     ),
-    items().length === 0
-      ? OverviewEmptyPanel(
-          'No activity in this window',
-          'Try a wider time range or create a fresh sign-in to watch the tenant activity feed come alive.',
-        )
-      : h('div', { class: 'activity-feed-list' },
-          () => items().map((item) => ActivityRow(item)),
-        ),
   );
 }
 
 function latestUserCard(stats: () => TenantStats | null, isBootstrapping: () => boolean) {
-  if (isBootstrapping()) {
-    return h('div', { class: 'console-card' },
+  return createShow(
+    () => !isBootstrapping(),
+    () => {
+      const latestUser = stats()?.latest_user;
+      return h('div', { class: 'console-card' },
+        h('div', { class: 'overview-card-head' },
+          h('div', { class: 'card-label' }, 'Latest User'),
+          latestUser ? CopyButton({ text: latestUser.email, iconOnly: true, title: 'Copy latest user email' }) : null,
+        ),
+        latestUser
+          ? h('div', { class: 'stack-sm' },
+              h('div', { class: 'card-value card-value-strong' }, latestUser.email),
+              h('div', { class: 'card-meta text-muted' },
+                new Date(latestUser.created_at).toLocaleString() + ' - ' + latestUser.provider,
+              ),
+            )
+          : h('p', { class: 'card-copy' }, 'User activity will appear here as soon as someone signs in.'),
+      );
+    },
+    () => h('div', { class: 'console-card' },
       h('div', { class: 'card-label' }, 'Latest User'),
       Skeleton({ width: '72%', height: '16px' }),
       Skeleton({ width: '52%', height: '12px' }),
-    );
-  }
-
-  const latestUser = stats()?.latest_user;
-  return h('div', { class: 'console-card' },
-    h('div', { class: 'overview-card-head' },
-      h('div', { class: 'card-label' }, 'Latest User'),
-      latestUser ? CopyButton({ text: latestUser.email, iconOnly: true, title: 'Copy latest user email' }) : null,
     ),
-    latestUser
-      ? h('div', { class: 'stack-sm' },
-          h('div', { class: 'card-value card-value-strong' }, latestUser.email),
-          h('div', { class: 'card-meta text-muted' },
-            new Date(latestUser.created_at).toLocaleString() + ' - ' + latestUser.provider,
-          ),
-        )
-      : h('p', { class: 'card-copy' }, 'User activity will appear here as soon as someone signs in.'),
   );
 }
 
 function authStatusCard() {
-  const data = introspectData();
-
-  if (data) {
-    return h('div', { class: 'console-card overview-auth-card' },
-      h('div', { class: 'card-label' }, 'Tenant Auth Status'),
-      h('div', { class: 'card-value card-value-strong' }, 'Live session detected'),
-      h('p', { class: 'card-copy' },
-        data.user.email + ' is authenticated in this browser. Open Auth Reference inside Integrate for the full payload shape, JWT format, and live session details.',
+  return createShow(
+    () => !!introspectData(),
+    () => {
+      const data = introspectData()!;
+      return h('div', { class: 'console-card overview-auth-card' },
+        h('div', { class: 'card-label' }, 'Tenant Auth Status'),
+        h('div', { class: 'card-value card-value-strong' }, 'Live session detected'),
+        h('p', { class: 'card-copy' },
+          data.user.email + ' is authenticated in this browser. Open Auth Reference inside Integrate for the full payload shape, JWT format, and live session details.',
+        ),
+        h('div', { class: 'detail-grid' },
+          OverviewDetailRow('Roles', data.user.roles.join(', ') || 'user'),
+          OverviewDetailRow('Session', data.session ? 'Active in this browser' : 'Token only'),
+        ),
+        h('div', { class: 'card-actions' },
+          h('button', {
+            type: 'button',
+            class: 'btn btn-primary btn-sm',
+            onClick: openSessionInspector,
+          }, 'Open Auth Reference'),
+        ),
+      );
+    },
+    () => createShow(
+      () => introspectUnavailable(),
+      () => h('div', { class: 'console-card overview-auth-card' },
+        h('div', { class: 'card-label' }, 'Tenant Auth Status'),
+        h('div', { class: 'card-value card-value-strong' }, 'No live tenant session yet'),
+        h('p', { class: 'card-copy' },
+          'Auth Reference is always available inside Integrate. Sign into the tenant once to also see live session data alongside the reference.',
+        ),
+        h('div', { class: 'card-actions' },
+          h('a', {
+            href: () => {
+              const t = selectedTenant();
+              return t ? '/t/' + t.slug + '/login?redirect=/t/' + t.slug + '/site' : '#';
+            },
+            target: '_blank',
+            class: 'btn btn-primary btn-sm',
+          }, 'Start tenant sign-in'),
+        ),
       ),
-      h('div', { class: 'detail-grid' },
-        OverviewDetailRow('Roles', data.user.roles.join(', ') || 'user'),
-        OverviewDetailRow('Session', data.session ? 'Active in this browser' : 'Token only'),
+      () => h('div', { class: 'console-card overview-auth-card' },
+        h('div', { class: 'card-label' }, 'Tenant Auth Status'),
+        h('div', { class: 'card-value card-value-strong' }, 'Checking current browser session'),
+        h('p', { class: 'card-copy' },
+          'If this browser already has a tenant session, the console will surface it automatically in a moment.',
+        ),
       ),
-      h('div', { class: 'card-actions' },
-        h('button', {
-          type: 'button',
-          class: 'btn btn-primary btn-sm',
-          onClick: openSessionInspector,
-        }, 'Open Auth Reference'),
-      ),
-    );
-  }
-
-  if (introspectUnavailable()) {
-    return h('div', { class: 'console-card overview-auth-card' },
-      h('div', { class: 'card-label' }, 'Tenant Auth Status'),
-      h('div', { class: 'card-value card-value-strong' }, 'No live tenant session yet'),
-      h('p', { class: 'card-copy' },
-        'Auth Reference is always available inside Integrate. Sign into the tenant once to also see live session data alongside the reference.',
-      ),
-      h('div', { class: 'card-actions' },
-        h('a', {
-          href: () => {
-            const t = selectedTenant();
-            return t ? '/t/' + t.slug + '/login?redirect=/t/' + t.slug + '/site' : '#';
-          },
-          target: '_blank',
-          class: 'btn btn-primary btn-sm',
-        }, 'Start tenant sign-in'),
-      ),
-    );
-  }
-
-  return h('div', { class: 'console-card overview-auth-card' },
-    h('div', { class: 'card-label' }, 'Tenant Auth Status'),
-    h('div', { class: 'card-value card-value-strong' }, 'Checking current browser session'),
-    h('p', { class: 'card-copy' },
-      'If this browser already has a tenant session, the console will surface it automatically in a moment.',
     ),
   );
 }

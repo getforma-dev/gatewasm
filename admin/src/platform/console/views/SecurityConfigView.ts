@@ -80,7 +80,7 @@ export function SecurityConfigView() {
     ),
 
     () => securityConfigLoading() && !config()
-      ? Skeleton({ rows: 6 })
+      ? Skeleton({ height: '240px' })
       : config()
         ? h('div', { class: 'console-view-body' },
 

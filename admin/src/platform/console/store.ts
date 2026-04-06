@@ -435,70 +435,6 @@ export function setPlane(nextPlane: Plane): void {
   }
 }
 
-function readWorkspaceState(): PersistedConsoleWorkspace | null {
-  const storageKey = workspaceStorageKey();
-  if (!storageKey) {
-    return null;
-  }
-
-  try {
-    const raw = window.localStorage.getItem(storageKey);
-    if (!raw) {
-      return null;
-    }
-    const parsed = JSON.parse(raw) as Partial<PersistedConsoleWorkspace> & { view?: string };
-    // Backward compat: 'users' was renamed to 'members'
-    if (parsed.view === 'users') parsed.view = 'members';
-
-    // Backward compat: 'tenants' and 'settings' are no longer ConsoleView values
-    let resolvedMode: AppMode;
-    let resolvedAccountTab: AccountTab;
-    if (parsed.view === 'tenants') {
-      resolvedMode = 'account';
-      resolvedAccountTab = 'tenants';
-      parsed.view = 'overview';
-    } else if (parsed.view === 'settings') {
-      resolvedMode = 'account';
-      resolvedAccountTab = 'account-settings';
-      parsed.view = 'overview';
-    } else {
-      const validAccountTabs: AccountTab[] = ['tenants', 'api-keys', 'account-settings'];
-      resolvedAccountTab = (typeof parsed.accountTab === 'string' && validAccountTabs.includes(parsed.accountTab as AccountTab))
-        ? (parsed.accountTab as AccountTab)
-        : 'tenants';
-      // Derive mode from tenantId
-      resolvedMode = (typeof parsed.mode === 'string' && (parsed.mode === 'account' || parsed.mode === 'workspace'))
-        ? (parsed.mode as AppMode)
-        : (typeof parsed.tenantId === 'string' ? 'workspace' : 'account');
-    }
-
-    const nextView = parsed.view;
-    const nextSection = parsed.integrateSection;
-    const validViews: ConsoleView[] = [
-      'overview', 'integrate', 'security',
-      'members', 'hosted-page', 'organizations', 'roles', 'audit-log',
-      'sessions', 'passkeys', 'tokens', 'activity',
-    ];
-    if (typeof nextView !== 'string' || !validViews.includes(nextView as ConsoleView)) {
-      return null;
-    }
-    const nextPlane = parsed.plane;
-    const validPlanes: Plane[] = ['operator', 'organization', 'enduser'];
-    return {
-      tenantId: typeof parsed.tenantId === 'string' ? parsed.tenantId : null,
-      view: nextView as ConsoleView,
-      integrateSection: nextSection === 'session-inspector' ? 'session-inspector' : nextSection === 'webhooks' ? 'webhooks' : 'guide',
-      plane: (typeof nextPlane === 'string' && validPlanes.includes(nextPlane as Plane))
-        ? (nextPlane as Plane)
-        : planeForView(nextView as ConsoleView),
-      mode: resolvedMode,
-      accountTab: resolvedAccountTab,
-    };
-  } catch {
-    return null;
-  }
-}
-
 function persistWorkspaceState(): void {
   const storageKey = workspaceStorageKey();
   if (!storageKey) {
@@ -518,41 +454,6 @@ function persistWorkspaceState(): void {
   } catch {
     // Ignore storage failures.
   }
-}
-
-async function restoreWorkspaceState(): Promise<void> {
-  const snapshot = readWorkspaceState();
-  if (!snapshot || !snapshot.tenantId) {
-    if (snapshot) {
-      batch(() => {
-        setMode(snapshot.mode);
-        setAccountTab(snapshot.accountTab);
-      });
-    }
-    persistWorkspaceState();
-    return;
-  }
-
-  const tenant = tenants().find((item) => item.id === snapshot.tenantId);
-  if (!tenant) {
-    persistWorkspaceState();
-    return;
-  }
-
-  const restoredView = snapshot.view as TenantWorkspaceView;
-
-  batch(() => {
-    setSelectedTenant(tenant);
-    resetTenantScopedState();
-    setIntegrateSectionSignal(snapshot.integrateSection);
-    setView(restoredView);
-    setPlaneSignal(snapshot.plane || planeForView(restoredView));
-    setMode(snapshot.mode);
-    setAccountTab(snapshot.accountTab);
-  });
-
-  persistWorkspaceState();
-  await hydrateTenantView(restoredView, tenant);
 }
 
 // ── API Functions ───────────────────────────────────────────────────────

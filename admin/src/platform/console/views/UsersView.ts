@@ -8,7 +8,7 @@ import {
   openSessionInspector,
   invites, invitesLoading, sendInvite, revokeInvite,
   loadUserDetail, userDetail, setUserDetail,
-  type UserSession, type TenantInvite, type UserDetail,
+  type UserSession, type TenantInvite,
 } from '../store';
 
 export function UsersView() {
