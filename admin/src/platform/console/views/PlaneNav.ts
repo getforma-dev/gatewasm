@@ -270,7 +270,7 @@ export function PlaneNav(props: PlaneNavProps) {
   // ── Tier 1 — Plane switcher ────────────────────────────────────────────
 
   const tier1 = h('div', { class: 'plane-tier1' },
-    ...PLANES.map((pd) =>
+    () => PLANES.map((pd) =>
       h('button', {
         type: 'button',
         class: () => 'plane-btn hv' + (props.plane() === pd.key ? ' active' : ''),

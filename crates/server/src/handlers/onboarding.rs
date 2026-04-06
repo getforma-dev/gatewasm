@@ -1525,6 +1525,72 @@ pub async fn list_tenant_user_sessions(
     Ok(Json(serde_json::json!({ "sessions": sessions })))
 }
 
+/// GET /platform/self-serve/tenants/{id}/audit-log
+pub async fn list_tenant_audit_log(
+    State(state): State<AppState>,
+    Path(tenant_id): Path<String>,
+    req: axum::extract::Request,
+) -> Result<impl IntoResponse, AppError> {
+    let platform_user = req
+        .extensions()
+        .get::<PlatformUser>()
+        .cloned()
+        .ok_or(AppError::Unauthorized {
+            error: "unauthorized",
+            message: "Not authenticated".into(),
+        })?;
+
+    sqlx::query_scalar::<_, String>(
+        "SELECT id FROM tenants WHERE id = $1 AND owner_user_id = $2 AND status != 'deleted'",
+    )
+    .bind(&tenant_id)
+    .bind(&platform_user.user_id)
+    .fetch_optional(&state.db)
+    .await?
+    .ok_or(AppError::NotFound {
+        error: "tenant_not_found",
+        message: "Tenant not found".into(),
+    })?;
+
+    let limit: i64 = 100;
+    let offset: i64 = 0;
+
+    let rows = sqlx::query(
+        "SELECT la.id, la.email, la.user_id, la.success, la.ip_address, la.user_agent, \
+         la.failure_reason, la.created_at \
+         FROM login_attempts la \
+         WHERE la.tenant_id = $1 \
+         ORDER BY la.created_at DESC LIMIT $2 OFFSET $3",
+    )
+    .bind(&tenant_id)
+    .bind(limit)
+    .bind(offset)
+    .fetch_all(&state.db)
+    .await?;
+
+    let entries: Vec<serde_json::Value> = rows
+        .iter()
+        .map(|r| {
+            serde_json::json!({
+                "id": r.get::<String, _>("id"),
+                "email": r.get::<String, _>("email"),
+                "user_id": r.get::<Option<String>, _>("user_id"),
+                "success": r.get::<bool, _>("success"),
+                "ip_address": r.get::<Option<String>, _>("ip_address"),
+                "user_agent": r.get::<Option<String>, _>("user_agent"),
+                "failure_reason": r.get::<Option<String>, _>("failure_reason"),
+                "created_at": r.get::<chrono::DateTime<Utc>, _>("created_at").to_rfc3339(),
+            })
+        })
+        .collect();
+
+    Ok(Json(serde_json::json!({
+        "audit_log": entries,
+        "limit": limit,
+        "offset": offset,
+    })))
+}
+
 // ── Hosted Page Management ─────────────────────────────────────────────
 
 /// GET /platform/self-serve/tenants/{id}/hosted-page
