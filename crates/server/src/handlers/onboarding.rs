@@ -2444,6 +2444,566 @@ pub async fn get_started_page(State(state): State<AppState>) -> impl IntoRespons
     ).into_response()
 }
 
+// ── Organization Management ──────────────────────────────────────────
+
+/// GET /platform/self-serve/tenants/{id}/organizations
+pub async fn list_tenant_organizations(
+    State(state): State<AppState>,
+    Path(tenant_id): Path<String>,
+    req: axum::extract::Request,
+) -> Result<impl IntoResponse, AppError> {
+    let platform_user = req
+        .extensions()
+        .get::<PlatformUser>()
+        .cloned()
+        .ok_or(AppError::Unauthorized {
+            error: "unauthorized",
+            message: "Not authenticated".into(),
+        })?;
+
+    sqlx::query_scalar::<_, String>(
+        "SELECT id FROM tenants WHERE id = $1 AND owner_user_id = $2 AND status != 'deleted'",
+    )
+    .bind(&tenant_id)
+    .bind(&platform_user.user_id)
+    .fetch_optional(&state.db)
+    .await?
+    .ok_or(AppError::NotFound {
+        error: "tenant_not_found",
+        message: "Tenant not found".into(),
+    })?;
+
+    let rows = sqlx::query(
+        "SELECT id, name, slug, metadata, created_at, updated_at \
+         FROM organizations WHERE tenant_id = $1 \
+         ORDER BY created_at DESC",
+    )
+    .bind(&tenant_id)
+    .fetch_all(&state.db)
+    .await?;
+
+    let orgs: Vec<serde_json::Value> = rows
+        .iter()
+        .map(|r| {
+            serde_json::json!({
+                "id": r.get::<String, _>("id"),
+                "name": r.get::<String, _>("name"),
+                "slug": r.get::<String, _>("slug"),
+                "metadata": r.get::<Option<serde_json::Value>, _>("metadata"),
+                "created_at": r.get::<chrono::DateTime<Utc>, _>("created_at").to_rfc3339(),
+                "updated_at": r.get::<chrono::DateTime<Utc>, _>("updated_at").to_rfc3339(),
+            })
+        })
+        .collect();
+
+    let total = orgs.len();
+    Ok(Json(serde_json::json!({ "organizations": orgs, "total": total })))
+}
+
+/// POST /platform/self-serve/tenants/{id}/organizations
+pub async fn create_tenant_organization(
+    State(state): State<AppState>,
+    Path(tenant_id): Path<String>,
+    req: axum::extract::Request,
+) -> Result<impl IntoResponse, AppError> {
+    let platform_user = req
+        .extensions()
+        .get::<PlatformUser>()
+        .cloned()
+        .ok_or(AppError::Unauthorized {
+            error: "unauthorized",
+            message: "Not authenticated".into(),
+        })?;
+
+    sqlx::query_scalar::<_, String>(
+        "SELECT id FROM tenants WHERE id = $1 AND owner_user_id = $2 AND status != 'deleted'",
+    )
+    .bind(&tenant_id)
+    .bind(&platform_user.user_id)
+    .fetch_optional(&state.db)
+    .await?
+    .ok_or(AppError::NotFound {
+        error: "tenant_not_found",
+        message: "Tenant not found".into(),
+    })?;
+
+    let body: serde_json::Value = axum::Json::from_request(req, &state)
+        .await
+        .map_err(|_| AppError::BadRequest {
+            error: "invalid_body",
+            message: "Invalid JSON body".into(),
+        })?
+        .0;
+
+    let name = body["name"].as_str().ok_or(AppError::BadRequest {
+        error: "missing_name",
+        message: "Organization name is required".into(),
+    })?;
+
+    if name.is_empty() || name.len() > 120 {
+        return Err(AppError::BadRequest {
+            error: "invalid_name",
+            message: "Organization name must be 1-120 characters".into(),
+        });
+    }
+
+    let slug = body["slug"].as_str().ok_or(AppError::BadRequest {
+        error: "missing_slug",
+        message: "Organization slug is required".into(),
+    })?;
+
+    let slug = slug.trim().to_lowercase();
+    if slug.is_empty()
+        || slug.len() > 64
+        || !slug.chars().all(|c| c.is_ascii_alphanumeric() || c == '-')
+    {
+        return Err(AppError::BadRequest {
+            error: "invalid_slug",
+            message: "Slug must be 1-64 characters, lowercase alphanumeric or hyphens".into(),
+        });
+    }
+
+    // Check slug uniqueness within tenant
+    let slug_exists: Option<String> = sqlx::query_scalar(
+        "SELECT id FROM organizations WHERE tenant_id = $1 AND slug = $2",
+    )
+    .bind(&tenant_id)
+    .bind(&slug)
+    .fetch_optional(&state.db)
+    .await?;
+
+    if slug_exists.is_some() {
+        return Err(AppError::Conflict {
+            error: "slug_taken",
+            message: format!("Organization slug '{}' is already in use for this tenant", slug),
+        });
+    }
+
+    let org_id = format!("org_{}", uuid::Uuid::new_v4());
+    let metadata = body.get("metadata").cloned();
+
+    sqlx::query(
+        "INSERT INTO organizations (id, tenant_id, name, slug, metadata) \
+         VALUES ($1, $2, $3, $4, $5)",
+    )
+    .bind(&org_id)
+    .bind(&tenant_id)
+    .bind(name)
+    .bind(&slug)
+    .bind(&metadata)
+    .execute(&state.db)
+    .await?;
+
+    Ok((
+        StatusCode::CREATED,
+        Json(serde_json::json!({
+            "id": org_id,
+            "name": name,
+            "slug": slug,
+            "metadata": metadata,
+            "tenant_id": tenant_id,
+        })),
+    ))
+}
+
+/// GET /platform/self-serve/tenants/{id}/organizations/{org_id}
+pub async fn get_tenant_organization(
+    State(state): State<AppState>,
+    Path((tenant_id, org_id)): Path<(String, String)>,
+    req: axum::extract::Request,
+) -> Result<impl IntoResponse, AppError> {
+    let platform_user = req
+        .extensions()
+        .get::<PlatformUser>()
+        .cloned()
+        .ok_or(AppError::Unauthorized {
+            error: "unauthorized",
+            message: "Not authenticated".into(),
+        })?;
+
+    sqlx::query_scalar::<_, String>(
+        "SELECT id FROM tenants WHERE id = $1 AND owner_user_id = $2 AND status != 'deleted'",
+    )
+    .bind(&tenant_id)
+    .bind(&platform_user.user_id)
+    .fetch_optional(&state.db)
+    .await?
+    .ok_or(AppError::NotFound {
+        error: "tenant_not_found",
+        message: "Tenant not found".into(),
+    })?;
+
+    let row = sqlx::query(
+        "SELECT id, name, slug, metadata, created_at, updated_at \
+         FROM organizations WHERE id = $1 AND tenant_id = $2",
+    )
+    .bind(&org_id)
+    .bind(&tenant_id)
+    .fetch_optional(&state.db)
+    .await?
+    .ok_or(AppError::NotFound {
+        error: "organization_not_found",
+        message: "Organization not found".into(),
+    })?;
+
+    Ok(Json(serde_json::json!({
+        "id": row.get::<String, _>("id"),
+        "name": row.get::<String, _>("name"),
+        "slug": row.get::<String, _>("slug"),
+        "metadata": row.get::<Option<serde_json::Value>, _>("metadata"),
+        "created_at": row.get::<chrono::DateTime<Utc>, _>("created_at").to_rfc3339(),
+        "updated_at": row.get::<chrono::DateTime<Utc>, _>("updated_at").to_rfc3339(),
+    })))
+}
+
+/// PATCH /platform/self-serve/tenants/{id}/organizations/{org_id}
+pub async fn update_tenant_organization(
+    State(state): State<AppState>,
+    Path((tenant_id, org_id)): Path<(String, String)>,
+    req: axum::extract::Request,
+) -> Result<impl IntoResponse, AppError> {
+    let platform_user = req
+        .extensions()
+        .get::<PlatformUser>()
+        .cloned()
+        .ok_or(AppError::Unauthorized {
+            error: "unauthorized",
+            message: "Not authenticated".into(),
+        })?;
+
+    sqlx::query_scalar::<_, String>(
+        "SELECT id FROM tenants WHERE id = $1 AND owner_user_id = $2 AND status != 'deleted'",
+    )
+    .bind(&tenant_id)
+    .bind(&platform_user.user_id)
+    .fetch_optional(&state.db)
+    .await?
+    .ok_or(AppError::NotFound {
+        error: "tenant_not_found",
+        message: "Tenant not found".into(),
+    })?;
+
+    // Verify org exists in this tenant
+    sqlx::query_scalar::<_, String>(
+        "SELECT id FROM organizations WHERE id = $1 AND tenant_id = $2",
+    )
+    .bind(&org_id)
+    .bind(&tenant_id)
+    .fetch_optional(&state.db)
+    .await?
+    .ok_or(AppError::NotFound {
+        error: "organization_not_found",
+        message: "Organization not found".into(),
+    })?;
+
+    let body: serde_json::Value = axum::Json::from_request(req, &state)
+        .await
+        .map_err(|_| AppError::BadRequest {
+            error: "invalid_body",
+            message: "Invalid JSON body".into(),
+        })?
+        .0;
+
+    if let Some(name) = body["name"].as_str() {
+        if name.is_empty() || name.len() > 120 {
+            return Err(AppError::BadRequest {
+                error: "invalid_name",
+                message: "Organization name must be 1-120 characters".into(),
+            });
+        }
+        sqlx::query("UPDATE organizations SET name = $1, updated_at = NOW() WHERE id = $2 AND tenant_id = $3")
+            .bind(name)
+            .bind(&org_id)
+            .bind(&tenant_id)
+            .execute(&state.db)
+            .await?;
+    }
+
+    if let Some(slug) = body["slug"].as_str() {
+        let slug = slug.trim().to_lowercase();
+        if slug.is_empty()
+            || slug.len() > 64
+            || !slug.chars().all(|c| c.is_ascii_alphanumeric() || c == '-')
+        {
+            return Err(AppError::BadRequest {
+                error: "invalid_slug",
+                message: "Slug must be 1-64 characters, lowercase alphanumeric or hyphens".into(),
+            });
+        }
+        sqlx::query("UPDATE organizations SET slug = $1, updated_at = NOW() WHERE id = $2 AND tenant_id = $3")
+            .bind(&slug)
+            .bind(&org_id)
+            .bind(&tenant_id)
+            .execute(&state.db)
+            .await
+            .map_err(|e| {
+                if let sqlx::Error::Database(ref db_err) = e {
+                    if db_err.is_unique_violation() {
+                        return AppError::Conflict {
+                            error: "slug_taken",
+                            message: format!("Organization slug '{}' is already in use", slug),
+                        };
+                    }
+                }
+                AppError::from(e)
+            })?;
+    }
+
+    if let Some(metadata) = body.get("metadata") {
+        sqlx::query("UPDATE organizations SET metadata = $1, updated_at = NOW() WHERE id = $2 AND tenant_id = $3")
+            .bind(metadata)
+            .bind(&org_id)
+            .bind(&tenant_id)
+            .execute(&state.db)
+            .await?;
+    }
+
+    Ok(Json(serde_json::json!({ "message": "Organization updated" })))
+}
+
+/// DELETE /platform/self-serve/tenants/{id}/organizations/{org_id}
+pub async fn delete_tenant_organization(
+    State(state): State<AppState>,
+    Path((tenant_id, org_id)): Path<(String, String)>,
+    req: axum::extract::Request,
+) -> Result<impl IntoResponse, AppError> {
+    let platform_user = req
+        .extensions()
+        .get::<PlatformUser>()
+        .cloned()
+        .ok_or(AppError::Unauthorized {
+            error: "unauthorized",
+            message: "Not authenticated".into(),
+        })?;
+
+    sqlx::query_scalar::<_, String>(
+        "SELECT id FROM tenants WHERE id = $1 AND owner_user_id = $2 AND status != 'deleted'",
+    )
+    .bind(&tenant_id)
+    .bind(&platform_user.user_id)
+    .fetch_optional(&state.db)
+    .await?
+    .ok_or(AppError::NotFound {
+        error: "tenant_not_found",
+        message: "Tenant not found".into(),
+    })?;
+
+    // Delete members first, then the organization
+    sqlx::query("DELETE FROM organization_members WHERE organization_id = $1 AND tenant_id = $2")
+        .bind(&org_id)
+        .bind(&tenant_id)
+        .execute(&state.db)
+        .await?;
+
+    let result = sqlx::query("DELETE FROM organizations WHERE id = $1 AND tenant_id = $2")
+        .bind(&org_id)
+        .bind(&tenant_id)
+        .execute(&state.db)
+        .await?;
+
+    if result.rows_affected() == 0 {
+        return Err(AppError::NotFound {
+            error: "organization_not_found",
+            message: "Organization not found".into(),
+        });
+    }
+
+    Ok(Json(serde_json::json!({ "message": "Organization deleted" })))
+}
+
+/// GET /platform/self-serve/tenants/{id}/organizations/{org_id}/members
+pub async fn list_organization_members(
+    State(state): State<AppState>,
+    Path((tenant_id, org_id)): Path<(String, String)>,
+    req: axum::extract::Request,
+) -> Result<impl IntoResponse, AppError> {
+    let platform_user = req
+        .extensions()
+        .get::<PlatformUser>()
+        .cloned()
+        .ok_or(AppError::Unauthorized {
+            error: "unauthorized",
+            message: "Not authenticated".into(),
+        })?;
+
+    sqlx::query_scalar::<_, String>(
+        "SELECT id FROM tenants WHERE id = $1 AND owner_user_id = $2 AND status != 'deleted'",
+    )
+    .bind(&tenant_id)
+    .bind(&platform_user.user_id)
+    .fetch_optional(&state.db)
+    .await?
+    .ok_or(AppError::NotFound {
+        error: "tenant_not_found",
+        message: "Tenant not found".into(),
+    })?;
+
+    let rows = sqlx::query(
+        "SELECT m.user_id, m.role, m.created_at, u.email, u.name \
+         FROM organization_members m \
+         JOIN users u ON u.id = m.user_id \
+         WHERE m.organization_id = $1 AND m.tenant_id = $2 \
+         ORDER BY m.created_at DESC",
+    )
+    .bind(&org_id)
+    .bind(&tenant_id)
+    .fetch_all(&state.db)
+    .await?;
+
+    let members: Vec<serde_json::Value> = rows
+        .iter()
+        .map(|r| {
+            serde_json::json!({
+                "user_id": r.get::<String, _>("user_id"),
+                "email": r.get::<String, _>("email"),
+                "name": r.get::<Option<String>, _>("name"),
+                "role": r.get::<String, _>("role"),
+                "created_at": r.get::<chrono::DateTime<Utc>, _>("created_at").to_rfc3339(),
+            })
+        })
+        .collect();
+
+    Ok(Json(serde_json::json!({ "members": members })))
+}
+
+/// POST /platform/self-serve/tenants/{id}/organizations/{org_id}/members
+pub async fn add_organization_member(
+    State(state): State<AppState>,
+    Path((tenant_id, org_id)): Path<(String, String)>,
+    req: axum::extract::Request,
+) -> Result<impl IntoResponse, AppError> {
+    let platform_user = req
+        .extensions()
+        .get::<PlatformUser>()
+        .cloned()
+        .ok_or(AppError::Unauthorized {
+            error: "unauthorized",
+            message: "Not authenticated".into(),
+        })?;
+
+    sqlx::query_scalar::<_, String>(
+        "SELECT id FROM tenants WHERE id = $1 AND owner_user_id = $2 AND status != 'deleted'",
+    )
+    .bind(&tenant_id)
+    .bind(&platform_user.user_id)
+    .fetch_optional(&state.db)
+    .await?
+    .ok_or(AppError::NotFound {
+        error: "tenant_not_found",
+        message: "Tenant not found".into(),
+    })?;
+
+    let body: serde_json::Value = axum::Json::from_request(req, &state)
+        .await
+        .map_err(|_| AppError::BadRequest {
+            error: "invalid_body",
+            message: "Invalid JSON body".into(),
+        })?
+        .0;
+
+    let user_id = body["user_id"].as_str().ok_or(AppError::BadRequest {
+        error: "missing_user_id",
+        message: "user_id is required".into(),
+    })?;
+
+    let role = body["role"].as_str().unwrap_or("member");
+
+    // Verify user exists in tenant
+    sqlx::query_scalar::<_, String>(
+        "SELECT id FROM users WHERE id = $1 AND tenant_id = $2",
+    )
+    .bind(user_id)
+    .bind(&tenant_id)
+    .fetch_optional(&state.db)
+    .await?
+    .ok_or(AppError::NotFound {
+        error: "user_not_found",
+        message: "User not found in this tenant".into(),
+    })?;
+
+    // Verify organization exists in tenant
+    sqlx::query_scalar::<_, String>(
+        "SELECT id FROM organizations WHERE id = $1 AND tenant_id = $2",
+    )
+    .bind(&org_id)
+    .bind(&tenant_id)
+    .fetch_optional(&state.db)
+    .await?
+    .ok_or(AppError::NotFound {
+        error: "organization_not_found",
+        message: "Organization not found".into(),
+    })?;
+
+    sqlx::query(
+        "INSERT INTO organization_members (organization_id, user_id, tenant_id, role) \
+         VALUES ($1, $2, $3, $4) \
+         ON CONFLICT (organization_id, user_id) DO UPDATE SET role = EXCLUDED.role",
+    )
+    .bind(&org_id)
+    .bind(user_id)
+    .bind(&tenant_id)
+    .bind(role)
+    .execute(&state.db)
+    .await?;
+
+    Ok((
+        StatusCode::CREATED,
+        Json(serde_json::json!({
+            "message": "Member added",
+            "organization_id": org_id,
+            "user_id": user_id,
+            "role": role,
+        })),
+    ))
+}
+
+/// DELETE /platform/self-serve/tenants/{id}/organizations/{org_id}/members/{user_id}
+pub async fn remove_organization_member(
+    State(state): State<AppState>,
+    Path((tenant_id, org_id, user_id)): Path<(String, String, String)>,
+    req: axum::extract::Request,
+) -> Result<impl IntoResponse, AppError> {
+    let platform_user = req
+        .extensions()
+        .get::<PlatformUser>()
+        .cloned()
+        .ok_or(AppError::Unauthorized {
+            error: "unauthorized",
+            message: "Not authenticated".into(),
+        })?;
+
+    sqlx::query_scalar::<_, String>(
+        "SELECT id FROM tenants WHERE id = $1 AND owner_user_id = $2 AND status != 'deleted'",
+    )
+    .bind(&tenant_id)
+    .bind(&platform_user.user_id)
+    .fetch_optional(&state.db)
+    .await?
+    .ok_or(AppError::NotFound {
+        error: "tenant_not_found",
+        message: "Tenant not found".into(),
+    })?;
+
+    let result = sqlx::query(
+        "DELETE FROM organization_members \
+         WHERE organization_id = $1 AND user_id = $2 AND tenant_id = $3",
+    )
+    .bind(&org_id)
+    .bind(&user_id)
+    .bind(&tenant_id)
+    .execute(&state.db)
+    .await?;
+
+    if result.rows_affected() == 0 {
+        return Err(AppError::NotFound {
+            error: "member_not_found",
+            message: "Member not found in this organization".into(),
+        });
+    }
+
+    Ok(Json(serde_json::json!({ "message": "Member removed" })))
+}
+
 /// GET /platform/login — Returning platform users sign in here.
 /// After authentication they always land in /platform/console, where
 /// tenant creation and setup now live.

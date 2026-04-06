@@ -433,6 +433,22 @@ fn create_router_inner(state: AppState, rate_limit_enabled: bool) -> Router {
             "/platform/self-serve/tenants/{id}/invites/{invite_id}/revoke",
             post(onboarding::revoke_tenant_invite_selfserve),
         )
+        .route(
+            "/platform/self-serve/tenants/{id}/organizations",
+            get(onboarding::list_tenant_organizations).post(onboarding::create_tenant_organization),
+        )
+        .route(
+            "/platform/self-serve/tenants/{id}/organizations/{org_id}",
+            get(onboarding::get_tenant_organization).patch(onboarding::update_tenant_organization).delete(onboarding::delete_tenant_organization),
+        )
+        .route(
+            "/platform/self-serve/tenants/{id}/organizations/{org_id}/members",
+            get(onboarding::list_organization_members).post(onboarding::add_organization_member),
+        )
+        .route(
+            "/platform/self-serve/tenants/{id}/organizations/{org_id}/members/{user_id}",
+            delete(onboarding::remove_organization_member),
+        )
         .layer(middleware::from_fn_with_state(
             state.clone(),
             require_platform_user,

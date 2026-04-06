@@ -16,6 +16,7 @@ import { AuditLogView } from './views/AuditLogView';
 import { ActivityView } from './views/ActivityView';
 import { SessionsView } from './views/SessionsView';
 import { PasskeysView } from './views/PasskeysView';
+import { OrganizationsView } from './views/OrganizationsView';
 import { RolesView } from './views/RolesView';
 import { SecurityConfigView } from './views/SecurityConfigView';
 import { TokensView } from './views/TokensView';
@@ -496,7 +497,7 @@ export function ConsoleApp() {
                     { match: 'integrate', render: () => IntegrateView() },
                     { match: 'security', render: () => SecurityConfigView() },
                     { match: 'hosted-page', render: () => HostedPageView() },
-                    { match: 'organizations', render: () => h('div', { class: 'console-view' }, h('h2', { class: 'view-title' }, 'Organizations')) },
+                    { match: 'organizations', render: () => OrganizationsView() },
                     { match: 'roles', render: () => RolesView() },
                     { match: 'audit-log', render: () => AuditLogView() },
                     { match: 'sessions', render: () => SessionsView() },

@@ -165,6 +165,23 @@ export interface TenantInvite {
   created_at: string;
 }
 
+export interface Organization {
+  id: string;
+  name: string;
+  slug: string;
+  metadata: any;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface OrgMember {
+  user_id: string;
+  email: string;
+  name: string | null;
+  role: string;
+  created_at: string;
+}
+
 export interface PlatformUser {
   id: string;
   email: string;
@@ -280,6 +297,8 @@ export const [securityConfigLoading, setSecurityConfigLoading] = createSignal(fa
 export const [tenantPlan, setTenantPlan] = createSignal<string>('trial');
 export const [invites, setInvites] = createSignal<TenantInvite[]>([]);
 export const [invitesLoading, setInvitesLoading] = createSignal(false);
+export const [organizations, setOrganizations] = createSignal<Organization[]>([]);
+export const [organizationsLoading, setOrganizationsLoading] = createSignal(false);
 
 let tenantDetailRequestSeq = 0;
 let usersRequestSeq = 0;
@@ -331,6 +350,8 @@ function resetTenantScopedState(): void {
     setTenantPlan('trial');
     setInvites([]);
     setInvitesLoading(false);
+    setOrganizations([]);
+    setOrganizationsLoading(false);
     setIntegrateSectionSignal('guide');
     setOverviewWindowSignal('7d');
   });
@@ -817,6 +838,79 @@ export async function deleteRole(tenantId: string, roleId: string): Promise<void
   }
 }
 
+export async function loadOrganizations(tenantId: string): Promise<void> {
+  setOrganizationsLoading(true);
+  try {
+    const data = await api.get<{ organizations: Organization[] }>(
+      '/platform/self-serve/tenants/' + encodeURIComponent(tenantId) + '/organizations',
+    );
+    if (selectedTenant()?.id !== tenantId) return;
+    setOrganizations(data.organizations || []);
+  } catch (e) {
+    toast.show(e instanceof Error ? e.message : 'Failed to load organizations', 'error');
+  } finally {
+    setOrganizationsLoading(false);
+  }
+}
+
+export async function createOrganization(tenantId: string, name: string, slug: string): Promise<boolean> {
+  try {
+    await api.post('/platform/self-serve/tenants/' + encodeURIComponent(tenantId) + '/organizations', { name, slug });
+    toast.show('Organization created', 'success');
+    await loadOrganizations(tenantId);
+    return true;
+  } catch (e) {
+    toast.show(e instanceof Error ? e.message : 'Failed to create organization', 'error');
+    return false;
+  }
+}
+
+export async function deleteOrganization(tenantId: string, orgId: string): Promise<void> {
+  try {
+    await api.del('/platform/self-serve/tenants/' + encodeURIComponent(tenantId) + '/organizations/' + encodeURIComponent(orgId));
+    toast.show('Organization deleted', 'success');
+    await loadOrganizations(tenantId);
+  } catch (e) {
+    toast.show(e instanceof Error ? e.message : 'Failed to delete organization', 'error');
+  }
+}
+
+export async function loadOrgMembers(tenantId: string, orgId: string): Promise<OrgMember[]> {
+  try {
+    const data = await api.get<{ members: OrgMember[] }>(
+      '/platform/self-serve/tenants/' + encodeURIComponent(tenantId) + '/organizations/' + encodeURIComponent(orgId) + '/members',
+    );
+    return data.members || [];
+  } catch {
+    return [];
+  }
+}
+
+export async function addOrgMember(tenantId: string, orgId: string, userId: string, role: string): Promise<boolean> {
+  try {
+    await api.post(
+      '/platform/self-serve/tenants/' + encodeURIComponent(tenantId) + '/organizations/' + encodeURIComponent(orgId) + '/members',
+      { user_id: userId, role },
+    );
+    toast.show('Member added', 'success');
+    return true;
+  } catch (e) {
+    toast.show(e instanceof Error ? e.message : 'Failed to add member', 'error');
+    return false;
+  }
+}
+
+export async function removeOrgMember(tenantId: string, orgId: string, userId: string): Promise<void> {
+  try {
+    await api.del(
+      '/platform/self-serve/tenants/' + encodeURIComponent(tenantId) + '/organizations/' + encodeURIComponent(orgId) + '/members/' + encodeURIComponent(userId),
+    );
+    toast.show('Member removed', 'success');
+  } catch (e) {
+    toast.show(e instanceof Error ? e.message : 'Failed to remove member', 'error');
+  }
+}
+
 export async function loadJwks(slug: string): Promise<void> {
   try {
     const res = await fetch('/t/' + encodeURIComponent(slug) + '/auth/jwks');
@@ -1021,6 +1115,8 @@ async function hydrateTenantView(nextView: TenantWorkspaceView, tenant: Tenant):
     tasks.push(loadAllSessions(tenant.id));
   } else if (nextView === 'passkeys') {
     tasks.push(loadPasskeys(tenant.id));
+  } else if (nextView === 'organizations') {
+    tasks.push(loadOrganizations(tenant.id));
   } else if (nextView === 'roles') {
     tasks.push(loadRoles(tenant.id));
   } else if (nextView === 'tokens') {
