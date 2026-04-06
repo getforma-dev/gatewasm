@@ -136,6 +136,25 @@ export interface HostedPageData {
   updated_at: string | null;
 }
 
+export interface SecurityConfig {
+  idle_timeout_minutes: number;
+  max_sessions_per_user: number;
+  host_prefix_cookies: boolean;
+  csp_enabled: boolean;
+  client_fingerprint: boolean;
+  webauthn_enabled: boolean;
+  webauthn_attestation: string;
+  webauthn_require_device_bound: boolean;
+  fedcm_enabled: boolean;
+  dpop_required: boolean;
+  par_required: boolean;
+  mtls_enabled: boolean;
+  introspection_enabled: boolean;
+  caep_enabled: boolean;
+  impossible_travel_enabled: boolean;
+  impossible_travel_speed_threshold_kmh: number;
+}
+
 export interface PlatformUser {
   id: string;
   email: string;
@@ -246,6 +265,9 @@ export const [currentUser, setCurrentUser] = createSignal<PlatformUser | null>(n
 export const [plane, setPlaneSignal] = createSignal<Plane>('operator');
 export const [mode, setMode] = createSignal<AppMode>('account');
 export const [accountTab, setAccountTab] = createSignal<AccountTab>('tenants');
+export const [securityConfig, setSecurityConfig] = createSignal<SecurityConfig | null>(null);
+export const [securityConfigLoading, setSecurityConfigLoading] = createSignal(false);
+export const [tenantPlan, setTenantPlan] = createSignal<string>('trial');
 
 let tenantDetailRequestSeq = 0;
 let usersRequestSeq = 0;
@@ -292,6 +314,9 @@ function resetTenantScopedState(): void {
     setRoles([]);
     setRolesLoading(false);
     setJwks(null);
+    setSecurityConfig(null);
+    setSecurityConfigLoading(false);
+    setTenantPlan('trial');
     setIntegrateSectionSignal('guide');
     setOverviewWindowSignal('7d');
   });
@@ -781,6 +806,38 @@ export async function saveHostedPage(tenantId: string, data: Partial<HostedPageD
   return true;
 }
 
+export async function loadSecurityConfig(tenantId: string): Promise<void> {
+  setSecurityConfigLoading(true);
+  try {
+    const data = await api.get<{ security_config: SecurityConfig; plan: string }>(
+      '/platform/self-serve/tenants/' + encodeURIComponent(tenantId) + '/security-config',
+    );
+    if (selectedTenant()?.id !== tenantId) return;
+    setSecurityConfig(data.security_config);
+    setTenantPlan(data.plan);
+  } catch (e) {
+    toast.show(e instanceof Error ? e.message : 'Failed to load security config', 'error');
+  } finally {
+    setSecurityConfigLoading(false);
+  }
+}
+
+export async function saveSecurityConfig(tenantId: string, patch: Partial<SecurityConfig>): Promise<boolean> {
+  try {
+    const data = await api.request<{ security_config: SecurityConfig; plan: string }>(
+      '/platform/self-serve/tenants/' + encodeURIComponent(tenantId) + '/security-config',
+      { method: 'PATCH', body: patch },
+    );
+    setSecurityConfig(data.security_config);
+    setTenantPlan(data.plan);
+    toast.show('Security config updated', 'success');
+    return true;
+  } catch (e) {
+    toast.show(e instanceof Error ? e.message : 'Failed to update security config', 'error');
+    return false;
+  }
+}
+
 export async function deleteTenant(tenantId: string, confirmSlug: string): Promise<boolean> {
   try {
     await api.request('/platform/self-serve/tenants/' + encodeURIComponent(tenantId), {
@@ -902,6 +959,8 @@ async function hydrateTenantView(nextView: TenantWorkspaceView, tenant: Tenant):
 
   if (nextView === 'members') {
     tasks.push(loadUsers(tenant.id));
+  } else if (nextView === 'security') {
+    tasks.push(loadSecurityConfig(tenant.id));
   } else if (nextView === 'hosted-page') {
     tasks.push(loadHostedPage(tenant.id));
   } else if (nextView === 'audit-log' || nextView === 'activity') {

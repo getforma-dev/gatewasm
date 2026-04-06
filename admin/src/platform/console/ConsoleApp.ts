@@ -17,6 +17,7 @@ import { ActivityView } from './views/ActivityView';
 import { SessionsView } from './views/SessionsView';
 import { PasskeysView } from './views/PasskeysView';
 import { RolesView } from './views/RolesView';
+import { SecurityConfigView } from './views/SecurityConfigView';
 import { TokensView } from './views/TokensView';
 import { ApiKeysView } from './views/ApiKeysView';
 import { AccountSettingsView } from './views/AccountSettingsView';
@@ -493,7 +494,7 @@ export function ConsoleApp() {
                     { match: 'overview', render: () => OverviewView() },
                     { match: 'members', render: () => UsersView() },
                     { match: 'integrate', render: () => IntegrateView() },
-                    { match: 'security', render: () => h('div', { class: 'console-view' }, h('h2', { class: 'view-title' }, 'Security')) },
+                    { match: 'security', render: () => SecurityConfigView() },
                     { match: 'hosted-page', render: () => HostedPageView() },
                     { match: 'organizations', render: () => h('div', { class: 'console-view' }, h('h2', { class: 'view-title' }, 'Organizations')) },
                     { match: 'roles', render: () => RolesView() },

@@ -2160,6 +2160,143 @@ pub async fn update_hosted_page(
     Ok(Json(serde_json::json!({ "status": "saved" })))
 }
 
+// ── Security Config ─────────────────────────────────────────────────────
+
+/// GET /platform/self-serve/tenants/{id}/security-config
+pub async fn get_tenant_security_config(
+    State(state): State<AppState>,
+    Path(tenant_id): Path<String>,
+    req: axum::extract::Request,
+) -> Result<impl IntoResponse, AppError> {
+    let platform_user = req
+        .extensions()
+        .get::<PlatformUser>()
+        .cloned()
+        .ok_or(AppError::Unauthorized {
+            error: "unauthorized",
+            message: "Not authenticated".into(),
+        })?;
+
+    sqlx::query_scalar::<_, String>(
+        "SELECT id FROM tenants WHERE id = $1 AND owner_user_id = $2 AND status != 'deleted'",
+    )
+    .bind(&tenant_id)
+    .bind(&platform_user.user_id)
+    .fetch_optional(&state.db)
+    .await?
+    .ok_or(AppError::NotFound {
+        error: "tenant_not_found",
+        message: "Tenant not found".into(),
+    })?;
+
+    let row: (serde_json::Value, String) = sqlx::query_as(
+        "SELECT COALESCE(t.security_config, '{}'::jsonb), COALESCE(te.plan, 'trial') \
+         FROM tenants t \
+         LEFT JOIN tenant_entitlements te ON te.tenant_id = t.id \
+         WHERE t.id = $1",
+    )
+    .bind(&tenant_id)
+    .fetch_one(&state.db)
+    .await?;
+
+    let config = crate::security_config::TenantSecurityConfig::from_json(&row.0);
+
+    Ok(Json(serde_json::json!({
+        "security_config": config,
+        "plan": row.1,
+    })))
+}
+
+/// PATCH /platform/self-serve/tenants/{id}/security-config
+pub async fn update_tenant_security_config(
+    State(state): State<AppState>,
+    Path(tenant_id): Path<String>,
+    req: axum::extract::Request,
+) -> Result<impl IntoResponse, AppError> {
+    let platform_user = req
+        .extensions()
+        .get::<PlatformUser>()
+        .cloned()
+        .ok_or(AppError::Unauthorized {
+            error: "unauthorized",
+            message: "Not authenticated".into(),
+        })?;
+
+    sqlx::query_scalar::<_, String>(
+        "SELECT id FROM tenants WHERE id = $1 AND owner_user_id = $2 AND status != 'deleted'",
+    )
+    .bind(&tenant_id)
+    .bind(&platform_user.user_id)
+    .fetch_optional(&state.db)
+    .await?
+    .ok_or(AppError::NotFound {
+        error: "tenant_not_found",
+        message: "Tenant not found".into(),
+    })?;
+
+    let body: serde_json::Value = axum::Json::from_request(req, &state)
+        .await
+        .map_err(|_| AppError::BadRequest {
+            error: "invalid_body",
+            message: "Invalid JSON body".into(),
+        })?
+        .0;
+
+    if !body.is_object() {
+        return Err(AppError::BadRequest {
+            error: "invalid_body",
+            message: "Request body must be a JSON object".into(),
+        });
+    }
+
+    // Load current config
+    let current_json: serde_json::Value = sqlx::query_scalar(
+        "SELECT COALESCE(security_config, '{}'::jsonb) FROM tenants WHERE id = $1",
+    )
+    .bind(&tenant_id)
+    .fetch_one(&state.db)
+    .await?;
+
+    // Merge patch into current
+    let mut merged = current_json.clone();
+    if let (Some(base), Some(patch)) = (merged.as_object_mut(), body.as_object()) {
+        for (k, v) in patch {
+            base.insert(k.clone(), v.clone());
+        }
+    }
+
+    // Validate
+    let config = crate::security_config::TenantSecurityConfig::from_json(&merged);
+
+    let plan: String = sqlx::query_scalar(
+        "SELECT COALESCE(plan, 'trial') FROM tenant_entitlements WHERE tenant_id = $1",
+    )
+    .bind(&tenant_id)
+    .fetch_optional(&state.db)
+    .await?
+    .unwrap_or_else(|| "trial".to_string());
+
+    let violations = config.validate_for_plan(&plan);
+    if !violations.is_empty() {
+        return Err(AppError::Forbidden {
+            error: "plan_violation",
+            message: format!("Security config violates plan restrictions: {}", violations.join(", ")),
+        });
+    }
+
+    // Save
+    sqlx::query("UPDATE tenants SET security_config = $1, updated_at = NOW() WHERE id = $2")
+        .bind(&merged)
+        .bind(&tenant_id)
+        .execute(&state.db)
+        .await?;
+
+    Ok(Json(serde_json::json!({
+        "security_config": config,
+        "plan": plan,
+    })))
+}
+
 // ── Get Started Page ────────────────────────────────────────────────────
 
 /// GET /get-started — Self-serve onboarding page.
