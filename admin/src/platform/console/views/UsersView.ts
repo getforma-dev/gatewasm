@@ -54,9 +54,9 @@ export function UsersView() {
   return h('div', { class: 'console-view' },
     h('div', { class: 'view-header view-header-split' },
       h('div', { class: 'view-header-body' },
-        h('div', { class: 'view-eyebrow' }, 'Tenant Directory'),
-        h('h2', { class: 'view-title' }, 'Users'),
-        h('p', { class: 'view-subtitle text-muted' }, () => users().length + ' total users in /t/' + tenantState().slug),
+        h('div', { class: 'view-eyebrow' }, 'Organization'),
+        h('h2', { class: 'view-title' }, 'Members'),
+        h('p', { class: 'view-subtitle text-muted' }, () => users().length + ' total members in /t/' + tenantState().slug),
       ),
       h('div', { class: 'view-header-actions' },
         MetricCard('Verified', () => String(verifiedCount())),
@@ -67,7 +67,7 @@ export function UsersView() {
     h('section', { class: 'console-card list-shell' },
       h('div', { class: 'list-shell-head list-shell-head-users' },
         h('div', { class: 'section-copy' },
-          h('div', { class: 'card-label' }, 'Recent Users'),
+          h('div', { class: 'card-label' }, 'Recent Members'),
           h('p', { class: 'card-copy' }, () => filteredUsers().length + ' matching records'),
         ),
         h('div', { class: 'list-shell-tools' },
@@ -114,10 +114,10 @@ export function UsersView() {
       createShow(
         () => !usersLoading() && filteredUsers().length === 0,
         () => h('div', { class: 'list-empty-state' },
-          h('div', { class: 'card-label' }, search().trim() ? 'No Matches' : 'No Users Yet'),
+          h('div', { class: 'card-label' }, search().trim() ? 'No Matches' : 'No Members Yet'),
           h('p', { class: 'card-copy' },
             () => search().trim()
-              ? 'Try a different name or email search to find a user.'
+              ? 'Try a different name or email search to find a member.'
               : 'The first tenant members will appear here as soon as someone signs up or completes a login flow.',
           ),
         ),
@@ -244,14 +244,14 @@ export function UsersView() {
       ),
       createShow(
         () => users().length >= 100,
-        () => h('div', { class: 'list-truncated' }, '100 most recent users shown'),
+        () => h('div', { class: 'list-truncated' }, '100 most recent members shown'),
       ),
     ),
   );
 }
 
 function InvitesPanel(tenantId: string) {
-  const [open, setOpen] = createSignal(true);
+  const [open, setOpen] = createSignal(false);
   const [inviteEmail, setInviteEmail] = createSignal('');
   const [inviteRole, setInviteRole] = createSignal('role_admin');
   const [sending, setSending] = createSignal(false);
@@ -316,7 +316,7 @@ function InvitesPanel(tenantId: string) {
             ),
             h('button', {
               type: 'button',
-              class: 'btn btn-primary btn-sm',
+              class: 'clip-btn',
               disabled: () => sending() || !inviteEmail().trim(),
               onClick: () => void handleSend(),
             }, () => sending() ? 'Sending...' : 'Send Invite'),

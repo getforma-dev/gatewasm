@@ -20,7 +20,7 @@ export function AuditLogView() {
         h('p', { class: 'view-subtitle text-muted' }, () => filteredEntries().length + ' events'),
       ),
     ),
-    h('section', { class: 'console-card list-shell' },
+    h('section', { class: 'console-card list-shell section-box section-box-bottom' },
       h('div', { class: 'list-shell-head' },
         h('div', { class: 'section-copy' },
           h('div', { class: 'card-label' }, 'Login Attempts'),

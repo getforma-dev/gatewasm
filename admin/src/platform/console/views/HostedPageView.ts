@@ -78,7 +78,7 @@ export function HostedPageView() {
   return h('div', { class: 'console-view' },
     h('div', { class: 'view-header view-header-split' },
       h('div', { class: 'view-header-body' },
-        h('div', { class: 'view-eyebrow' }, 'Hosted Experience'),
+        h('div', { class: 'view-eyebrow' }, 'Organization'),
         h('h2', { class: 'view-title' }, 'Hosted Page'),
         h('p', { class: 'view-subtitle text-muted' }, () => 'Shape the first page people see after authenticating into /t/' + tenantState().slug),
       ),

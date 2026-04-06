@@ -15,7 +15,7 @@ export function TokensView() {
     ),
 
     // ── JWKS Public Keys ──────────────────────────────────────────────
-    h('section', { class: 'console-card' },
+    h('section', { class: 'console-card section-box section-box-bottom' },
       h('div', { class: 'card-label' }, 'JWKS Public Keys'),
       h('p', { class: 'card-copy' }, () => {
         const keys = jwks()?.keys;
@@ -47,7 +47,7 @@ export function TokensView() {
     ),
 
     // ── Management API Key ────────────────────────────────────────────
-    h('section', { class: 'console-card' },
+    h('section', { class: 'console-card section-box section-box-bottom' },
       h('div', { class: 'card-label' }, 'Management API Key'),
       createShow(
         () => !!tenantState()?.management_api_key,
@@ -62,7 +62,7 @@ export function TokensView() {
     ),
 
     // ── Token Configuration ───────────────────────────────────────────
-    h('section', { class: 'console-card' },
+    h('section', { class: 'console-card section-box section-box-bottom' },
       h('div', { class: 'card-label' }, 'Token Configuration'),
       h('div', { class: 'detail-grid' },
         DetailRow('Algorithm', 'EdDSA'),

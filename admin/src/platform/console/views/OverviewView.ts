@@ -169,7 +169,7 @@ export function OverviewView() {
   return h('div', { class: 'console-view' },
     h('div', { class: 'view-header view-header-split' },
       h('div', { class: 'view-header-body' },
-        h('div', { class: 'view-eyebrow' }, 'Tenant Workspace'),
+        h('div', { class: 'view-eyebrow' }, 'Operator'),
         h('h2', { class: 'view-title' }, () => tenantState().name || 'Overview'),
         h('p', { class: 'view-subtitle text-muted' }, () => '/t/' + tenantState().slug),
       ),

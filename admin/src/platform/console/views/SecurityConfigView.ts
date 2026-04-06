@@ -177,8 +177,34 @@ export function SecurityConfigView() {
               ),
             ]),
           )
-        : h('div', { class: 'console-card' },
-            h('p', { class: 'text-muted' }, 'No security configuration loaded.'),
+        : h('div', { class: 'console-view-body' },
+            SectionCard('Foundation (Defaults)', null, [
+              NumberRow(
+                'Idle Timeout (minutes)',
+                () => 30,
+                () => {},
+              ),
+              NumberRow(
+                'Max Sessions per End User',
+                () => 10,
+                () => {},
+              ),
+              ToggleRow(
+                'Host-Prefix Cookies',
+                () => true,
+                () => {},
+              ),
+              ToggleRow(
+                'Content Security Policy',
+                () => true,
+                () => {},
+              ),
+              ToggleRow(
+                'Client Fingerprint',
+                () => true,
+                () => {},
+              ),
+            ]),
           ),
   );
 }

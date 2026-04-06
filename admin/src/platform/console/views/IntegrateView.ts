@@ -46,7 +46,7 @@ export function IntegrateView() {
   return h('div', { class: 'console-view' },
     h('div', { class: 'view-header view-header-split' },
       h('div', { class: 'view-header-body' },
-        h('div', { class: 'view-eyebrow' }, 'Developer Setup'),
+        h('div', { class: 'view-eyebrow' }, 'Operator'),
         h('h2', { class: 'view-title' }, 'Integrate'),
         h('p', { class: 'view-subtitle text-muted' }, () => 'Everything you need to wire auth into /t/' + tenantState().slug),
       ),
@@ -268,7 +268,7 @@ function WebhooksPanel() {
         ),
         h('button', {
           type: 'button',
-          class: 'btn btn-primary btn-sm',
+          class: () => showCreate() ? 'btn btn-sm btn-ghost' : 'clip-btn',
           onClick: () => { setShowCreate(!showCreate()); setCreatedSecret(null); },
         }, () => showCreate() ? 'Cancel' : 'Create Webhook'),
       ),

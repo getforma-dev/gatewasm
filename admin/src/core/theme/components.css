@@ -328,10 +328,12 @@
 }
 
 .stat-card {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  padding: 1.25rem;
+  border-left: 3px solid var(--accent);
+  background: linear-gradient(135deg, var(--accent-glow), transparent);
+  padding: var(--space-md) var(--space-lg);
   border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
   position: relative;
   overflow: hidden;
   animation: fade-up 0.4s var(--ease) both;
@@ -339,23 +341,15 @@
 }
 
 .stat-card:hover {
-  border-color: var(--border-accent);
+  border-color: var(--accent-border);
 }
 
-.stat-card::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 1px;
-  height: 100%;
-  background: var(--accent);
-  opacity: 0;
-  transition: opacity 0.3s ease;
-}
-
-.stat-card:hover::before {
-  opacity: 0.5;
+.stat-card .stat-label {
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text-muted);
+  margin-bottom: 0.25rem;
 }
 
 /* Stagger animation delays */
@@ -367,11 +361,13 @@
 .stat-grid .stat-card:nth-child(6) { animation-delay: 120ms; }
 
 .stat-value {
-  font-size: 1.5rem;
-  font-weight: 500;
-  letter-spacing: -0.02em;
+  font-family: 'Orbitron', sans-serif;
+  font-weight: 700;
+  font-size: 1.35rem;
+  color: var(--accent);
+  text-shadow: 0 0 14px var(--accent-dim);
+  letter-spacing: 0.02em;
   line-height: 1.1;
-  color: var(--text);
 }
 
 .stat-value small {
@@ -3028,4 +3024,150 @@
   /* Touch targets */
   .nav button { min-height: 44px; padding: 10px 12px; }
   .btn-sm { min-height: 44px; padding: 10px 16px; }
+}
+
+
+/* ==========================================================================
+   Design System: Console Content
+   ───────────────────────────────
+   Reusable classes that extend the PlaneNav design language into content views.
+   ========================================================================== */
+
+/* ── Section box with corner brackets ──────────────────────────────── */
+
+.section-box {
+  position: relative;
+}
+
+.section-box::before {
+  content: '';
+  position: absolute;
+  top: -1px;
+  left: -1px;
+  width: 10px;
+  height: 10px;
+  border-top: 1.5px solid;
+  border-left: 1.5px solid;
+  border-color: var(--accent-border);
+  pointer-events: none;
+  z-index: 1;
+}
+
+.section-box::after {
+  content: '';
+  position: absolute;
+  top: -1px;
+  right: -1px;
+  width: 10px;
+  height: 10px;
+  border-top: 1.5px solid;
+  border-right: 1.5px solid;
+  border-color: var(--accent-border);
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* Bottom corner brackets — rendered via outline trick on inner shadow */
+.section-box-bottom {
+  background-image:
+    linear-gradient(var(--accent-border), var(--accent-border)),
+    linear-gradient(var(--accent-border), var(--accent-border)),
+    linear-gradient(var(--accent-border), var(--accent-border)),
+    linear-gradient(var(--accent-border), var(--accent-border));
+  background-size:
+    10px 1.5px,
+    1.5px 10px,
+    10px 1.5px,
+    1.5px 10px;
+  background-position:
+    bottom left,
+    bottom left,
+    bottom right,
+    bottom right;
+  background-repeat: no-repeat;
+}
+
+/* ── Diamond label — section header with diamond prefix ────────────── */
+
+.diamond-label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.diamond-label::before {
+  content: '';
+  display: block;
+  width: 5px;
+  height: 5px;
+  clip-path: polygon(50% 0, 100% 50%, 50% 100%, 0 50%);
+  background: var(--accent);
+  flex-shrink: 0;
+}
+
+/* ── Clip button — parallelogram action button ─────────────────────── */
+
+.clip-btn {
+  clip-path: polygon(5px 0, 100% 0, calc(100% - 5px) 100%, 0 100%);
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  padding: 0.45rem 1.25rem;
+  font-family: Rajdhani, sans-serif;
+  font-weight: 700;
+  font-size: 0.78rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: background 150ms ease;
+}
+
+.clip-btn:hover {
+  background: var(--accent-hover);
+}
+
+.clip-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.clip-btn-secondary {
+  clip-path: polygon(5px 0, 100% 0, calc(100% - 5px) 100%, 0 100%);
+  background: transparent;
+  color: var(--accent);
+  border: 1px solid var(--accent-border);
+  padding: 0.45rem 1.25rem;
+  font-family: Rajdhani, sans-serif;
+  font-weight: 600;
+  font-size: 0.78rem;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  transition: all 150ms ease;
+}
+
+.clip-btn-secondary:hover {
+  background: var(--accent-glow);
+}
+
+/* ── Accent cell — table first column styling ──────────────────────── */
+
+.accent-cell {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+/* ── Card hover glow (matches login page feel) ─────────────────────── */
+
+.console-card {
+  transition: border-color 200ms ease, box-shadow 200ms ease;
+}
+
+.console-card:hover {
+  border-color: var(--accent-border);
+  box-shadow: 0 0 20px var(--accent-glow);
 }

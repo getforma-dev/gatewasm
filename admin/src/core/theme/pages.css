@@ -1292,25 +1292,27 @@
 }
 
 .view-eyebrow {
-  font-size: 0.68rem;
-  font-weight: 500;
+  font-family: 'DM Mono', monospace;
+  font-size: 0.6rem;
   text-transform: uppercase;
-  letter-spacing: 0.1em;
-  color: var(--text-muted);
+  letter-spacing: 0.12em;
+  color: var(--accent);
 }
 
 .view-title {
-  font-size: 1.35rem;
-  font-weight: 500;
+  font-family: 'Instrument Serif', serif;
+  font-size: 1.5rem;
+  font-weight: 400;
+  letter-spacing: -0.02em;
   color: var(--text);
   margin: 0;
 }
 
 .view-subtitle {
+  font-family: 'DM Mono', monospace;
   font-size: 0.85rem;
   color: var(--text-dim);
   margin: var(--space-xs) 0 0;
-  font-family: 'DM Mono', monospace;
 }
 
 .view-header-note {
@@ -1531,12 +1533,25 @@
 }
 
 .card-label {
-  font-size: 0.7rem;
-  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.65rem;
   text-transform: uppercase;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.1em;
   color: var(--text-muted);
+  font-weight: 600;
   margin-bottom: var(--space-xs);
+}
+
+.card-label::before {
+  content: '';
+  display: block;
+  width: 5px;
+  height: 5px;
+  clip-path: polygon(50% 0, 100% 50%, 50% 100%, 0 50%);
+  background: var(--accent);
+  flex-shrink: 0;
 }
 
 .card-value {

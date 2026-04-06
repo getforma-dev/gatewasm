@@ -32,7 +32,7 @@ export function RolesView() {
       ),
       h('div', { class: 'view-header-actions' },
         h('button', {
-          class: 'btn btn-sm btn-primary',
+          class: () => showCreate() ? 'btn btn-sm btn-ghost' : 'clip-btn',
           onClick: () => setShowCreate(!showCreate()),
         }, () => showCreate() ? 'Cancel' : 'Create Role'),
       ),
@@ -68,7 +68,7 @@ export function RolesView() {
     ),
 
     // ── Role list ──────────────────────────────────────────────────
-    h('section', { class: 'console-card list-shell' },
+    h('section', { class: 'console-card list-shell section-box section-box-bottom' },
       h('div', { class: 'list-shell-head' },
         h('div', { class: 'section-copy' },
           h('div', { class: 'card-label' }, 'All Roles'),
