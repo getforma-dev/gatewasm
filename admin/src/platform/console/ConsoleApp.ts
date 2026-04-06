@@ -22,6 +22,7 @@ import { SecurityConfigView } from './views/SecurityConfigView';
 import { TokensView } from './views/TokensView';
 import { ApiKeysView } from './views/ApiKeysView';
 import { AccountSettingsView } from './views/AccountSettingsView';
+import { TeamView } from './views/TeamView';
 import {
   view, loading, toast, backToTenants, signout,
   selectedTenant, tenants, selectTenant, createTenant, checkSlugAvailability, currentUser,
@@ -29,6 +30,7 @@ import {
   plane, setPlane, type Plane, type ConsoleView,
   type TenantWorkspaceView,
   mode, accountTab, setAccountTab, type AccountTab,
+  platformRole,
   serverUrl,
 } from './store';
 
@@ -435,7 +437,14 @@ export function ConsoleApp() {
       ),
       h('div', { class: 'account-tabs' },
         AccountTabBtn('tenants', 'Tenants'),
-        AccountTabBtn('api-keys', 'API Keys'),
+        createShow(
+          () => platformRole() === 'owner' || platformRole() === 'admin',
+          () => AccountTabBtn('team', 'Team'),
+        ),
+        createShow(
+          () => platformRole() === 'owner' || platformRole() === 'admin',
+          () => AccountTabBtn('api-keys', 'API Keys'),
+        ),
         AccountTabBtn('account-settings', 'Settings'),
       ),
       h('div', { class: 'account-stage' },
@@ -445,6 +454,7 @@ export function ConsoleApp() {
             accountTab,
             [
               { match: 'tenants', render: () => TenantsList() },
+              { match: 'team', render: () => TeamView() },
               { match: 'api-keys', render: () => ApiKeysView() },
               { match: 'account-settings', render: () => AccountSettingsView() },
             ],

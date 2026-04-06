@@ -1382,6 +1382,25 @@ export async function init(): Promise<void> {
     await auth.silentRefresh();
     await Promise.all([loadTenants(), loadCurrentUser()]);
 
+    // Check for pending invite acceptance
+    const inviteParam = new URLSearchParams(window.location.search).get('owner_invite');
+    if (inviteParam) {
+      try {
+        await api.post('/platform/admin/invites/accept', { token: inviteParam });
+        toast.show('Invite accepted! Welcome to the team.', 'success');
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : 'Failed to accept invite';
+        toast.show(msg, 'error');
+      }
+      // Clean the URL
+      const url = new URL(window.location.href);
+      url.searchParams.delete('owner_invite');
+      history.replaceState(null, '', url.pathname + url.search);
+
+      // Reload user data to get fresh platform_role
+      await Promise.all([loadTenants(), loadCurrentUser()]);
+    }
+
     // URL determines mode — no localStorage override
     const urlMatch = window.location.pathname.match(/^\/platform\/console\/([^/]+)/);
     if (urlMatch) {
