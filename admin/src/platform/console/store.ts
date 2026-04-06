@@ -82,6 +82,17 @@ export interface UserSession {
   mfa_verified: boolean;
 }
 
+export interface AuditLogEntry {
+  id: string;
+  email: string;
+  user_id: string | null;
+  success: boolean;
+  ip_address: string | null;
+  user_agent: string | null;
+  failure_reason: string | null;
+  created_at: string;
+}
+
 export interface HostedPageData {
   headline: string;
   body: string;
@@ -182,6 +193,8 @@ export const [introspectToken, setIntrospectToken] = createSignal<string | null>
 export const [introspectUnavailable, setIntrospectUnavailable] = createSignal(false);
 export const [userSessions, setUserSessions] = createSignal<UserSession[]>([]);
 export const [userSessionsLoading, setUserSessionsLoading] = createSignal(false);
+export const [auditLog, setAuditLog] = createSignal<AuditLogEntry[]>([]);
+export const [auditLogLoading, setAuditLogLoading] = createSignal(false);
 export const [integrateSection, setIntegrateSectionSignal] = createSignal<IntegrateSection>('guide');
 export const [overviewWindow, setOverviewWindowSignal] = createSignal<OverviewWindow>('7d');
 export const [currentUser, setCurrentUser] = createSignal<PlatformUser | null>(null);
@@ -225,6 +238,8 @@ function resetTenantScopedState(): void {
     setIntrospectUnavailable(false);
     setUserSessions([]);
     setUserSessionsLoading(false);
+    setAuditLog([]);
+    setAuditLogLoading(false);
     setIntegrateSectionSignal('guide');
     setOverviewWindowSignal('7d');
   });
@@ -558,6 +573,21 @@ export async function loadUserSessions(tenantId: string, userId: string): Promis
   }
 }
 
+export async function loadAuditLog(tenantId: string): Promise<void> {
+  setAuditLogLoading(true);
+  try {
+    const data = await api.get<{ audit_log: AuditLogEntry[] }>(
+      '/platform/self-serve/tenants/' + encodeURIComponent(tenantId) + '/audit-log',
+    );
+    if (selectedTenant()?.id !== tenantId) return;
+    setAuditLog(data.audit_log || []);
+  } catch (e) {
+    toast.show(e instanceof Error ? e.message : 'Failed to load audit log', 'error');
+  } finally {
+    setAuditLogLoading(false);
+  }
+}
+
 export async function loadHostedPage(tenantId: string): Promise<void> {
   const requestSeq = ++hostedPageRequestSeq;
   try {
@@ -714,6 +744,8 @@ async function hydrateTenantView(nextView: TenantWorkspaceView, tenant: Tenant):
     tasks.push(loadUsers(tenant.id));
   } else if (nextView === 'hosted-page') {
     tasks.push(loadHostedPage(tenant.id));
+  } else if (nextView === 'audit-log' || nextView === 'activity') {
+    tasks.push(loadAuditLog(tenant.id));
   }
 
   await Promise.all(tasks);
