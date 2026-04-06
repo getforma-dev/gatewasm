@@ -1,15 +1,12 @@
-import { h, createSignal, createSwitch, createShow, onCleanup } from 'formajs';
+import { h, createSignal, createSwitch } from 'formajs';
 import { Field } from '../../core/components/ui/Field';
-import { Sidebar } from '../../core/components/ui/Sidebar';
 import { LoadingBar } from '../../core/components/ui/LoadingBar';
 import { ToastView } from '../../core/components/ui/Toast';
-import { Topbar } from '../../core/components/ui/Topbar';
-import { Icon } from '../../core/components/ui/Icon';
-import { ICONS } from '../../core/components/ui/icon-paths';
 import { createKeyboard } from '../../core/hooks/createKeyboard';
-import { detectEnv, getThemeMode, toggleThemeMode, type ThemeMode } from '../../core/utils';
+import { getThemeMode, toggleThemeMode, type ThemeMode } from '../../core/utils';
 import { normalizeTenantSlugInput } from '../tenantSlug';
 import { CommandPalette, type CommandPaletteSection } from './CommandPalette';
+import { PlaneNav } from './views/PlaneNav';
 import { OverviewView } from './views/OverviewView';
 import { UsersView } from './views/UsersView';
 import { IntegrateView } from './views/IntegrateView';
@@ -19,44 +16,9 @@ import {
   view, loading, toast, backToTenants, signout,
   selectedTenant, tenants, selectTenant, createTenant, currentUser,
   navigateTenantView, refreshCurrentView, openIntegrateGuide, openSessionInspector,
-  introspectData, introspectUnavailable,
+  plane, setPlane, type Plane, type ConsoleView,
   type TenantWorkspaceView,
 } from './store';
-
-function iconSvg(name: string, size = 18): string {
-  return Icon({ name, size }).outerHTML;
-}
-
-function userDisplayName(name: string | null | undefined, email: string): string {
-  const nextName = (name || '').trim();
-  if (nextName) {
-    return nextName;
-  }
-
-  const local = email.split('@')[0] || email;
-  return local.replace(/[._-]+/g, ' ');
-}
-
-function userInitials(name: string | null | undefined, email: string): string {
-  const source = userDisplayName(name, email)
-    .split(/\s+/)
-    .map((part) => part.trim())
-    .filter(Boolean);
-
-  if (source.length === 0) {
-    return email.slice(0, 2).toUpperCase();
-  }
-
-  const initials = source
-    .slice(0, 2)
-    .map((part) => part[0] || '')
-    .join('')
-    .toUpperCase();
-
-  return initials || email.slice(0, 2).toUpperCase();
-}
-
-const FORMAJS_MARK = '<svg width="64" height="64" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">' + ICONS['formajs-mark'] + '</svg>';
 
 function TenantsList() {
   const tenantCountLabel = () => {
@@ -136,176 +98,6 @@ function TenantMeta(label: string, value: string) {
     h('span', { class: 'tenant-card-stat-label' }, label),
     h('span', { class: 'tenant-card-stat-value' }, value),
   );
-}
-
-function QuickSwitchTrigger(shortcutLabel: string, onOpen: () => void) {
-  return h('button', {
-    type: 'button',
-    class: 'topbar-chip topbar-chip-button topbar-chip-command',
-    onClick: onOpen,
-    title: 'Open quick switcher',
-    'aria-label': 'Open quick switcher',
-  }, [
-    Icon({ name: 'search', size: 14, class: 'topbar-chip-icon' }),
-    h('span', null, 'Quick Switch'),
-    h('span', { class: 'topbar-chip-shortcut' }, shortcutLabel),
-  ]);
-}
-
-function TopbarActions(
-  serverUrl: string,
-  onOpenPalette: () => void,
-  shortcutLabel: string,
-) {
-  const tenant = () => selectedTenant();
-
-  return h('div', { class: 'topbar-context' },
-    QuickSwitchTrigger(shortcutLabel, onOpenPalette),
-    SessionStatusChip(serverUrl),
-    () => tenant()
-      ? [
-          h('span', { class: 'topbar-chip topbar-chip-mono' }, '/t/' + (tenant()?.slug || '')),
-          h('span', { class: 'topbar-chip' }, tenant()?.plan || ''),
-          h('span', { class: 'topbar-chip' }, tenant()?.status || ''),
-        ]
-      : null,
-  );
-}
-
-function SessionStatusChip(serverUrl: string) {
-  const tenant = () => selectedTenant();
-  const active = () => introspectData() != null;
-  const unavailable = () => introspectUnavailable();
-
-  return () => {
-    const currentTenant = tenant();
-    if (!currentTenant) {
-      return null;
-    }
-
-    if (active()) {
-      return h('button', {
-        type: 'button',
-        class: 'topbar-chip topbar-chip-button topbar-chip-status topbar-chip-status-active',
-        onClick: openSessionInspector,
-        title: 'Open Auth Reference',
-        'aria-label': 'Open Auth Reference',
-      },
-        Icon({ name: 'check-circle', size: 14, class: 'topbar-chip-icon' }),
-        'Tenant Session Active',
-      );
-    }
-
-    if (unavailable()) {
-      return h('button', {
-        type: 'button',
-        class: 'topbar-chip topbar-chip-button topbar-chip-status topbar-chip-status-missing',
-        onClick: () => {
-          window.open(
-            serverUrl + '/t/' + currentTenant.slug + '/login?redirect=/t/' + currentTenant.slug + '/site',
-            '_blank',
-            'noopener',
-          );
-        },
-        title: 'Start a tenant sign-in in a new tab',
-        'aria-label': 'Start a tenant sign-in in a new tab',
-      },
-        Icon({ name: 'alert-circle', size: 14, class: 'topbar-chip-icon' }),
-        'No Tenant Session',
-      );
-    }
-
-    return h('span', {
-      class: 'topbar-chip topbar-chip-status topbar-chip-status-pending',
-      title: 'Checking whether this browser already has a tenant session',
-    },
-      Icon({ name: 'clock', size: 14, class: 'topbar-chip-icon' }),
-      'Checking Session',
-    );
-  };
-}
-
-function SidebarAccountMenu(themeMode: () => ThemeMode, onToggleTheme: () => void) {
-  const user = () => currentUser();
-  if (!user()) {
-    return null;
-  }
-
-  const [open, setOpen] = createSignal(false);
-  const handleDocumentClick = (event: Event) => {
-    const target = event.target as Node;
-    if (container && !container.contains(target)) {
-      setOpen(false);
-    }
-  };
-
-  if (typeof document !== 'undefined') {
-    document.addEventListener('click', handleDocumentClick);
-    onCleanup(() => document.removeEventListener('click', handleDocumentClick));
-  }
-
-  const container = h('div', { class: 'sidebar-account-shell' },
-    h('button', {
-      type: 'button',
-      class: 'sidebar-account sidebar-account-trigger',
-      'aria-haspopup': 'menu',
-      'aria-expanded': () => String(open()),
-      onClick: () => setOpen((value: boolean) => !value),
-    },
-      h('div', { class: 'sidebar-account-avatar', 'aria-hidden': 'true' },
-        () => user()?.avatar
-          ? h('img', {
-              class: 'sidebar-account-image',
-              src: user()!.avatar!,
-              alt: '',
-              referrerPolicy: 'no-referrer',
-            })
-          : h('span', { class: 'sidebar-account-initials' }, () => userInitials(user()?.name, user()?.email || '')),
-      ),
-      h('div', { class: 'sidebar-account-copy' },
-        h('div', { class: 'sidebar-account-name' }, () => userDisplayName(user()?.name, user()?.email || '')),
-        h('div', { class: 'sidebar-account-email' }, () => user()?.email || ''),
-      ),
-      h('span', { class: 'sidebar-account-caret', 'aria-hidden': 'true' }, Icon({ name: 'chevron-down', size: 14 })),
-    ),
-    createShow(
-      open,
-      () => h('div', { class: 'sidebar-account-menu', role: 'menu' },
-        h('div', { class: 'sidebar-account-menu-header' },
-          h('div', { class: 'sidebar-account-menu-title' }, userDisplayName(user()?.name, user()?.email || '')),
-          h('div', { class: 'sidebar-account-menu-meta' }, user()?.email || ''),
-        ),
-        h('div', { class: 'sidebar-account-menu-actions' },
-          h('button', {
-            type: 'button',
-            class: 'sidebar-account-menu-item',
-            role: 'menuitem',
-            onClick: () => {
-              onToggleTheme();
-              setOpen(false);
-            },
-          },
-            Icon({ name: themeMode() === 'dark' ? 'sun' : 'moon', size: 14 }),
-            themeMode() === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode',
-          ),
-          h('button', {
-            type: 'button',
-            class: 'sidebar-account-menu-item danger',
-            role: 'menuitem',
-            onClick: () => {
-              setOpen(false);
-              signout();
-            },
-          },
-            Icon({ name: 'signout', size: 14 }),
-            'Sign Out',
-          ),
-        ),
-      ),
-    ),
-  ) as HTMLElement;
-
-  return container;
 }
 
 function TenantCreatePanel() {
@@ -401,11 +193,22 @@ function TenantWorkspaceGuard(render: () => HTMLElement) {
   return () => selectedTenant() ? render() : TenantsList();
 }
 
+function ComingSoonView(label: string) {
+  return h('div', { class: 'console-view' },
+    h('div', { class: 'view-header' },
+      h('div', { class: 'view-eyebrow' }, 'Coming Soon'),
+      h('h2', { class: 'view-title' }, label),
+      h('p', { class: 'view-subtitle text-muted' },
+        'API endpoints are ready \u2014 dashboard view coming next.',
+      ),
+    ),
+  );
+}
+
 export function ConsoleApp() {
   const serverUrl: string = (window as any).__FORMA_SERVER_URL__ || window.location.origin;
   const [themeMode, setThemeMode] = createSignal<ThemeMode>(getThemeMode());
   const [paletteOpen, setPaletteOpen] = createSignal(false);
-  const hasTenantSelection = () => selectedTenant() != null;
   const shortcutLabel = /Mac|iPhone|iPad/.test(navigator.platform) ? 'Cmd K' : 'Ctrl K';
 
   const handleThemeToggle = () => {
@@ -415,12 +218,6 @@ export function ConsoleApp() {
   const openCommandPalette = () => setPaletteOpen(true);
   const closeCommandPalette = () => setPaletteOpen(false);
   const openConsoleHome = () => backToTenants();
-
-  const openTenantHome = () => {
-    const tenant = selectedTenant();
-    if (!tenant) return;
-    navigateTenantView('overview');
-  };
 
   createKeyboard([
     { keys: 'Meta+k', handler: openCommandPalette },
@@ -468,12 +265,12 @@ export function ConsoleApp() {
           onSelect: () => navigateTenantView('overview'),
         },
         {
-          id: 'palette-users',
-          title: 'Users',
+          id: 'palette-members',
+          title: 'Members',
           subtitle: 'Inspect members, providers, and session controls.',
-          meta: currentView === 'users' ? 'Current page' : undefined,
-          keywords: ['users members sessions'],
-          onSelect: () => navigateTenantView('users'),
+          meta: currentView === 'members' ? 'Current page' : undefined,
+          keywords: ['users members sessions people'],
+          onSelect: () => navigateTenantView('members' as TenantWorkspaceView),
         },
         {
           id: 'palette-integrate',
@@ -506,6 +303,54 @@ export function ConsoleApp() {
           meta: currentView === 'settings' ? 'Current page' : undefined,
           keywords: ['settings slug name config'],
           onSelect: () => navigateTenantView('settings'),
+        },
+        {
+          id: 'palette-roles',
+          title: 'Roles',
+          subtitle: 'Manage tenant roles and permission assignments.',
+          meta: currentView === 'roles' ? 'Current page' : undefined,
+          keywords: ['roles permissions rbac access'],
+          onSelect: () => navigateTenantView('roles' as TenantWorkspaceView),
+        },
+        {
+          id: 'palette-audit-log',
+          title: 'Audit Log',
+          subtitle: 'Review the event log for authentication and admin actions.',
+          meta: currentView === 'audit-log' ? 'Current page' : undefined,
+          keywords: ['audit log events history trail'],
+          onSelect: () => navigateTenantView('audit-log' as TenantWorkspaceView),
+        },
+        {
+          id: 'palette-sessions',
+          title: 'Sessions',
+          subtitle: 'View and manage active tenant sessions.',
+          meta: currentView === 'sessions' ? 'Current page' : undefined,
+          keywords: ['sessions active login tokens'],
+          onSelect: () => navigateTenantView('sessions' as TenantWorkspaceView),
+        },
+        {
+          id: 'palette-passkeys',
+          title: 'Passkeys',
+          subtitle: 'Manage WebAuthn passkeys and biometric credentials.',
+          meta: currentView === 'passkeys' ? 'Current page' : undefined,
+          keywords: ['passkeys webauthn biometric fido'],
+          onSelect: () => navigateTenantView('passkeys' as TenantWorkspaceView),
+        },
+        {
+          id: 'palette-tokens',
+          title: 'Tokens',
+          subtitle: 'Inspect and manage issued tokens and refresh grants.',
+          meta: currentView === 'tokens' ? 'Current page' : undefined,
+          keywords: ['tokens jwt refresh access grant'],
+          onSelect: () => navigateTenantView('tokens' as TenantWorkspaceView),
+        },
+        {
+          id: 'palette-activity',
+          title: 'Activity',
+          subtitle: 'View real-time activity and usage metrics.',
+          meta: currentView === 'activity' ? 'Current page' : undefined,
+          keywords: ['activity metrics usage analytics'],
+          onSelect: () => navigateTenantView('activity' as TenantWorkspaceView),
         },
       );
 
@@ -574,110 +419,24 @@ export function ConsoleApp() {
     return sections;
   };
 
-  const sidebarGroups = () => {
-    const groups: { label?: string; items: { id: string; label: string; icon: string }[] }[] = [
-      {
-        label: 'Platform',
-        items: [
-          { id: 'tenants', label: 'Tenants', icon: iconSvg('tenants') },
-        ],
+  return h('div', {
+    class: 'shell',
+    'data-plane': () => plane(),
+  },
+    PlaneNav({
+      plane: () => plane(),
+      view: () => view(),
+      onPlaneSwitch: (p: Plane) => setPlane(p),
+      onTabSwitch: (v: ConsoleView) => {
+        if (v === 'tenants') { backToTenants(); return; }
+        navigateTenantView(v as TenantWorkspaceView);
       },
-    ];
-
-    if (hasTenantSelection()) {
-      groups.push(
-        {
-          label: 'Workspace',
-          items: [
-            { id: 'overview', label: 'Overview', icon: iconSvg('overview') },
-            { id: 'users', label: 'Users', icon: iconSvg('users-stroke') },
-          ],
-        },
-        {
-          label: 'Build',
-          items: [
-            { id: 'integrate', label: 'Integrate', icon: iconSvg('integrate') },
-            { id: 'hosted-page', label: 'Hosted Page', icon: iconSvg('hosted-page') },
-            { id: 'settings', label: 'Settings', icon: iconSvg('settings-stroke') },
-          ],
-        },
-      );
-    }
-
-    return groups;
-  };
-
-  const sidebarContext = () => {
-    const tenant = selectedTenant();
-    if (!tenant) {
-      return null;
-    }
-
-    return h('div', { class: 'sidebar-context-card' },
-      h('div', { class: 'sidebar-context-copy' },
-        h('div', { class: 'sidebar-context-label' }, 'Active Tenant'),
-        h('div', { class: 'sidebar-context-title' }, tenant.name),
-        h('div', { class: 'sidebar-context-meta' }, '/t/' + tenant.slug),
-      ),
-      h('button', {
-        type: 'button',
-        class: 'sidebar-context-action',
-        onClick: openCommandPalette,
-      }, 'Quick switch'),
-    );
-  };
-
-  const sidebarAccount = () => {
-    return SidebarAccountMenu(themeMode, handleThemeToggle);
-  };
-
-  return h('div', { class: 'shell' },
-    Sidebar({
-      brand: { name: 'FormaJS', mark: FORMAJS_MARK, subtitle: 'GATEWASM CONSOLE' },
-      groups: sidebarGroups,
-      footer: [
-        { id: 'reload-data', label: 'Reload Data', icon: iconSvg('refresh-stroke') },
-      ],
-      activeView: () => view(),
-      onNavigate: (id: string) => {
-        if (id === 'reload-data') { void refreshCurrentView(); return; }
-        if (id === 'tenants') { backToTenants(); return; }
-        if (id === 'integrate') { openIntegrateGuide(); return; }
-        if (['overview', 'users', 'hosted-page', 'settings'].includes(id)) {
-          navigateTenantView(id as TenantWorkspaceView);
-          return;
-        }
-      },
-      env: detectEnv(),
-      context: sidebarContext,
-      account: sidebarAccount,
+      onSettings: () => navigateTenantView('settings' as TenantWorkspaceView),
+      onSignOut: () => void signout(),
+      user: () => currentUser(),
+      tenant: () => selectedTenant(),
     }),
     h('div', { class: 'shell-stage' },
-      Topbar({
-        breadcrumbs: () => {
-          const currentView = view();
-          const tenant = selectedTenant();
-          const crumbs: { label: string; onClick?: () => void }[] = [
-            { label: 'Console', onClick: currentView !== 'tenants' ? openConsoleHome : undefined },
-          ];
-          if (tenant) crumbs.push({
-            label: tenant.name,
-            onClick: currentView !== 'overview' ? openTenantHome : undefined,
-          });
-          if (currentView !== 'tenants') {
-            const labels: Record<string, string> = {
-              overview: 'Overview',
-              users: 'Users',
-              integrate: 'Integrate',
-              'hosted-page': 'Hosted Page',
-              settings: 'Settings',
-            };
-            crumbs.push({ label: labels[currentView] || currentView });
-          }
-          return crumbs;
-        },
-        actions: () => TopbarActions(serverUrl, openCommandPalette, shortcutLabel),
-      }),
       h('main', { class: 'main page-enter' },
         LoadingBar(() => loading()),
         createSwitch(
@@ -685,10 +444,16 @@ export function ConsoleApp() {
           [
             { match: 'tenants', render: () => TenantsList() },
             { match: 'overview', render: TenantWorkspaceGuard(() => OverviewView()) },
-            { match: 'users', render: TenantWorkspaceGuard(() => UsersView()) },
+            { match: 'members', render: TenantWorkspaceGuard(() => UsersView()) },
             { match: 'integrate', render: TenantWorkspaceGuard(() => IntegrateView()) },
             { match: 'hosted-page', render: TenantWorkspaceGuard(() => HostedPageView()) },
             { match: 'settings', render: TenantWorkspaceGuard(() => SettingsView()) },
+            { match: 'roles', render: TenantWorkspaceGuard(() => ComingSoonView('Roles')) },
+            { match: 'audit-log', render: TenantWorkspaceGuard(() => ComingSoonView('Audit Log')) },
+            { match: 'sessions', render: TenantWorkspaceGuard(() => ComingSoonView('Sessions')) },
+            { match: 'passkeys', render: TenantWorkspaceGuard(() => ComingSoonView('Passkeys')) },
+            { match: 'tokens', render: TenantWorkspaceGuard(() => ComingSoonView('Tokens')) },
+            { match: 'activity', render: TenantWorkspaceGuard(() => ComingSoonView('Activity')) },
           ],
         ),
       ),
