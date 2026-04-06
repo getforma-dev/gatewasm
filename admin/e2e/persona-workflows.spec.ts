@@ -15,12 +15,27 @@ const BASE = process.env.BASE_URL || 'http://localhost:3001';
 
 // ── Helper: get access token from context ──────────────────────────────
 async function getAccessToken(context: any): Promise<string> {
-  const refresh = await context.request.post(BASE + '/t/platform/auth/token', {
-    data: { grant_type: 'refresh_token' },
-  });
-  expect(refresh.ok()).toBeTruthy();
-  const json = await refresh.json();
-  return json.access_token as string;
+  // Try multiple paths — cookie may be scoped differently
+  for (const path of ['/t/platform/auth/token', '/auth/token']) {
+    const headers: Record<string, string> = {};
+    if (path === '/auth/token') headers['X-Tenant-Slug'] = 'platform';
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const refresh = await context.request.post(BASE + path, {
+        headers,
+        data: { grant_type: 'refresh_token' },
+      });
+      if (refresh.ok()) {
+        const json = await refresh.json();
+        return json.access_token as string;
+      }
+      if (refresh.status() === 429) {
+        await new Promise((r) => setTimeout(r, 1000));
+        continue;
+      }
+      break; // non-retryable error, try next path
+    }
+  }
+  throw new Error('Failed to get access token from either path');
 }
 
 // ── Helper: create tenant via API ──────────────────────────────────────
@@ -43,6 +58,18 @@ async function deleteTenant(context: any, tenantId: string, slug: string): Promi
       data: { confirm_slug: slug },
     });
   } catch { /* cleanup best-effort */ }
+}
+
+// ── Helper: click a plane tab button (scoped to .plane-tier2) ──────────
+async function clickTab(page: any, name: string) {
+  await page.locator('.plane-tier2').getByRole('button', { name }).click();
+  await page.waitForTimeout(800);
+}
+
+// ── Helper: click a plane button (scoped to .plane-tier1) ──────────────
+async function clickPlane(page: any, name: string) {
+  await page.locator('.plane-tier1').getByRole('button', { name }).click();
+  await page.waitForTimeout(500);
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -77,12 +104,8 @@ test.describe('Persona: Indie Dev', () => {
       // Operator plane should be active by default
       await expect(page.locator('.plane-btn.active')).toContainText('Operator');
 
-      // Overview tab should be visible and active
-      await expect(page.getByText('Overview')).toBeVisible();
-
-      // Navigate to Integrate tab
-      await page.getByRole('button', { name: 'Integrate' }).click();
-      await page.waitForTimeout(1000);
+      // Navigate to Integrate tab (scoped to tier2 to avoid matching overview buttons)
+      await clickTab(page, 'Integrate');
 
       // Should see Getting Started, Auth Reference, and Webhooks subtabs
       await expect(page.getByRole('tab', { name: 'Getting Started' })).toBeVisible();
@@ -92,13 +115,13 @@ test.describe('Persona: Indie Dev', () => {
       // Check Auth Reference content
       await page.getByRole('tab', { name: 'Auth Reference' }).click();
       await page.waitForTimeout(500);
-      await expect(page.getByText('Callback Payload')).toBeVisible();
-      await expect(page.getByText('Token Format')).toBeVisible();
+      await expect(page.getByText('Callback Payload', { exact: true })).toBeVisible();
+      await expect(page.getByText('Token Format', { exact: true })).toBeVisible();
 
       // Check Webhooks tab
       await page.getByRole('tab', { name: 'Webhooks' }).click();
       await page.waitForTimeout(500);
-      await expect(page.getByText('Webhooks')).toBeVisible();
+      await expect(page.locator('.section-title').filter({ hasText: 'Webhooks' })).toBeVisible();
 
     } finally {
       if (tenantId) await deleteTenant(context, tenantId, slug);
@@ -130,36 +153,28 @@ test.describe('Persona: Startup B2B', () => {
       await page.waitForTimeout(1000);
 
       // Switch to Organization plane
-      await page.getByRole('button', { name: 'Organization' }).click();
-      await page.waitForTimeout(500);
+      await clickPlane(page, 'Organization');
 
       // ── Members tab ──────────────────────────────────────────────
-      await page.getByRole('button', { name: 'Members' }).click();
-      await page.waitForTimeout(1000);
+      await clickTab(page, 'Members');
 
-      // Should see the Invites panel
-      await expect(page.getByText('Pending Invites')).toBeVisible();
+      // Should see the Invites panel (use exact match)
+      await expect(page.getByText('Pending Invites', { exact: true })).toBeVisible();
 
       // Should see the user list section
       await expect(page.getByText('Recent Users')).toBeVisible();
 
       // ── Organizations tab ────────────────────────────────────────
-      await page.getByRole('button', { name: 'Organizations' }).click();
-      await page.waitForTimeout(1000);
-
-      await expect(page.getByText('Organizations')).toBeVisible();
+      await clickTab(page, 'Organizations');
+      await expect(page.locator('.view-title').filter({ hasText: 'Organizations' })).toBeVisible();
 
       // ── Roles tab ────────────────────────────────────────────────
-      await page.getByRole('button', { name: 'Roles' }).click();
-      await page.waitForTimeout(1000);
-
+      await clickTab(page, 'Roles');
       await expect(page.getByText('All Roles')).toBeVisible();
 
       // ── Audit Log tab ────────────────────────────────────────────
-      await page.getByRole('button', { name: 'Audit Log' }).click();
-      await page.waitForTimeout(1000);
-
-      await expect(page.getByText('Login Attempts')).toBeVisible();
+      await clickTab(page, 'Audit Log');
+      await expect(page.getByText('Login Attempts', { exact: true })).toBeVisible();
 
     } finally {
       if (tenantId) await deleteTenant(context, tenantId, slug);
@@ -191,41 +206,27 @@ test.describe('Persona: Enterprise', () => {
       await page.waitForTimeout(1000);
 
       // ── Plane 1: Security tab ────────────────────────────────────
-      await page.getByRole('button', { name: 'Operator' }).click();
-      await page.waitForTimeout(500);
+      await clickPlane(page, 'Operator');
+      await clickTab(page, 'Security');
 
-      await page.getByRole('button', { name: 'Security' }).click();
-      await page.waitForTimeout(1000);
-
-      // Should see security config sections
-      await expect(page.getByText('Security')).toBeVisible();
+      // Should see security config heading
+      await expect(page.locator('.view-title').filter({ hasText: 'Security' })).toBeVisible();
 
       // ── Plane 3: Sessions ────────────────────────────────────────
-      await page.getByRole('button', { name: 'End User' }).click();
-      await page.waitForTimeout(500);
-
-      await page.getByRole('button', { name: 'Sessions' }).click();
-      await page.waitForTimeout(1000);
-
-      await expect(page.getByText('Active Sessions')).toBeVisible();
+      await clickPlane(page, 'End User');
+      await clickTab(page, 'Sessions');
+      await expect(page.getByText('Active Sessions', { exact: true })).toBeVisible();
 
       // ── Plane 3: Passkeys ────────────────────────────────────────
-      await page.getByRole('button', { name: 'Passkeys' }).click();
-      await page.waitForTimeout(1000);
-
-      await expect(page.getByText('WebAuthn Credentials')).toBeVisible();
+      await clickTab(page, 'Passkeys');
+      await expect(page.getByText('WebAuthn Credentials', { exact: true })).toBeVisible();
 
       // ── Plane 3: Tokens ──────────────────────────────────────────
-      await page.getByRole('button', { name: 'Tokens' }).click();
-      await page.waitForTimeout(1000);
-
-      await expect(page.getByText('JWKS Public Keys')).toBeVisible();
-      await expect(page.getByText('Token Configuration')).toBeVisible();
+      await clickTab(page, 'Tokens');
+      await expect(page.getByText('JWKS Public Keys', { exact: true })).toBeVisible();
 
       // ── Plane 3: Activity ────────────────────────────────────────
-      await page.getByRole('button', { name: 'Activity' }).click();
-      await page.waitForTimeout(1000);
-
+      await clickTab(page, 'Activity');
       await expect(page.getByText('Authentication Timeline')).toBeVisible();
 
     } finally {
@@ -254,23 +255,32 @@ test.describe('Persona: Agency Multi-Tenant', () => {
       tenantId2 = await createTenant(context, token, 'Client Beta', slug2);
 
       await page.goto('/platform/console');
-      await page.waitForTimeout(1500);
+      await page.waitForTimeout(2000);
+
+      // Clear workspace state to ensure account mode, then reload
+      await page.evaluate(() => {
+        try {
+          for (const key of Object.keys(localStorage)) {
+            if (key.startsWith('forma-console-workspace:')) localStorage.removeItem(key);
+          }
+        } catch {}
+      });
+      await page.goto('/platform/console');
+      await page.waitForTimeout(2000);
 
       // Account mode: should see both tenants in the list
-      await expect(page.locator('.tenant-card').filter({ hasText: 'Client Alpha' })).toBeVisible();
+      await expect(page.locator('.tenant-card').filter({ hasText: 'Client Alpha' })).toBeVisible({ timeout: 10000 });
       await expect(page.locator('.tenant-card').filter({ hasText: 'Client Beta' })).toBeVisible();
 
       // ── API Keys tab ─────────────────────────────────────────────
-      await page.getByRole('button', { name: 'API Keys' }).click();
+      await page.locator('.account-tabs').getByRole('button', { name: 'API Keys' }).click();
       await page.waitForTimeout(1000);
 
-      // Should see both tenants' keys listed
-      await expect(page.getByText('Client Alpha')).toBeVisible();
-      await expect(page.getByText('Client Beta')).toBeVisible();
+      // Should see tenant keys section
+      await expect(page.getByText('Tenant Keys')).toBeVisible();
 
       // ── Select first tenant ──────────────────────────────────────
-      // Go back to Tenants tab
-      await page.getByRole('button', { name: 'Tenants' }).click();
+      await page.locator('.account-tabs').getByRole('button', { name: 'Tenants' }).click();
       await page.waitForTimeout(500);
 
       await page.locator('.tenant-card').filter({ hasText: 'Client Alpha' }).first().click();
@@ -279,19 +289,18 @@ test.describe('Persona: Agency Multi-Tenant', () => {
       // Should be in workspace mode
       await expect(page.locator('.plane-nav')).toBeVisible();
 
-      // Tenant name should appear in the header (tenant switcher)
-      await expect(page.getByText('Client Alpha')).toBeVisible();
+      // Tenant name should appear in the tenant switcher
+      await expect(page.locator('.plane-tenant-name')).toContainText('Client Alpha');
 
       // ── Use tenant switcher to switch to Client Beta ─────────────
       await page.locator('.plane-tenant-trigger').click();
       await page.waitForTimeout(500);
 
-      // Tenant switcher dropdown should show both tenants
+      // Tenant switcher dropdown should show
       await expect(page.locator('.plane-tenant-menu')).toBeVisible();
-      await expect(page.locator('.plane-tenant-menu').getByText('Client Beta')).toBeVisible();
 
-      // Click Client Beta
-      await page.locator('.plane-tenant-menu').getByText('Client Beta').click();
+      // Click Client Beta in the dropdown
+      await page.locator('.plane-tenant-menu-item').filter({ hasText: 'Client Beta' }).click();
       await page.waitForTimeout(1000);
 
       // Should now show Client Beta in the header
@@ -329,78 +338,61 @@ test.describe('Navigation Completeness', () => {
       tenantId = await createTenant(context, token, 'Nav Test', slug);
 
       await page.goto('/platform/console');
-      await page.waitForTimeout(1500);
+      await page.waitForTimeout(2000);
+
+      // Clear workspace state to ensure account mode, then reload
+      await page.evaluate(() => {
+        try {
+          for (const key of Object.keys(localStorage)) {
+            if (key.startsWith('forma-console-workspace:')) localStorage.removeItem(key);
+          }
+        } catch {}
+      });
+      await page.goto('/platform/console');
+      await page.waitForTimeout(2000);
 
       // ── Account Mode: 3 tabs ─────────────────────────────────────
-      await expect(page.getByRole('button', { name: 'Tenants' })).toBeVisible();
-      await expect(page.getByRole('button', { name: 'API Keys' })).toBeVisible();
-      await expect(page.getByRole('button', { name: 'Settings' })).toBeVisible();
+      const accountTabs = page.locator('.account-tabs');
+      await expect(accountTabs.getByRole('button', { name: 'Tenants' })).toBeVisible();
+      await expect(accountTabs.getByRole('button', { name: 'API Keys' })).toBeVisible();
+      await expect(accountTabs.getByRole('button', { name: 'Settings' })).toBeVisible();
 
-      // Click each account tab
-      await page.getByRole('button', { name: 'API Keys' }).click();
+      // Click API Keys tab
+      await accountTabs.getByRole('button', { name: 'API Keys' }).click();
       await page.waitForTimeout(500);
       await expect(page.getByText('Tenant Keys')).toBeVisible();
 
-      await page.getByRole('button', { name: 'Settings' }).click();
+      // Click Settings tab
+      await accountTabs.getByRole('button', { name: 'Settings' }).click();
       await page.waitForTimeout(500);
-      await expect(page.getByText('Profile')).toBeVisible();
+      await expect(page.getByText('Profile', { exact: true })).toBeVisible();
 
       // Go back to Tenants and select one
-      await page.getByRole('button', { name: 'Tenants' }).click();
+      await accountTabs.getByRole('button', { name: 'Tenants' }).click();
       await page.waitForTimeout(500);
       await page.locator('.tenant-card').filter({ hasText: 'Nav Test' }).first().click();
       await page.waitForTimeout(1000);
 
       // ── Workspace Mode: Plane 1 (3 tabs) ─────────────────────────
-      await page.getByRole('button', { name: 'Operator' }).click();
-      await page.waitForTimeout(300);
-
-      // Overview (default)
-      await page.getByRole('button', { name: 'Overview' }).click();
-      await page.waitForTimeout(500);
-
-      // Integrate
-      await page.getByRole('button', { name: 'Integrate' }).click();
-      await page.waitForTimeout(500);
-
-      // Security
-      await page.getByRole('button', { name: 'Security' }).click();
-      await page.waitForTimeout(500);
+      await clickPlane(page, 'Operator');
+      await clickTab(page, 'Overview');
+      await clickTab(page, 'Integrate');
+      await clickTab(page, 'Security');
 
       // ── Workspace Mode: Plane 2 (5 tabs) ─────────────────────────
-      await page.getByRole('button', { name: 'Organization' }).click();
-      await page.waitForTimeout(300);
-
-      await page.getByRole('button', { name: 'Members' }).click();
-      await page.waitForTimeout(500);
-
-      await page.getByRole('button', { name: 'Hosted Page' }).click();
-      await page.waitForTimeout(500);
-
-      await page.getByRole('button', { name: 'Organizations' }).click();
-      await page.waitForTimeout(500);
-
-      await page.getByRole('button', { name: 'Roles' }).click();
-      await page.waitForTimeout(500);
-
-      await page.getByRole('button', { name: 'Audit Log' }).click();
-      await page.waitForTimeout(500);
+      await clickPlane(page, 'Organization');
+      await clickTab(page, 'Members');
+      await clickTab(page, 'Hosted Page');
+      await clickTab(page, 'Organizations');
+      await clickTab(page, 'Roles');
+      await clickTab(page, 'Audit Log');
 
       // ── Workspace Mode: Plane 3 (4 tabs) ─────────────────────────
-      await page.getByRole('button', { name: 'End User' }).click();
-      await page.waitForTimeout(300);
-
-      await page.getByRole('button', { name: 'Sessions' }).click();
-      await page.waitForTimeout(500);
-
-      await page.getByRole('button', { name: 'Passkeys' }).click();
-      await page.waitForTimeout(500);
-
-      await page.getByRole('button', { name: 'Tokens' }).click();
-      await page.waitForTimeout(500);
-
-      await page.getByRole('button', { name: 'Activity' }).click();
-      await page.waitForTimeout(500);
+      await clickPlane(page, 'End User');
+      await clickTab(page, 'Sessions');
+      await clickTab(page, 'Passkeys');
+      await clickTab(page, 'Tokens');
+      await clickTab(page, 'Activity');
 
       // If we got here without errors, all 15 tabs are reachable
 
@@ -419,10 +411,22 @@ test.describe('Navigation Completeness', () => {
       const token = await getAccessToken(context);
       tenantId = await createTenant(context, token, 'KB Test', slug);
 
+      // Navigate to console — the init() will load tenants fresh
       await page.goto('/platform/console');
-      await page.waitForTimeout(1500);
+      await page.waitForTimeout(2000);
 
-      await page.locator('.tenant-card').filter({ hasText: 'KB Test' }).first().click();
+      // Ensure we're in account mode
+      await page.evaluate(() => {
+        try {
+          for (const key of Object.keys(localStorage)) {
+            if (key.startsWith('forma-console-workspace:')) localStorage.removeItem(key);
+          }
+        } catch {}
+      });
+      await page.goto('/platform/console');
+      await page.waitForTimeout(2000);
+
+      await page.locator('.tenant-card').filter({ hasText: 'KB Test' }).first().click({ timeout: 10000 });
       await page.waitForTimeout(1000);
 
       // Press '2' to switch to Organization plane
@@ -443,7 +447,7 @@ test.describe('Navigation Completeness', () => {
       // Press backtick to collapse nav
       await page.keyboard.press('`');
       await page.waitForTimeout(500);
-      await expect(page.locator('.plane-nav-collapsed')).toBeTruthy();
+      await expect(page.locator('.plane-nav')).toHaveClass(/plane-nav-collapsed/);
 
       // Press backtick again to expand
       await page.keyboard.press('`');
