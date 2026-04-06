@@ -31,6 +31,7 @@ import {
   type TenantWorkspaceView,
   mode, accountTab, setAccountTab, type AccountTab,
   platformRole,
+  canEdit,
   serverUrl,
 } from './store';
 
@@ -54,6 +55,7 @@ function TenantsList() {
         h('button', {
           type: 'button',
           class: 'clip-btn',
+          disabled: () => !canEdit(),
           onClick: () => setShowCreate(true),
         }, '+ New Workspace'),
       ),
@@ -73,6 +75,7 @@ function TenantsList() {
             h('button', {
               type: 'button',
               class: 'clip-btn',
+              disabled: () => !canEdit(),
               onClick: async () => {
                 const slug = 'my-app-' + Math.random().toString(36).slice(2, 8);
                 const created = await createTenant({ name: 'My App', slug });
@@ -85,6 +88,7 @@ function TenantsList() {
             h('button', {
               type: 'button',
               class: 'clip-btn-secondary',
+              disabled: () => !canEdit(),
               onClick: () => setShowCreate(true),
               style: 'margin-left: var(--space-sm)',
             }, '+ Custom Workspace'),

@@ -3,6 +3,7 @@ import { Skeleton } from '../../../core/components/ui/Skeleton';
 import {
   selectedTenant, allSessions, allSessionsLoading,
   revokeUserSessions, loadAllSessions,
+  canEdit,
   type TenantSession,
 } from '../store';
 
@@ -64,6 +65,7 @@ function SessionRow(s: TenantSession) {
       ),
       h('button', {
         class: 'btn btn-sm btn-ghost',
+        disabled: () => !canEdit(),
         onClick: async () => {
           await revokeUserSessions(tenantId, s.user_id);
           await loadAllSessions(tenantId);

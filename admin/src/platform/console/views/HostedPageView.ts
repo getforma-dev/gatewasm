@@ -1,7 +1,7 @@
 import { h, createEffect, createSignal } from 'formajs';
 import { Field } from '../../../core/components/ui/Field';
 import { CopyButton } from '../../../core/components/ui/CopyButton';
-import { selectedTenant, hostedPage, saveHostedPage } from '../store';
+import { selectedTenant, hostedPage, saveHostedPage, canEdit } from '../store';
 
 export function HostedPageView() {
   const tenant = selectedTenant()!;
@@ -124,6 +124,7 @@ export function HostedPageView() {
             value: headline,
             onChange: setHeadline,
             placeholder: 'Welcome to My App',
+            disabled: () => !canEdit(),
           }),
           h('div', { class: 'field' },
             h('label', null, 'Body Text'),
@@ -133,6 +134,7 @@ export function HostedPageView() {
               placeholder: 'Tell your visitors what this is about...',
               rows: 6,
               class: 'full-width-resize',
+              disabled: () => !canEdit(),
             }),
           ),
           h('div', { class: 'form-grid-two' },
@@ -142,6 +144,7 @@ export function HostedPageView() {
               value: ctaText,
               onChange: setCtaText,
               placeholder: 'Get Started',
+              disabled: () => !canEdit(),
             }),
             Field({
               label: 'CTA Button Link',
@@ -149,6 +152,7 @@ export function HostedPageView() {
               value: ctaLink,
               onChange: setCtaLink,
               placeholder: 'https://...',
+              disabled: () => !canEdit(),
             }),
           ),
         ),
@@ -161,13 +165,13 @@ export function HostedPageView() {
             h('button', {
               type: 'button',
               class: 'btn btn-sm btn-ghost',
-              disabled: () => saving() || !isDirty(),
+              disabled: () => saving() || !isDirty() || !canEdit(),
               onClick: resetDraft,
             }, 'Reset'),
             h('button', {
               type: 'button',
               class: 'btn btn-primary btn-sm',
-              disabled: () => saving() || !isDirty(),
+              disabled: () => saving() || !isDirty() || !canEdit(),
               onClick: save,
             }, () => saving() ? 'Saving...' : 'Save'),
           ),

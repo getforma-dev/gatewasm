@@ -8,6 +8,7 @@ import {
   openSessionInspector,
   invites, invitesLoading, sendInvite, revokeInvite,
   loadUserDetail, userDetail, setUserDetail,
+  canEdit,
   type UserSession, type TenantInvite,
 } from '../store';
 
@@ -225,11 +226,11 @@ export function UsersView() {
                       }, 'Auth Reference'),
                       h('div', { class: 'user-detail-toolbar-sep' }),
                       user.is_locked
-                        ? h('button', { class: 'btn btn-sm btn-ghost', onClick: () => unblockUser(tenantState().id, user.id) }, 'Unblock')
-                        : h('button', { class: 'btn btn-sm btn-ghost', onClick: () => blockUser(tenantState().id, user.id) }, 'Block'),
+                        ? h('button', { class: 'btn btn-sm btn-ghost', disabled: () => !canEdit(), onClick: () => unblockUser(tenantState().id, user.id) }, 'Unblock')
+                        : h('button', { class: 'btn btn-sm btn-ghost', disabled: () => !canEdit(), onClick: () => blockUser(tenantState().id, user.id) }, 'Block'),
                       h('button', {
                         class: 'btn btn-sm btn-ghost',
-                        disabled: () => user.active_sessions === 0,
+                        disabled: () => user.active_sessions === 0 || !canEdit(),
                         onClick: () => revokeUserSessions(tenantState().id, user.id),
                       }, () => user.active_sessions > 0
                         ? 'Revoke ' + user.active_sessions + ' ' + (user.active_sessions === 1 ? 'Session' : 'Sessions')
@@ -302,12 +303,14 @@ function InvitesPanel(tenantId: string) {
               class: 'search-input invite-email-input',
               placeholder: 'colleague@example.com',
               value: inviteEmail,
+              disabled: () => !canEdit(),
               onInput: (e: Event) => setInviteEmail((e.target as HTMLInputElement).value),
               onKeyDown: (e: KeyboardEvent) => { if (e.key === 'Enter') void handleSend(); },
             }),
             h('select', {
               class: 'filter-select invite-role-select',
               value: inviteRole,
+              disabled: () => !canEdit(),
               onChange: (e: Event) => setInviteRole((e.target as HTMLSelectElement).value),
             },
               h('option', { value: 'role_admin' }, 'Admin'),
@@ -317,7 +320,7 @@ function InvitesPanel(tenantId: string) {
             h('button', {
               type: 'button',
               class: 'clip-btn',
-              disabled: () => sending() || !inviteEmail().trim(),
+              disabled: () => sending() || !inviteEmail().trim() || !canEdit(),
               onClick: () => void handleSend(),
             }, () => sending() ? 'Sending...' : 'Send Invite'),
           ),
@@ -360,6 +363,7 @@ function InvitesPanel(tenantId: string) {
                   ? h('button', {
                       type: 'button',
                       class: 'btn btn-sm btn-ghost invite-revoke-btn',
+                      disabled: () => !canEdit(),
                       onClick: () => void revokeInvite(tenantId, invite.id),
                     }, 'Revoke')
                   : null,

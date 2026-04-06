@@ -10,6 +10,7 @@ import {
   deleteWebhook,
   loadWebhookDeliveries,
   testWebhook,
+  canEdit,
   type IntegrateSection,
   type Webhook,
   type WebhookDelivery,
@@ -268,6 +269,7 @@ function WebhooksPanel() {
         h('button', {
           type: 'button',
           class: () => showCreate() ? 'btn btn-sm btn-ghost' : 'clip-btn',
+          disabled: () => !canEdit(),
           onClick: () => { setShowCreate(!showCreate()); setCreatedSecret(null); },
         }, () => showCreate() ? 'Cancel' : 'Create Webhook'),
       ),
@@ -496,21 +498,23 @@ function WebhookDetail(wh: Webhook, tenantId: string) {
       h('button', {
         type: 'button',
         class: 'btn btn-sm btn-ghost',
-        disabled: testing,
+        disabled: () => testing() || !canEdit(),
         onClick: handleTest,
       }, () => testing() ? 'Sending...' : 'Send Test'),
       h('button', {
         type: 'button',
         class: 'btn btn-sm btn-ghost',
-        disabled: toggling,
+        disabled: () => toggling() || !canEdit(),
         onClick: handleToggle,
       }, () => toggling() ? 'Updating...' : (wh.active ? 'Deactivate' : 'Activate')),
-      h('button', {
-        type: 'button',
-        class: 'btn btn-sm btn-danger',
-        disabled: deleting,
-        onClick: handleDelete,
-      }, () => deleting() ? 'Deleting...' : 'Delete'),
+      createShow(() => canEdit(), () =>
+        h('button', {
+          type: 'button',
+          class: 'btn btn-sm btn-danger',
+          disabled: deleting,
+          onClick: handleDelete,
+        }, () => deleting() ? 'Deleting...' : 'Delete'),
+      ),
     ),
     h('div', { class: 'webhook-deliveries' },
       h('h4', { class: 'section-subtitle' }, 'Recent Deliveries'),

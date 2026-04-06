@@ -2,7 +2,7 @@ import { h, createSignal, createShow } from 'formajs';
 import { Skeleton } from '../../../core/components/ui/Skeleton';
 import {
   selectedTenant, securityConfig, securityConfigLoading, tenantPlan,
-  saveSecurityConfig, type SecurityConfig,
+  saveSecurityConfig, canEdit, type SecurityConfig,
 } from '../store';
 
 function ToggleRow(label: string, value: () => boolean, onChange: () => void, locked?: boolean) {
@@ -12,6 +12,7 @@ function ToggleRow(label: string, value: () => boolean, onChange: () => void, lo
       ? h('span', { class: 'text-muted' }, 'Requires higher plan')
       : h('button', {
           class: () => 'btn btn-sm ' + (value() ? 'btn-primary' : 'btn-ghost'),
+          disabled: () => !canEdit(),
           onClick: onChange,
         }, () => value() ? 'Enabled' : 'Disabled'),
   );
@@ -27,6 +28,7 @@ function NumberRow(label: string, value: () => number, onSave: (v: number) => vo
           class: 'search-input',
           style: 'width:6rem',
           value: value,
+          disabled: () => !canEdit(),
           onBlur: (e: Event) => {
             const parsed = parseInt((e.target as HTMLInputElement).value, 10);
             if (!isNaN(parsed) && parsed !== value()) {

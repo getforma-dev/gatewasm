@@ -4,6 +4,7 @@ import {
   selectedTenant, organizations, organizationsLoading,
   createOrganization, deleteOrganization,
   loadOrgMembers, addOrgMember, removeOrgMember,
+  canEdit,
   type Organization, type OrgMember,
 } from '../store';
 
@@ -110,6 +111,7 @@ export function OrganizationsView() {
       h('div', { class: 'view-header-actions' },
         h('button', {
           class: () => showCreate() ? 'btn btn-sm btn-ghost' : 'clip-btn',
+          disabled: () => !canEdit(),
           onClick: () => setShowCreate(!showCreate()),
         }, () => showCreate() ? 'Cancel' : 'Create Organization'),
       ),
@@ -225,10 +227,12 @@ export function OrganizationsView() {
                                   m.role + (m.name ? ' \u00b7 ' + m.name : ''),
                                 ),
                               ),
-                              h('button', {
-                                class: 'btn btn-xs btn-outline btn-danger',
-                                onClick: () => handleRemoveMember(org.id, m.user_id),
-                              }, 'Remove'),
+                              createShow(() => canEdit(), () =>
+                                h('button', {
+                                  class: 'btn btn-xs btn-outline btn-danger',
+                                  onClick: () => handleRemoveMember(org.id, m.user_id),
+                                }, 'Remove'),
+                              ),
                             ),
                           ),
                         ),
@@ -245,11 +249,13 @@ export function OrganizationsView() {
                           class: 'search-input',
                           placeholder: 'User ID (e.g. usr_...)',
                           value: addUserId,
+                          disabled: () => !canEdit(),
                           onInput: (e: Event) => setAddUserId((e.target as HTMLInputElement).value),
                         }),
                         h('select', {
                           class: 'filter-select',
                           value: addRole,
+                          disabled: () => !canEdit(),
                           onChange: (e: Event) => setAddRole((e.target as HTMLSelectElement).value),
                         },
                           h('option', { value: 'member' }, 'member'),
@@ -258,7 +264,7 @@ export function OrganizationsView() {
                         ),
                         h('button', {
                           class: 'btn btn-xs btn-primary',
-                          disabled: () => !addUserId().trim(),
+                          disabled: () => !addUserId().trim() || !canEdit(),
                           onClick: () => handleAddMember(org.id),
                         }, 'Add'),
                       ),
@@ -270,16 +276,18 @@ export function OrganizationsView() {
                       'ID: ' + org.id,
                     ),
                     h('div', { class: 'user-detail-footer-actions' },
-                      h('button', {
-                        class: 'btn btn-xs btn-outline btn-danger',
-                        onClick: () => {
-                          if (confirm('Delete organization "' + org.name + '"? This cannot be undone.')) {
-                            void deleteOrganization(tenantId(), org.id);
-                            setExpandedId(null);
-                            setMembers([]);
-                          }
-                        },
-                      }, 'Delete Organization'),
+                      createShow(() => canEdit(), () =>
+                        h('button', {
+                          class: 'btn btn-xs btn-outline btn-danger',
+                          onClick: () => {
+                            if (confirm('Delete organization "' + org.name + '"? This cannot be undone.')) {
+                              void deleteOrganization(tenantId(), org.id);
+                              setExpandedId(null);
+                              setMembers([]);
+                            }
+                          },
+                        }, 'Delete Organization'),
+                      ),
                     ),
                   ),
                 ),

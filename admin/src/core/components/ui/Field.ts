@@ -10,6 +10,7 @@ export function Field(props: {
   hint?: string;
   required?: boolean;
   readonly?: boolean;
+  disabled?: () => boolean;
 }) {
   const inputId = 'field-' + props.name;
   const input = props.type === 'select'
@@ -17,6 +18,7 @@ export function Field(props: {
         id: inputId,
         name: props.name,
         value: props.value,
+        disabled: props.disabled,
         onChange: (e: Event) => props.onChange?.((e.target as HTMLSelectElement).value),
       })
     : props.type === 'textarea'
@@ -25,6 +27,7 @@ export function Field(props: {
         name: props.name,
         value: props.value,
         placeholder: props.placeholder,
+        disabled: props.disabled,
         onInput: (e: Event) => props.onChange?.((e.target as HTMLTextAreaElement).value),
       })
     : h('input', {
@@ -35,6 +38,7 @@ export function Field(props: {
         placeholder: props.placeholder,
         required: props.required,
         readOnly: props.readonly,
+        disabled: props.disabled,
         onInput: (e: Event) => props.onChange?.((e.target as HTMLInputElement).value),
       });
 

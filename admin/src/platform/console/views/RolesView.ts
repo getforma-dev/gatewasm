@@ -2,7 +2,7 @@ import { h, createSignal, createShow } from 'formajs';
 import { Skeleton } from '../../../core/components/ui/Skeleton';
 import {
   selectedTenant, roles, rolesLoading,
-  createRole, deleteRole, type Role,
+  createRole, deleteRole, canEdit, type Role,
 } from '../store';
 
 export function RolesView() {
@@ -33,6 +33,7 @@ export function RolesView() {
       h('div', { class: 'view-header-actions' },
         h('button', {
           class: () => showCreate() ? 'btn btn-sm btn-ghost' : 'clip-btn',
+          disabled: () => !canEdit(),
           onClick: () => setShowCreate(!showCreate()),
         }, () => showCreate() ? 'Cancel' : 'Create Role'),
       ),
@@ -114,10 +115,12 @@ function RoleRow(role: Role, tenantId: string) {
         ),
       ),
       !role.is_system
-        ? h('button', {
-            class: 'btn btn-sm btn-ghost',
-            onClick: () => deleteRole(tenantId, role.id),
-          }, 'Delete')
+        ? createShow(() => canEdit(), () =>
+            h('button', {
+              class: 'btn btn-sm btn-ghost',
+              onClick: () => deleteRole(tenantId, role.id),
+            }, 'Delete'),
+          )
         : null,
     ),
   );
