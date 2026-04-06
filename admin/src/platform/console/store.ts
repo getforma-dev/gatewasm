@@ -104,10 +104,8 @@ export interface PlatformUser {
 }
 
 export type ConsoleView =
-  | 'tenants'
   | 'overview'
   | 'integrate'
-  | 'settings'
   | 'members'
   | 'hosted-page'
   | 'roles'
@@ -117,11 +115,14 @@ export type ConsoleView =
   | 'tokens'
   | 'activity';
 
-export type TenantWorkspaceView = Exclude<ConsoleView, 'tenants'>;
+export type TenantWorkspaceView = ConsoleView;
 export type IntegrateSection = 'guide' | 'session-inspector';
 export type OverviewWindow = '24h' | '7d' | '30d';
 
 export type Plane = 'operator' | 'organization' | 'enduser';
+
+export type AppMode = 'account' | 'workspace';
+export type AccountTab = 'tenants' | 'api-keys' | 'account-settings';
 
 export interface PlaneTab {
   id: string;
@@ -134,8 +135,7 @@ export const PLANES: { key: Plane; label: string; sector: string; num: number; t
     key: 'operator', label: 'Operator', sector: 'SEC-01', num: 1,
     tabs: [
       { id: 'overview', label: 'Overview', shortcut: '\u2325\u0031' },
-      { id: 'tenants', label: 'Tenants', shortcut: '\u2325\u0032' },
-      { id: 'integrate', label: 'Integrate', shortcut: '\u2325\u0033' },
+      { id: 'integrate', label: 'Integrate', shortcut: '\u2325\u0032' },
     ],
   },
   {
@@ -163,6 +163,8 @@ interface PersistedConsoleWorkspace {
   view: ConsoleView;
   integrateSection: IntegrateSection;
   plane: Plane;
+  mode: AppMode;
+  accountTab: AccountTab;
 }
 
 // ── State ───────────────────────────────────────────────────────────────
@@ -171,7 +173,7 @@ export const [tenants, setTenants] = createSignal<Tenant[]>([]);
 export const [selectedTenant, setSelectedTenant] = createSignal<Tenant | null>(null);
 export const [selectedTenantStats, setSelectedTenantStats] = createSignal<TenantStats | null>(null);
 export const [loading, setLoading] = createSignal(false);
-export const [view, setView] = createSignal<ConsoleView>('tenants');
+export const [view, setView] = createSignal<ConsoleView>('overview');
 export const [users, setUsers] = createSignal<TenantUser[]>([]);
 export const [usersLoading, setUsersLoading] = createSignal(false);
 export const [hostedPage, setHostedPage] = createSignal<HostedPageData | null>(null);
@@ -184,6 +186,8 @@ export const [integrateSection, setIntegrateSectionSignal] = createSignal<Integr
 export const [overviewWindow, setOverviewWindowSignal] = createSignal<OverviewWindow>('7d');
 export const [currentUser, setCurrentUser] = createSignal<PlatformUser | null>(null);
 export const [plane, setPlaneSignal] = createSignal<Plane>('operator');
+export const [mode, setMode] = createSignal<AppMode>('account');
+export const [accountTab, setAccountTab] = createSignal<AccountTab>('tenants');
 
 let tenantDetailRequestSeq = 0;
 let usersRequestSeq = 0;
@@ -260,13 +264,36 @@ function readWorkspaceState(): PersistedConsoleWorkspace | null {
     if (!raw) {
       return null;
     }
-    const parsed = JSON.parse(raw) as Partial<PersistedConsoleWorkspace>;
+    const parsed = JSON.parse(raw) as Partial<PersistedConsoleWorkspace> & { view?: string };
     // Backward compat: 'users' was renamed to 'members'
-    if ((parsed as any).view === 'users') (parsed as any).view = 'members';
+    if (parsed.view === 'users') parsed.view = 'members';
+
+    // Backward compat: 'tenants' and 'settings' are no longer ConsoleView values
+    let resolvedMode: AppMode;
+    let resolvedAccountTab: AccountTab;
+    if (parsed.view === 'tenants') {
+      resolvedMode = 'account';
+      resolvedAccountTab = 'tenants';
+      parsed.view = 'overview';
+    } else if (parsed.view === 'settings') {
+      resolvedMode = 'account';
+      resolvedAccountTab = 'account-settings';
+      parsed.view = 'overview';
+    } else {
+      const validAccountTabs: AccountTab[] = ['tenants', 'api-keys', 'account-settings'];
+      resolvedAccountTab = (typeof parsed.accountTab === 'string' && validAccountTabs.includes(parsed.accountTab as AccountTab))
+        ? (parsed.accountTab as AccountTab)
+        : 'tenants';
+      // Derive mode from tenantId
+      resolvedMode = (typeof parsed.mode === 'string' && (parsed.mode === 'account' || parsed.mode === 'workspace'))
+        ? (parsed.mode as AppMode)
+        : (typeof parsed.tenantId === 'string' ? 'workspace' : 'account');
+    }
+
     const nextView = parsed.view;
     const nextSection = parsed.integrateSection;
     const validViews: ConsoleView[] = [
-      'tenants', 'overview', 'integrate', 'settings',
+      'overview', 'integrate',
       'members', 'hosted-page', 'roles', 'audit-log',
       'sessions', 'passkeys', 'tokens', 'activity',
     ];
@@ -282,6 +309,8 @@ function readWorkspaceState(): PersistedConsoleWorkspace | null {
       plane: (typeof nextPlane === 'string' && validPlanes.includes(nextPlane as Plane))
         ? (nextPlane as Plane)
         : planeForView(nextView as ConsoleView),
+      mode: resolvedMode,
+      accountTab: resolvedAccountTab,
     };
   } catch {
     return null;
@@ -300,6 +329,8 @@ function persistWorkspaceState(): void {
       view: view(),
       integrateSection: integrateSection(),
       plane: plane(),
+      mode: mode(),
+      accountTab: accountTab(),
     };
     window.localStorage.setItem(storageKey, JSON.stringify(snapshot));
   } catch {
@@ -309,7 +340,13 @@ function persistWorkspaceState(): void {
 
 async function restoreWorkspaceState(): Promise<void> {
   const snapshot = readWorkspaceState();
-  if (!snapshot || !snapshot.tenantId || snapshot.view === 'tenants') {
+  if (!snapshot || !snapshot.tenantId) {
+    if (snapshot) {
+      batch(() => {
+        setMode(snapshot.mode);
+        setAccountTab(snapshot.accountTab);
+      });
+    }
     persistWorkspaceState();
     return;
   }
@@ -328,6 +365,8 @@ async function restoreWorkspaceState(): Promise<void> {
     setIntegrateSectionSignal(snapshot.integrateSection);
     setView(restoredView);
     setPlaneSignal(snapshot.plane || planeForView(restoredView));
+    setMode(snapshot.mode);
+    setAccountTab(snapshot.accountTab);
   });
 
   persistWorkspaceState();
@@ -747,7 +786,7 @@ export async function refreshCurrentView(): Promise<void> {
   const currentView = view();
   const tenant = selectedTenant();
 
-  if (currentView === 'tenants' || !tenant) {
+  if (mode() === 'account' || !tenant) {
     await Promise.all([loadTenants(), loadCurrentUser()]);
     return;
   }
@@ -768,6 +807,8 @@ export function selectTenant(tenant: Tenant): void {
     setSelectedTenant(tenant);
     resetTenantScopedState();
     setView(nextView);
+    setPlaneSignal(planeForView(nextView));
+    setMode('workspace');
   });
 
   persistWorkspaceState();
@@ -785,7 +826,8 @@ export function backToTenants(): void {
     setLoading(false);
     setSelectedTenant(null);
     resetTenantScopedState();
-    setView('tenants');
+    setMode('account');
+    setAccountTab('tenants');
   });
   persistWorkspaceState();
 }
