@@ -1425,12 +1425,8 @@ function switchToWorkspaceInternal(tenant: Tenant): void {
     setMode('workspace');
   });
   persistWorkspaceState();
-  void Promise.all([
-    loadTenantDetail(tenant.id, overviewWindow()),
-    loadIntrospect(tenant.slug),
-    hydrateTenantView(nextView, tenant),
-  ]);
-  syncIntrospectRefresh(tenant.slug);
+  // hydrateTenantView handles all data loading (including loadTenantDetail for overview)
+  void hydrateTenantView(nextView, tenant);
 }
 
 // Internal: switch to account mode without pushing history
