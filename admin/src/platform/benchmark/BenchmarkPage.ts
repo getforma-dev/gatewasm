@@ -21,7 +21,10 @@ export function BenchmarkPage() {
     // ── Brand header (pure static — rendered as opcodes) ──────────
     h('div', { class: 'brand-header' },
       FAuthMark(18),
-      h('span', null, 'Forma Auth'),
+      h('span', { class: 'footer-brand-text' },
+        h('span', { class: 'footer-brand-forma' }, 'Forma'),
+        h('span', { class: 'footer-brand-auth' }, 'Auth'),
+      ),
       h('span', { class: 'brand-separator' }, '/'),
       h('span', { class: 'brand-page-title' }, 'Benchmark'),
     ),
@@ -37,7 +40,10 @@ export function BenchmarkPage() {
     h('footer', { class: 'page-footer text-center pt-sm' },
       h('div', { class: 'footer-badge inline-flex-center gap-xs text-xxs footer-muted' },
         FAuthMark(16),
-        'Forma Auth',
+        h('span', { class: 'footer-brand-text' },
+          h('span', { class: 'footer-brand-forma' }, 'Forma'),
+          h('span', { class: 'footer-brand-auth' }, 'Auth'),
+        ),
       ),
     ),
   );

@@ -46,7 +46,10 @@ export function OnboardingPage() {
       "div",
       { class: "brand-header" },
       FAuthMark(18),
-      h("span", null, "Forma Auth"),
+      h('span', { class: 'footer-brand-text' },
+        h('span', { class: 'footer-brand-forma' }, 'Forma'),
+        h('span', { class: 'footer-brand-auth' }, 'Auth'),
+      ),
     ),
 
     // ── Hero section (pure static) ──────────────────────────────────
@@ -134,7 +137,10 @@ export function OnboardingPage() {
           class: "footer-badge inline-flex-center gap-xs text-xxs footer-muted",
         },
         FAuthMark(16),
-        "Forma Auth",
+        h('span', { class: 'footer-brand-text' },
+          h('span', { class: 'footer-brand-forma' }, 'Forma'),
+          h('span', { class: 'footer-brand-auth' }, 'Auth'),
+        ),
       ),
     ),
   );

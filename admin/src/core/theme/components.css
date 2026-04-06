@@ -984,11 +984,11 @@
 }
 
 .plane-product-name {
-  font-family: Rajdhani, sans-serif;
+  font-family: 'Orbitron', sans-serif;
   font-weight: 700;
   font-size: 15px;
-  letter-spacing: 0.04em;
-  color: var(--text);
+  letter-spacing: 1px;
+  color: #c4a265;
 }
 
 .plane-domain {

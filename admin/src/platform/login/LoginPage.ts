@@ -73,7 +73,10 @@ export function LoginPage() {
     h('footer', { class: 'page-footer' },
       h('div', { class: 'footer-badge' },
         FAuthMark(16),
-        'Forma Auth',
+        h('span', { class: 'footer-brand-text' },
+          h('span', { class: 'footer-brand-forma' }, 'Forma'),
+          h('span', { class: 'footer-brand-auth' }, 'Auth'),
+        ),
       ),
     ),
   );
