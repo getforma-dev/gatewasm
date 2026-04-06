@@ -361,6 +361,57 @@ pub fn tenant_invite_email_content(
     (subject, text, html)
 }
 
+/// Build the subject / text / HTML for a platform team invite email.
+pub fn platform_team_invite_email_content(
+    invite_url: &str,
+    role: &str,
+    invited_by_email: &str,
+    tenant_names: &[String],
+) -> (String, String, String) {
+    let role_display = match role {
+        "admin" => "Admin",
+        "editor" => "Editor",
+        "viewer" => "Viewer",
+        other => other,
+    };
+
+    let tenant_line = if tenant_names.is_empty() {
+        "You'll have access to all workspaces.".to_string()
+    } else {
+        format!("You'll have access to: {}.", tenant_names.join(", "))
+    };
+
+    let escaped_invite_url = escape_html(invite_url);
+    let escaped_role_display = escape_html(role_display);
+    let escaped_invited_by = escape_html(invited_by_email);
+    let escaped_tenant_line = escape_html(&tenant_line);
+
+    let subject = "You've been invited to join the fAuth platform team".to_string();
+
+    let text = format!(
+        "You have been invited to join the fAuth platform team as {role_display}.\n\nInvited by: {invited_by_email}\n\n{tenant_line}\n\nAccept invite:\n{invite_url}\n\nThis invite expires soon."
+    );
+
+    let inner = format!(
+        r#"<h1 style="margin:0 0 16px;font-size:22px;font-weight:700;color:#111827;">You're invited to the platform team</h1>
+<p style="margin:0 0 8px;">You have been invited to join the <strong>fAuth platform team</strong> with the role <strong>{escaped_role_display}</strong>.</p>
+<p style="margin:0 0 8px;">Invited by <strong>{escaped_invited_by}</strong>.</p>
+<p style="margin:0 0 16px;">{escaped_tenant_line}</p>
+{button}
+<p style="margin:0;font-size:13px;color:#6b7280;">If the button doesn't work, copy and paste this link into your browser:</p>
+<p style="margin:4px 0 0;font-size:13px;word-break:break-all;color:#4f46e5;"><a href="{escaped_invite_url}" style="color:#4f46e5;">{escaped_invite_url}</a></p>
+<p style="margin:16px 0 0;font-size:13px;color:#6b7280;">This invite expires soon.</p>"#,
+        escaped_role_display = escaped_role_display,
+        escaped_invited_by = escaped_invited_by,
+        escaped_tenant_line = escaped_tenant_line,
+        button = email_button(&escaped_invite_url, "Accept invite"),
+        escaped_invite_url = escaped_invite_url,
+    );
+    let html = email_html_wrapper(&inner);
+
+    (subject, text, html)
+}
+
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
@@ -368,6 +419,54 @@ pub fn tenant_invite_email_content(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn platform_team_invite_subject_and_role_mapping() {
+        let (subject, text, html) = platform_team_invite_email_content(
+            "https://example.com/invite?tok=abc&x=1",
+            "admin",
+            "alice@example.com",
+            &["Acme".to_string(), "Beta Corp".to_string()],
+        );
+
+        assert_eq!(subject, "You've been invited to join the fAuth platform team");
+        assert!(text.contains("Admin"));
+        assert!(text.contains("alice@example.com"));
+        assert!(text.contains("Acme, Beta Corp"));
+        assert!(html.contains("<!DOCTYPE html>"));
+        assert!(html.contains("Admin"));
+        assert!(html.contains("alice@example.com"));
+        // URL ampersand must be escaped in HTML
+        assert!(html.contains("tok=abc&amp;x=1"));
+        assert!(!html.contains("tok=abc&x=1"));
+    }
+
+    #[test]
+    fn platform_team_invite_empty_tenants_shows_all_workspaces() {
+        let (_, text, html) = platform_team_invite_email_content(
+            "https://example.com/invite",
+            "viewer",
+            "bob@example.com",
+            &[],
+        );
+
+        assert!(text.contains("You'll have access to all workspaces."));
+        assert!(html.contains("You&#39;ll have access to all workspaces."));
+    }
+
+    #[test]
+    fn platform_team_invite_escapes_untrusted_inputs() {
+        let (_, _, html) = platform_team_invite_email_content(
+            "https://example.com/invite",
+            "editor",
+            "evil<script>@example.com",
+            &["Tenant <X>".to_string()],
+        );
+
+        assert!(html.contains("evil&lt;script&gt;@example.com"));
+        assert!(html.contains("Tenant &lt;X&gt;"));
+        assert!(!html.contains("<script>"));
+    }
 
     #[test]
     fn invite_html_escapes_untrusted_inputs() {
