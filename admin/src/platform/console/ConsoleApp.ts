@@ -12,6 +12,7 @@ import { UsersView } from './views/UsersView';
 import { IntegrateView } from './views/IntegrateView';
 import { HostedPageView } from './views/HostedPageView';
 import { AuditLogView } from './views/AuditLogView';
+import { ActivityView } from './views/ActivityView';
 import {
   view, loading, toast, backToTenants, signout,
   selectedTenant, tenants, selectTenant, createTenant, currentUser,
@@ -507,7 +508,7 @@ export function ConsoleApp() {
                     { match: 'sessions', render: () => ComingSoonView('Sessions') },
                     { match: 'passkeys', render: () => ComingSoonView('Passkeys') },
                     { match: 'tokens', render: () => ComingSoonView('Tokens') },
-                    { match: 'activity', render: () => ComingSoonView('Activity') },
+                    { match: 'activity', render: () => ActivityView() },
                   ],
                 ),
               ),
