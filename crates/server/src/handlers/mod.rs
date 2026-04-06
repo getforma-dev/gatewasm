@@ -410,6 +410,14 @@ fn create_router_inner(state: AppState, rate_limit_enabled: bool) -> Router {
             get(onboarding::list_tenant_passkeys),
         )
         .route(
+            "/platform/self-serve/tenants/{id}/roles",
+            get(onboarding::list_tenant_roles).post(onboarding::create_tenant_role),
+        )
+        .route(
+            "/platform/self-serve/tenants/{id}/roles/{role_id}",
+            patch(onboarding::update_tenant_role).delete(onboarding::delete_tenant_role),
+        )
+        .route(
             "/platform/self-serve/tenants/{id}/hosted-page",
             get(onboarding::get_hosted_page).put(onboarding::update_hosted_page),
         )

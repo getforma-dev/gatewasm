@@ -117,6 +117,16 @@ export interface Passkey {
   last_used_at: string | null;
 }
 
+export interface Role {
+  id: string;
+  name: string;
+  description: string | null;
+  is_system: boolean;
+  permissions: string[];
+  tenant_id: string | null;
+  created_at: string;
+}
+
 export interface HostedPageData {
   headline: string;
   body: string;
@@ -223,6 +233,8 @@ export const [allSessions, setAllSessions] = createSignal<TenantSession[]>([]);
 export const [allSessionsLoading, setAllSessionsLoading] = createSignal(false);
 export const [passkeys, setPasskeys] = createSignal<Passkey[]>([]);
 export const [passkeysLoading, setPasskeysLoading] = createSignal(false);
+export const [roles, setRoles] = createSignal<Role[]>([]);
+export const [rolesLoading, setRolesLoading] = createSignal(false);
 export const [jwks, setJwks] = createSignal<any>(null);
 export const [integrateSection, setIntegrateSectionSignal] = createSignal<IntegrateSection>('guide');
 export const [overviewWindow, setOverviewWindowSignal] = createSignal<OverviewWindow>('7d');
@@ -273,6 +285,8 @@ function resetTenantScopedState(): void {
     setAllSessionsLoading(false);
     setPasskeys([]);
     setPasskeysLoading(false);
+    setRoles([]);
+    setRolesLoading(false);
     setJwks(null);
     setIntegrateSectionSignal('guide');
     setOverviewWindowSignal('7d');
@@ -652,6 +666,43 @@ export async function loadPasskeys(tenantId: string): Promise<void> {
   }
 }
 
+export async function loadRoles(tenantId: string): Promise<void> {
+  setRolesLoading(true);
+  try {
+    const data = await api.get<{ roles: Role[] }>(
+      '/platform/self-serve/tenants/' + encodeURIComponent(tenantId) + '/roles',
+    );
+    if (selectedTenant()?.id !== tenantId) return;
+    setRoles(data.roles || []);
+  } catch (e) {
+    toast.show(e instanceof Error ? e.message : 'Failed to load roles', 'error');
+  } finally {
+    setRolesLoading(false);
+  }
+}
+
+export async function createRole(tenantId: string, name: string, description: string): Promise<boolean> {
+  try {
+    await api.post('/platform/self-serve/tenants/' + encodeURIComponent(tenantId) + '/roles', { name, description, permissions: [] });
+    toast.show('Role created', 'success');
+    await loadRoles(tenantId);
+    return true;
+  } catch (e) {
+    toast.show(e instanceof Error ? e.message : 'Failed to create role', 'error');
+    return false;
+  }
+}
+
+export async function deleteRole(tenantId: string, roleId: string): Promise<void> {
+  try {
+    await api.del('/platform/self-serve/tenants/' + encodeURIComponent(tenantId) + '/roles/' + encodeURIComponent(roleId));
+    toast.show('Role deleted', 'success');
+    await loadRoles(tenantId);
+  } catch (e) {
+    toast.show(e instanceof Error ? e.message : 'Failed to delete role', 'error');
+  }
+}
+
 export async function loadJwks(slug: string): Promise<void> {
   try {
     const res = await fetch('/t/' + encodeURIComponent(slug) + '/auth/jwks');
@@ -821,6 +872,8 @@ async function hydrateTenantView(nextView: TenantWorkspaceView, tenant: Tenant):
     tasks.push(loadAllSessions(tenant.id));
   } else if (nextView === 'passkeys') {
     tasks.push(loadPasskeys(tenant.id));
+  } else if (nextView === 'roles') {
+    tasks.push(loadRoles(tenant.id));
   } else if (nextView === 'tokens') {
     tasks.push(loadJwks(tenant.slug));
   }

@@ -15,6 +15,7 @@ import { AuditLogView } from './views/AuditLogView';
 import { ActivityView } from './views/ActivityView';
 import { SessionsView } from './views/SessionsView';
 import { PasskeysView } from './views/PasskeysView';
+import { RolesView } from './views/RolesView';
 import { TokensView } from './views/TokensView';
 import {
   view, loading, toast, backToTenants, signout,
@@ -506,7 +507,7 @@ export function ConsoleApp() {
                     { match: 'members', render: () => UsersView() },
                     { match: 'integrate', render: () => IntegrateView() },
                     { match: 'hosted-page', render: () => HostedPageView() },
-                    { match: 'roles', render: () => ComingSoonView('Roles') },
+                    { match: 'roles', render: () => RolesView() },
                     { match: 'audit-log', render: () => AuditLogView() },
                     { match: 'sessions', render: () => SessionsView() },
                     { match: 'passkeys', render: () => PasskeysView() },

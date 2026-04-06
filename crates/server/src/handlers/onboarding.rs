@@ -1709,6 +1709,278 @@ pub async fn list_tenant_passkeys(
     Ok(Json(serde_json::json!({ "passkeys": passkeys })))
 }
 
+// ── Role CRUD ─────────────────────────────────────────────────────────
+
+/// GET /platform/self-serve/tenants/{id}/roles
+pub async fn list_tenant_roles(
+    State(state): State<AppState>,
+    Path(tenant_id): Path<String>,
+    req: axum::extract::Request,
+) -> Result<impl IntoResponse, AppError> {
+    let platform_user = req
+        .extensions()
+        .get::<PlatformUser>()
+        .cloned()
+        .ok_or(AppError::Unauthorized {
+            error: "unauthorized",
+            message: "Not authenticated".into(),
+        })?;
+
+    sqlx::query_scalar::<_, String>(
+        "SELECT id FROM tenants WHERE id = $1 AND owner_user_id = $2 AND status != 'deleted'",
+    )
+    .bind(&tenant_id)
+    .bind(&platform_user.user_id)
+    .fetch_optional(&state.db)
+    .await?
+    .ok_or(AppError::NotFound {
+        error: "tenant_not_found",
+        message: "Tenant not found".into(),
+    })?;
+
+    let rows = sqlx::query(
+        "SELECT id, name, description, is_system, permissions_jsonb, tenant_id, created_at \
+         FROM roles WHERE tenant_id IS NULL OR tenant_id = $1 \
+         ORDER BY is_system DESC, name",
+    )
+    .bind(&tenant_id)
+    .fetch_all(&state.db)
+    .await?;
+
+    let roles: Vec<serde_json::Value> = rows
+        .iter()
+        .map(|r| {
+            let perms: Option<serde_json::Value> = r.get("permissions_jsonb");
+            serde_json::json!({
+                "id": r.get::<String, _>("id"),
+                "name": r.get::<String, _>("name"),
+                "description": r.get::<Option<String>, _>("description"),
+                "is_system": r.get::<bool, _>("is_system"),
+                "permissions": perms.unwrap_or(serde_json::json!([])),
+                "tenant_id": r.get::<Option<String>, _>("tenant_id"),
+                "created_at": r.get::<chrono::DateTime<Utc>, _>("created_at").to_rfc3339(),
+            })
+        })
+        .collect();
+
+    Ok(Json(serde_json::json!({ "roles": roles })))
+}
+
+/// POST /platform/self-serve/tenants/{id}/roles
+pub async fn create_tenant_role(
+    State(state): State<AppState>,
+    Path(tenant_id): Path<String>,
+    req: axum::extract::Request,
+) -> Result<impl IntoResponse, AppError> {
+    let platform_user = req
+        .extensions()
+        .get::<PlatformUser>()
+        .cloned()
+        .ok_or(AppError::Unauthorized {
+            error: "unauthorized",
+            message: "Not authenticated".into(),
+        })?;
+
+    sqlx::query_scalar::<_, String>(
+        "SELECT id FROM tenants WHERE id = $1 AND owner_user_id = $2 AND status != 'deleted'",
+    )
+    .bind(&tenant_id)
+    .bind(&platform_user.user_id)
+    .fetch_optional(&state.db)
+    .await?
+    .ok_or(AppError::NotFound {
+        error: "tenant_not_found",
+        message: "Tenant not found".into(),
+    })?;
+
+    let body: serde_json::Value = axum::Json::from_request(req, &state)
+        .await
+        .map_err(|_| AppError::BadRequest {
+            error: "invalid_body",
+            message: "Invalid JSON body".into(),
+        })?
+        .0;
+
+    let name = body["name"].as_str().ok_or(AppError::BadRequest {
+        error: "missing_name",
+        message: "Role name is required".into(),
+    })?;
+    let description = body["description"].as_str().map(String::from);
+    let permissions = body.get("permissions").cloned().unwrap_or(serde_json::json!([]));
+    let role_id = format!("role_{}", name.to_lowercase().replace(' ', "_"));
+
+    sqlx::query(
+        "INSERT INTO roles (id, name, description, permissions_jsonb, tenant_id, is_system, created_at) \
+         VALUES ($1, $2, $3, $4, $5, FALSE, NOW())",
+    )
+    .bind(&role_id)
+    .bind(name)
+    .bind(&description)
+    .bind(&permissions)
+    .bind(&tenant_id)
+    .execute(&state.db)
+    .await?;
+
+    Ok((
+        StatusCode::CREATED,
+        Json(serde_json::json!({
+            "id": role_id,
+            "name": name,
+            "description": description,
+            "permissions": permissions,
+            "is_system": false,
+            "tenant_id": tenant_id,
+        })),
+    ))
+}
+
+/// PATCH /platform/self-serve/tenants/{id}/roles/{role_id}
+pub async fn update_tenant_role(
+    State(state): State<AppState>,
+    Path((tenant_id, role_id)): Path<(String, String)>,
+    req: axum::extract::Request,
+) -> Result<impl IntoResponse, AppError> {
+    let platform_user = req
+        .extensions()
+        .get::<PlatformUser>()
+        .cloned()
+        .ok_or(AppError::Unauthorized {
+            error: "unauthorized",
+            message: "Not authenticated".into(),
+        })?;
+
+    sqlx::query_scalar::<_, String>(
+        "SELECT id FROM tenants WHERE id = $1 AND owner_user_id = $2 AND status != 'deleted'",
+    )
+    .bind(&tenant_id)
+    .bind(&platform_user.user_id)
+    .fetch_optional(&state.db)
+    .await?
+    .ok_or(AppError::NotFound {
+        error: "tenant_not_found",
+        message: "Tenant not found".into(),
+    })?;
+
+    // Verify role exists and is custom (not system)
+    let is_system: bool = sqlx::query_scalar(
+        "SELECT is_system FROM roles WHERE id = $1 AND (tenant_id IS NULL OR tenant_id = $2)",
+    )
+    .bind(&role_id)
+    .bind(&tenant_id)
+    .fetch_optional(&state.db)
+    .await?
+    .ok_or(AppError::NotFound {
+        error: "role_not_found",
+        message: "Role not found".into(),
+    })?;
+
+    if is_system {
+        return Err(AppError::BadRequest {
+            error: "system_role",
+            message: "Cannot modify system roles".into(),
+        });
+    }
+
+    let body: serde_json::Value = axum::Json::from_request(req, &state)
+        .await
+        .map_err(|_| AppError::BadRequest {
+            error: "invalid_body",
+            message: "Invalid JSON body".into(),
+        })?
+        .0;
+
+    if let Some(name) = body["name"].as_str() {
+        sqlx::query("UPDATE roles SET name = $1 WHERE id = $2 AND tenant_id = $3")
+            .bind(name)
+            .bind(&role_id)
+            .bind(&tenant_id)
+            .execute(&state.db)
+            .await?;
+    }
+
+    if let Some(desc) = body.get("description") {
+        let desc_str = desc.as_str().map(String::from);
+        sqlx::query("UPDATE roles SET description = $1 WHERE id = $2 AND tenant_id = $3")
+            .bind(&desc_str)
+            .bind(&role_id)
+            .bind(&tenant_id)
+            .execute(&state.db)
+            .await?;
+    }
+
+    if let Some(perms) = body.get("permissions") {
+        sqlx::query("UPDATE roles SET permissions_jsonb = $1 WHERE id = $2 AND tenant_id = $3")
+            .bind(perms)
+            .bind(&role_id)
+            .bind(&tenant_id)
+            .execute(&state.db)
+            .await?;
+    }
+
+    Ok(Json(serde_json::json!({ "message": "Role updated" })))
+}
+
+/// DELETE /platform/self-serve/tenants/{id}/roles/{role_id}
+pub async fn delete_tenant_role(
+    State(state): State<AppState>,
+    Path((tenant_id, role_id)): Path<(String, String)>,
+    req: axum::extract::Request,
+) -> Result<impl IntoResponse, AppError> {
+    let platform_user = req
+        .extensions()
+        .get::<PlatformUser>()
+        .cloned()
+        .ok_or(AppError::Unauthorized {
+            error: "unauthorized",
+            message: "Not authenticated".into(),
+        })?;
+
+    sqlx::query_scalar::<_, String>(
+        "SELECT id FROM tenants WHERE id = $1 AND owner_user_id = $2 AND status != 'deleted'",
+    )
+    .bind(&tenant_id)
+    .bind(&platform_user.user_id)
+    .fetch_optional(&state.db)
+    .await?
+    .ok_or(AppError::NotFound {
+        error: "tenant_not_found",
+        message: "Tenant not found".into(),
+    })?;
+
+    // Verify role is custom
+    let is_system: bool = sqlx::query_scalar(
+        "SELECT is_system FROM roles WHERE id = $1 AND tenant_id = $2",
+    )
+    .bind(&role_id)
+    .bind(&tenant_id)
+    .fetch_optional(&state.db)
+    .await?
+    .ok_or(AppError::NotFound {
+        error: "role_not_found",
+        message: "Role not found in this tenant".into(),
+    })?;
+
+    if is_system {
+        return Err(AppError::BadRequest {
+            error: "system_role",
+            message: "Cannot delete system roles".into(),
+        });
+    }
+
+    sqlx::query("DELETE FROM user_roles WHERE role_id = $1")
+        .bind(&role_id)
+        .execute(&state.db)
+        .await?;
+
+    sqlx::query("DELETE FROM roles WHERE id = $1 AND tenant_id = $2")
+        .bind(&role_id)
+        .bind(&tenant_id)
+        .execute(&state.db)
+        .await?;
+
+    Ok(Json(serde_json::json!({ "message": "Role deleted" })))
+}
+
 // ── Hosted Page Management ─────────────────────────────────────────────
 
 /// GET /platform/self-serve/tenants/{id}/hosted-page
