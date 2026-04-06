@@ -44,6 +44,9 @@ export interface PlaneNavProps {
   onSignOut: () => void;
   user: () => PlatformUser | null;
   tenant: () => Tenant | null;
+  tenants: () => Tenant[];
+  onTenantSwitch: (tenant: Tenant) => void;
+  onBackToAccount: () => void;
 }
 
 // ── Component ───────────────────────────────────────────────────────────────
@@ -51,6 +54,7 @@ export interface PlaneNavProps {
 export function PlaneNav(props: PlaneNavProps) {
   const [collapsed, setCollapsed] = createSignal(false);
   const [menuOpen, setMenuOpen] = createSignal(false);
+  const [tenantMenuOpen, setTenantMenuOpen] = createSignal(false);
   const [flashing, setFlashing] = createSignal(false);
   const [flashAccent, setFlashAccent] = createSignal(PLANE_ACCENTS.operator);
 
@@ -131,7 +135,53 @@ export function PlaneNav(props: PlaneNavProps) {
   document.addEventListener('click', handleDocClick);
   onCleanup(() => document.removeEventListener('click', handleDocClick));
 
+  // ── Close tenant menu on outside click ─────────────────────────────────
+
+  function handleTenantMenuClick(e: Event) {
+    if (!tenantMenuOpen()) return;
+    const target = e.target as Node;
+    if (tenantSwitcherEl && !tenantSwitcherEl.contains(target)) {
+      setTenantMenuOpen(false);
+    }
+  }
+
+  document.addEventListener('click', handleTenantMenuClick);
+  onCleanup(() => document.removeEventListener('click', handleTenantMenuClick));
+
   // ── Header bar (56px) ──────────────────────────────────────────────────
+
+  const tenantSwitcher = h('div', { class: 'plane-tenant-switcher' },
+    h('button', {
+      type: 'button',
+      class: 'plane-tenant-trigger hv',
+      onClick: () => setTenantMenuOpen(!tenantMenuOpen()),
+    },
+      h('span', { class: 'plane-tenant-name' }, () => props.tenant()?.name || ''),
+      h('span', { class: 'plane-tenant-chevron' }, '\u25BE'),
+    ),
+    createShow(tenantMenuOpen, () =>
+      h('div', { class: 'plane-tenant-menu' },
+        h('button', {
+          type: 'button',
+          class: 'plane-tenant-menu-item plane-tenant-menu-back hv',
+          onClick: () => { setTenantMenuOpen(false); props.onBackToAccount(); },
+        }, '\u2190 All Tenants'),
+        h('div', { class: 'plane-avatar-menu-divider' }),
+        () => props.tenants().map((t) =>
+          h('button', {
+            type: 'button',
+            class: () => 'plane-tenant-menu-item hv' + (props.tenant()?.id === t.id ? ' active' : ''),
+            onClick: () => { setTenantMenuOpen(false); props.onTenantSwitch(t); },
+          },
+            h('span', null, t.name),
+            h('span', { class: 'plane-tenant-menu-slug' }, '/t/' + t.slug),
+          ),
+        ),
+      ),
+    ),
+  );
+
+  const tenantSwitcherEl = tenantSwitcher as HTMLElement;
 
   const headerLeft = h('div', { class: 'plane-header-left' },
     h('div', {
@@ -140,6 +190,7 @@ export function PlaneNav(props: PlaneNavProps) {
     }),
     h('span', { class: 'plane-product-name' }, 'GateWASM'),
     h('span', { class: 'plane-domain' }, () => window.location.hostname),
+    tenantSwitcher,
   );
 
   const headerCenter = h('div', { class: 'plane-header-center' },
@@ -201,12 +252,6 @@ export function PlaneNav(props: PlaneNavProps) {
   ) as HTMLElement;
 
   const headerRight = h('div', { class: 'plane-header-right' },
-    createShow(
-      () => props.tenant() != null,
-      () => h('span', { class: 'plane-tenant-indicator' },
-        () => props.tenant()?.name || '',
-      ),
-    ),
     h('span', { class: 'plane-version' }, 'v0.44'),
     avatarShell,
   );
