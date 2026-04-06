@@ -10,6 +10,11 @@
 
 **Sequencing note:** This is Sub-plan A. Sub-plan B (new views for Roles, Audit Log, Sessions, Passkeys, Tokens, Activity) builds on this shell and will be planned separately after A ships.
 
+**Corrections applied:**
+- Task 8 (font files) moved to Task 1 — fonts must exist on disk before CSS references them.
+- Settings removed from Plane 1 tabs — Settings moves to an avatar dropdown menu in the PlaneNav header. Plane 1 is now 3 tabs: Overview, Tenants, Integrate.
+- Tenant context indicator added to PlaneNav header — active tenant name displayed next to version badge for production usability.
+
 ---
 
 ## File Structure
