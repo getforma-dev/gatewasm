@@ -3135,3 +3135,92 @@
 .slug-suggestion:hover {
   background: var(--accent-glow);
 }
+
+/* ── Team View ──────────────────────────────────────────────────────────── */
+
+.team-list { display: flex; flex-direction: column; gap: 2px; }
+
+.team-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: background var(--duration-fast) var(--ease-out);
+}
+.team-row.hv:hover { background: var(--surface-raised); }
+.team-row-pending { opacity: 0.7; cursor: default; }
+
+.team-row-info { display: flex; align-items: center; gap: 12px; flex: 1; min-width: 0; }
+.team-row-name { font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.team-row-email { font-size: var(--text-base); color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.team-row-meta { display: flex; align-items: center; gap: 12px; font-size: var(--text-base); flex-shrink: 0; }
+.team-row-actions { display: flex; gap: 8px; align-items: center; }
+
+.team-role-badge {
+  font-size: var(--text-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 2px 8px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-raised);
+  flex-shrink: 0;
+}
+.team-role-badge.role-owner  { color: var(--accent); }
+.team-role-badge.role-admin  { color: var(--info); }
+.team-role-badge.role-editor { color: var(--success); }
+.team-role-badge.role-viewer { color: var(--text-muted); }
+
+.team-status-badge {
+  font-size: var(--text-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 2px 8px;
+  border-radius: var(--radius-sm);
+}
+.team-status-badge.pending   { color: var(--warning); background: var(--warning-dim); }
+.team-status-badge.suspended { color: var(--danger);  background: var(--danger-dim); }
+
+.team-member-shell { border-radius: var(--radius-md); transition: background var(--duration-fast) var(--ease-out); }
+.team-member-shell.expanded { background: var(--surface-raised); }
+
+.team-member-detail { padding: 0 16px 16px; }
+
+.team-tenant-access { margin-top: 16px; }
+.team-tenant-list { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.team-tenant-chip {
+  font-size: var(--text-base);
+  padding: 4px 10px;
+  border-radius: 6px;
+  background: var(--surface-raised);
+}
+
+.team-tenant-assigner { margin-top: 12px; }
+.team-tenant-checkboxes { display: flex; flex-direction: column; gap: 6px; margin: 8px 0; }
+.team-tenant-checkbox { display: flex; align-items: center; gap: 8px; font-size: var(--text-base); cursor: pointer; }
+
+.team-role-select {
+  font-size: var(--text-base);
+  padding: 4px 8px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  color: inherit;
+  cursor: pointer;
+}
+
+.invite-url-row { display: flex; align-items: center; gap: 8px; margin: 12px 0; }
+.invite-url-code {
+  font-size: var(--text-sm);
+  padding: 8px;
+  border-radius: 6px;
+  background: var(--surface-raised);
+  word-break: break-all;
+  flex: 1;
+}
+
+.team-loading { padding: 24px; text-align: center; color: var(--text-muted); }
