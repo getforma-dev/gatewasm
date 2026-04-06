@@ -40,6 +40,54 @@
   src: url('/_assets/instrument-serif-italic.woff2') format('woff2');
 }
 
+@font-face {
+  font-family: 'Rajdhani';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/_assets/rajdhani-400.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Rajdhani';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('/_assets/rajdhani-500.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Rajdhani';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('/_assets/rajdhani-600.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Rajdhani';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('/_assets/rajdhani-700.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Orbitron';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('/_assets/orbitron-500.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Orbitron';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('/_assets/orbitron-700.woff2') format('woff2');
+}
+
 /* ==========================================================================
    Forma Auth — Design Tokens
    ──────────────────────────
@@ -70,6 +118,24 @@
   --accent-dim:     rgba(196, 162, 101, 0.19);
   --accent-glow:    rgba(196, 162, 101, 0.09);
   --accent-border:  rgba(196, 162, 101, 0.25);
+
+  /* ── Plane Accents ─────────────────────────────────────────────── */
+  --plane1: #F05A3A;
+  --plane1-glow: rgba(240, 90, 58, 0.25);
+  --plane1-muted: rgba(240, 90, 58, 0.08);
+  --plane1-border: rgba(240, 90, 58, 0.25);
+  --plane2: #2E9BFF;
+  --plane2-glow: rgba(46, 155, 255, 0.25);
+  --plane2-muted: rgba(46, 155, 255, 0.08);
+  --plane2-border: rgba(46, 155, 255, 0.25);
+  --plane3: #1EDC82;
+  --plane3-glow: rgba(30, 220, 130, 0.25);
+  --plane3-muted: rgba(30, 220, 130, 0.08);
+  --plane3-border: rgba(30, 220, 130, 0.25);
+  --plane: var(--plane1);
+  --plane-glow: var(--plane1-glow);
+  --plane-muted: var(--plane1-muted);
+  --plane-border: var(--plane1-border);
 
   /* ── Semantic ───────────────────────────────────────────────────────── */
   --success:        #4ade80;
@@ -129,6 +195,10 @@
   --sidebar-width: 240px;
   --sidebar-collapsed-width: 64px;
   --topbar-height: 52px;
+  --header-height: 56px;
+  --tier1-height: 52px;
+  --tier2-height: 42px;
+  --collapsed-nav-height: 42px;
 }
 
 /* ── Light Mode ──────────────────────────────────────────────────────── */
@@ -152,6 +222,24 @@
   --accent-dim:     rgba(184, 134, 11, 0.1);
   --accent-glow:    rgba(184, 134, 11, 0.05);
   --accent-border:  rgba(184, 134, 11, 0.2);
+
+  /* ── Plane Accents ─────────────────────────────────────────────── */
+  --plane1: #F05A3A;
+  --plane1-glow: rgba(240, 90, 58, 0.25);
+  --plane1-muted: rgba(240, 90, 58, 0.08);
+  --plane1-border: rgba(240, 90, 58, 0.25);
+  --plane2: #2E9BFF;
+  --plane2-glow: rgba(46, 155, 255, 0.25);
+  --plane2-muted: rgba(46, 155, 255, 0.08);
+  --plane2-border: rgba(46, 155, 255, 0.25);
+  --plane3: #1EDC82;
+  --plane3-glow: rgba(30, 220, 130, 0.25);
+  --plane3-muted: rgba(30, 220, 130, 0.08);
+  --plane3-border: rgba(30, 220, 130, 0.25);
+  --plane: var(--plane1);
+  --plane-glow: var(--plane1-glow);
+  --plane-muted: var(--plane1-muted);
+  --plane-border: var(--plane1-border);
 
   --success:        #16a34a;
   --success-dim:    rgba(22, 163, 74, 0.08);
