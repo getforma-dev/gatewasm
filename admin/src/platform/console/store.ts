@@ -720,6 +720,17 @@ export async function createTenant(fields: { name: string; slug: string }): Prom
   }
 }
 
+export async function checkSlugAvailability(slug: string): Promise<boolean> {
+  try {
+    const data = await api.get<{ available: boolean }>(
+      '/platform/self-serve/check-slug/' + encodeURIComponent(slug),
+    );
+    return data.available;
+  } catch {
+    return true; // Assume available on error — will fail at creation time if not
+  }
+}
+
 export async function pollTenantStats(id: string): Promise<TenantStats> {
   return api.get<TenantStats>(
     '/platform/self-serve/tenants/' + encodeURIComponent(id) + '/stats',

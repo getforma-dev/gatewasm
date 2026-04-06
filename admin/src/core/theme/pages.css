@@ -3074,3 +3074,52 @@
   white-space: nowrap;
   padding-top: 2px;
 }
+
+
+/* ==========================================================================
+   Slug Availability Indicator
+   ========================================================================== */
+
+.slug-status {
+  min-height: 1.2rem;
+  margin-top: -0.25rem;
+  margin-bottom: 0.25rem;
+}
+
+.slug-status-checking {
+  font-family: 'DM Mono', monospace;
+  font-size: 0.68rem;
+  color: var(--text-muted);
+}
+
+.slug-status-available {
+  font-family: 'DM Mono', monospace;
+  font-size: 0.68rem;
+  color: var(--success);
+}
+
+.slug-status-taken {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-family: 'DM Mono', monospace;
+  font-size: 0.68rem;
+  color: var(--danger);
+  flex-wrap: wrap;
+}
+
+.slug-suggestion {
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 2px 8px;
+  font-family: 'DM Mono', monospace;
+  font-size: 0.65rem;
+  color: var(--accent);
+  cursor: pointer;
+  transition: background 150ms ease;
+}
+
+.slug-suggestion:hover {
+  background: var(--accent-glow);
+}

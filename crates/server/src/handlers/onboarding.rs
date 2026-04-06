@@ -438,6 +438,43 @@ pub async fn create_tenant(
     ))
 }
 
+/// GET /platform/self-serve/check-slug/{slug} — Check if a tenant slug is available.
+pub async fn check_slug_availability(
+    State(state): State<AppState>,
+    Path(slug): Path<String>,
+    req: axum::extract::Request,
+) -> Result<impl IntoResponse, AppError> {
+    req.extensions()
+        .get::<PlatformUser>()
+        .ok_or(AppError::Unauthorized {
+            error: "unauthorized",
+            message: "Not authenticated".into(),
+        })?;
+
+    // Run the same validation as create_tenant so reserved/invalid slugs are flagged early
+    let slug = match validate_slug(&slug) {
+        Ok(s) => s,
+        Err(_) => {
+            return Ok(Json(serde_json::json!({
+                "slug": slug,
+                "available": false,
+            })));
+        }
+    };
+
+    let exists: Option<String> = sqlx::query_scalar(
+        "SELECT id FROM tenants WHERE slug = $1 AND status != 'deleted'",
+    )
+    .bind(&slug)
+    .fetch_optional(&state.db)
+    .await?;
+
+    Ok(Json(serde_json::json!({
+        "slug": slug,
+        "available": exists.is_none(),
+    })))
+}
+
 /// GET /platform/self-serve/tenants — List tenants owned by the authenticated user.
 pub async fn list_my_tenants(
     State(state): State<AppState>,

@@ -360,6 +360,10 @@ fn create_router_inner(state: AppState, rate_limit_enabled: bool) -> Router {
     // ── Self-Serve API (JWT auth for platform tenant users) ──────
     let self_serve_routes = Router::new()
         .route(
+            "/platform/self-serve/check-slug/{slug}",
+            get(onboarding::check_slug_availability),
+        )
+        .route(
             "/platform/self-serve/tenants",
             get(onboarding::list_my_tenants).post(onboarding::create_tenant),
         )

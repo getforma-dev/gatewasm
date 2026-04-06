@@ -24,7 +24,7 @@ import { ApiKeysView } from './views/ApiKeysView';
 import { AccountSettingsView } from './views/AccountSettingsView';
 import {
   view, loading, toast, backToTenants, signout,
-  selectedTenant, tenants, selectTenant, createTenant, currentUser,
+  selectedTenant, tenants, selectTenant, createTenant, checkSlugAvailability, currentUser,
   navigateTenantView, refreshCurrentView, openIntegrateGuide, openSessionInspector,
   plane, setPlane, type Plane, type ConsoleView,
   type TenantWorkspaceView,
@@ -141,17 +141,39 @@ function CreateTenantModal(onClose: () => void) {
   const [slug, setSlug] = createSignal('');
   const [slugEdited, setSlugEdited] = createSignal(false);
   const [saving, setSaving] = createSignal(false);
+  const [slugStatus, setSlugStatus] = createSignal<'idle' | 'checking' | 'available' | 'taken'>('idle');
+  let checkTimer: ReturnType<typeof setTimeout> | undefined;
+
+  function debouncedCheckSlug(slugValue: string) {
+    clearTimeout(checkTimer);
+    if (!slugValue || slugValue.length < 2) {
+      setSlugStatus('idle');
+      return;
+    }
+    setSlugStatus('checking');
+    checkTimer = setTimeout(async () => {
+      const available = await checkSlugAvailability(slugValue);
+      // Only update if the slug hasn't changed during the async check
+      if (slug() === slugValue) {
+        setSlugStatus(available ? 'available' : 'taken');
+      }
+    }, 500);
+  }
 
   function handleNameChange(value: string) {
     setName(value);
     if (!slugEdited()) {
-      setSlug(normalizeTenantSlugInput(value));
+      const newSlug = normalizeTenantSlugInput(value);
+      setSlug(newSlug);
+      debouncedCheckSlug(newSlug);
     }
   }
 
   function handleSlugChange(value: string) {
     setSlugEdited(true);
-    setSlug(normalizeTenantSlugInput(value));
+    const normalized = normalizeTenantSlugInput(value);
+    setSlug(normalized);
+    debouncedCheckSlug(normalized);
   }
 
   async function handleSubmit(event: Event) {
@@ -160,6 +182,7 @@ function CreateTenantModal(onClose: () => void) {
     const nextSlug = slug().trim();
     if (!nextName) { toast.show('App name is required', 'error'); return; }
     if (!nextSlug) { toast.show('Tenant slug is required', 'error'); return; }
+    if (slugStatus() === 'taken') { toast.show('This slug is already taken', 'error'); return; }
     setSaving(true);
     const created = await createTenant({ name: nextName, slug: nextSlug });
     setSaving(false);
@@ -202,6 +225,35 @@ function CreateTenantModal(onClose: () => void) {
           hint: 'Lowercase letters, numbers, and hyphens only.',
           required: true,
         }),
+        // Slug availability indicator
+        h('div', { class: 'slug-status' },
+          createShow(
+            () => slugStatus() === 'checking',
+            () => h('span', { class: 'slug-status-checking' }, 'Checking availability...'),
+          ),
+          createShow(
+            () => slugStatus() === 'available',
+            () => h('span', { class: 'slug-status-available' }, '\u2713 Available'),
+          ),
+          createShow(
+            () => slugStatus() === 'taken',
+            () => {
+              const suggestion = slug() + '-' + Math.random().toString(36).slice(2, 5);
+              return h('div', { class: 'slug-status-taken' },
+                h('span', null, '\u2717 Already taken'),
+                h('button', {
+                  type: 'button',
+                  class: 'slug-suggestion',
+                  onClick: () => {
+                    setSlug(suggestion);
+                    setSlugEdited(true);
+                    debouncedCheckSlug(suggestion);
+                  },
+                }, 'Try ' + suggestion),
+              );
+            },
+          ),
+        ),
         h('div', { class: 'tenant-create-preview' },
           h('span', { class: 'detail-label' }, 'Tenant URL'),
           h('code', { class: 'code-block code-inline-block break-all' },
@@ -217,7 +269,7 @@ function CreateTenantModal(onClose: () => void) {
           h('button', {
             type: 'submit',
             class: 'clip-btn',
-            disabled: () => saving() || !name().trim() || !slug().trim(),
+            disabled: () => saving() || !name().trim() || !slug().trim() || slugStatus() === 'taken' || slugStatus() === 'checking',
           }, () => saving() ? 'Creating...' : 'Create Workspace'),
         ),
       ),
