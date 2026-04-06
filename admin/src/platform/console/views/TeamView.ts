@@ -52,6 +52,7 @@ export function TeamView() {
   }
 
   async function handleRemove(member: PlatformMember) {
+    if (!confirm('Remove ' + member.email + ' from the team?')) return;
     await removeTeamMember(member.id);
     if (expandedId() === member.id) {
       setExpandedId(null);

@@ -240,6 +240,8 @@ pub async fn update_team_member(
         });
     }
 
+    let mut tx = state.db.begin().await?;
+
     // ── Validate & apply role change ───────────────────────────────────
     if let Some(ref new_role) = body.role {
         let valid_roles = ["admin", "editor", "viewer"];
@@ -262,14 +264,14 @@ pub async fn update_team_member(
         )
         .bind(new_role)
         .bind(&member_id)
-        .execute(&state.db)
+        .execute(&mut *tx)
         .await?;
 
         // Admins see all tenants — clear any scoped assignments.
         if new_role == "admin" {
             sqlx::query("DELETE FROM platform_member_tenants WHERE member_id = $1")
                 .bind(&member_id)
-                .execute(&state.db)
+                .execute(&mut *tx)
                 .await?;
         }
     }
@@ -289,9 +291,11 @@ pub async fn update_team_member(
         )
         .bind(new_status)
         .bind(&member_id)
-        .execute(&state.db)
+        .execute(&mut *tx)
         .await?;
     }
+
+    tx.commit().await?;
 
     Ok(Json(serde_json::json!({ "success": true })))
 }
@@ -395,6 +399,25 @@ pub async fn set_member_tenants(
             error: "role_not_scoped",
             message: "Owner and admin roles have access to all tenants and cannot be scoped".into(),
         });
+    }
+
+    // Validate all tenant IDs exist
+    if !body.tenant_ids.is_empty() {
+        let valid_count = sqlx::query_as::<_, (i64,)>(
+            "SELECT COUNT(*) FROM tenants WHERE id = ANY($1) AND id != 'ten_platform'"
+        )
+        .bind(&body.tenant_ids)
+        .fetch_one(&state.db)
+        .await
+        .map(|(c,)| c)
+        .unwrap_or(0);
+
+        if valid_count != body.tenant_ids.len() as i64 {
+            return Err(AppError::BadRequest {
+                error: "invalid_tenant_ids",
+                message: "One or more tenant IDs are invalid".into(),
+            });
+        }
     }
 
     let tenant_count = body.tenant_ids.len() as i64;

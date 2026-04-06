@@ -452,18 +452,6 @@ pub async fn accept_owner_invite(
     .execute(&mut *tx)
     .await?;
 
-    // Assign role_platform_owner for admin (backward compat with existing middleware).
-    if invite_role == "admin" {
-        sqlx::query(
-            "INSERT INTO user_roles (user_id, role_id, tenant_id)
-             VALUES ($1, 'role_platform_owner', 'ten_platform')
-             ON CONFLICT DO NOTHING",
-        )
-        .bind(&platform_user.user_id)
-        .execute(&mut *tx)
-        .await?;
-    }
-
     // ── Create platform_members row ────────────────────────────────────
     let member_id = format!("pm_{}", uuid::Uuid::new_v4());
 
