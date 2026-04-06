@@ -106,19 +106,63 @@ export interface PlatformUser {
 export type ConsoleView =
   | 'tenants'
   | 'overview'
-  | 'users'
-  | 'hosted-page'
   | 'integrate'
-  | 'settings';
+  | 'settings'
+  | 'members'
+  | 'hosted-page'
+  | 'roles'
+  | 'audit-log'
+  | 'sessions'
+  | 'passkeys'
+  | 'tokens'
+  | 'activity';
 
 export type TenantWorkspaceView = Exclude<ConsoleView, 'tenants'>;
 export type IntegrateSection = 'guide' | 'session-inspector';
 export type OverviewWindow = '24h' | '7d' | '30d';
 
+export type Plane = 'operator' | 'organization' | 'enduser';
+
+export interface PlaneTab {
+  id: string;
+  label: string;
+  shortcut: string;
+}
+
+export const PLANES: { key: Plane; label: string; sector: string; num: number; tabs: PlaneTab[] }[] = [
+  {
+    key: 'operator', label: 'Operator', sector: 'SEC-01', num: 1,
+    tabs: [
+      { id: 'overview', label: 'Overview', shortcut: '\u2325\u0031' },
+      { id: 'tenants', label: 'Tenants', shortcut: '\u2325\u0032' },
+      { id: 'integrate', label: 'Integrate', shortcut: '\u2325\u0033' },
+    ],
+  },
+  {
+    key: 'organization', label: 'Organization', sector: 'SEC-02', num: 2,
+    tabs: [
+      { id: 'members', label: 'Members', shortcut: '\u2325\u0031' },
+      { id: 'hosted-page', label: 'Hosted Page', shortcut: '\u2325\u0032' },
+      { id: 'roles', label: 'Roles', shortcut: '\u2325\u0033' },
+      { id: 'audit-log', label: 'Audit Log', shortcut: '\u2325\u0034' },
+    ],
+  },
+  {
+    key: 'enduser', label: 'End User', sector: 'SEC-03', num: 3,
+    tabs: [
+      { id: 'sessions', label: 'Sessions', shortcut: '\u2325\u0031' },
+      { id: 'passkeys', label: 'Passkeys', shortcut: '\u2325\u0032' },
+      { id: 'tokens', label: 'Tokens', shortcut: '\u2325\u0033' },
+      { id: 'activity', label: 'Activity', shortcut: '\u2325\u0034' },
+    ],
+  },
+];
+
 interface PersistedConsoleWorkspace {
   tenantId: string | null;
   view: ConsoleView;
   integrateSection: IntegrateSection;
+  plane: Plane;
 }
 
 // ── State ───────────────────────────────────────────────────────────────
@@ -139,6 +183,7 @@ export const [userSessionsLoading, setUserSessionsLoading] = createSignal(false)
 export const [integrateSection, setIntegrateSectionSignal] = createSignal<IntegrateSection>('guide');
 export const [overviewWindow, setOverviewWindowSignal] = createSignal<OverviewWindow>('7d');
 export const [currentUser, setCurrentUser] = createSignal<PlatformUser | null>(null);
+export const [plane, setPlaneSignal] = createSignal<Plane>('operator');
 
 let tenantDetailRequestSeq = 0;
 let usersRequestSeq = 0;
@@ -187,6 +232,23 @@ function workspaceStorageKey(): string | null {
   return WORKSPACE_STORAGE_PREFIX + user.id;
 }
 
+export function planeForView(v: ConsoleView): Plane {
+  for (const p of PLANES) {
+    if (p.tabs.some((t) => t.id === v)) return p.key;
+  }
+  return 'operator';
+}
+
+export function setPlane(nextPlane: Plane): void {
+  if (plane() === nextPlane) return;
+  setPlaneSignal(nextPlane);
+  const planeDef = PLANES.find((p) => p.key === nextPlane);
+  if (planeDef) {
+    const firstTab = planeDef.tabs[0].id as ConsoleView;
+    navigateTenantView(firstTab as TenantWorkspaceView);
+  }
+}
+
 function readWorkspaceState(): PersistedConsoleWorkspace | null {
   const storageKey = workspaceStorageKey();
   if (!storageKey) {
@@ -199,18 +261,27 @@ function readWorkspaceState(): PersistedConsoleWorkspace | null {
       return null;
     }
     const parsed = JSON.parse(raw) as Partial<PersistedConsoleWorkspace>;
+    // Backward compat: 'users' was renamed to 'members'
+    if ((parsed as any).view === 'users') (parsed as any).view = 'members';
     const nextView = parsed.view;
     const nextSection = parsed.integrateSection;
-    if (
-      typeof nextView !== 'string' ||
-      !['tenants', 'overview', 'users', 'hosted-page', 'integrate', 'settings'].includes(nextView)
-    ) {
+    const validViews: ConsoleView[] = [
+      'tenants', 'overview', 'integrate', 'settings',
+      'members', 'hosted-page', 'roles', 'audit-log',
+      'sessions', 'passkeys', 'tokens', 'activity',
+    ];
+    if (typeof nextView !== 'string' || !validViews.includes(nextView as ConsoleView)) {
       return null;
     }
+    const nextPlane = parsed.plane;
+    const validPlanes: Plane[] = ['operator', 'organization', 'enduser'];
     return {
       tenantId: typeof parsed.tenantId === 'string' ? parsed.tenantId : null,
       view: nextView as ConsoleView,
       integrateSection: nextSection === 'session-inspector' ? 'session-inspector' : 'guide',
+      plane: (typeof nextPlane === 'string' && validPlanes.includes(nextPlane as Plane))
+        ? (nextPlane as Plane)
+        : planeForView(nextView as ConsoleView),
     };
   } catch {
     return null;
@@ -228,6 +299,7 @@ function persistWorkspaceState(): void {
       tenantId: selectedTenant()?.id || null,
       view: view(),
       integrateSection: integrateSection(),
+      plane: plane(),
     };
     window.localStorage.setItem(storageKey, JSON.stringify(snapshot));
   } catch {
@@ -255,6 +327,7 @@ async function restoreWorkspaceState(): Promise<void> {
     resetTenantScopedState();
     setIntegrateSectionSignal(snapshot.integrateSection);
     setView(restoredView);
+    setPlaneSignal(snapshot.plane || planeForView(restoredView));
   });
 
   persistWorkspaceState();
@@ -596,7 +669,7 @@ async function hydrateTenantView(nextView: TenantWorkspaceView, tenant: Tenant):
 
   syncIntrospectRefresh(tenant.slug);
 
-  if (nextView === 'users') {
+  if (nextView === 'members') {
     tasks.push(loadUsers(tenant.id));
   } else if (nextView === 'hosted-page') {
     tasks.push(loadHostedPage(tenant.id));
@@ -610,6 +683,7 @@ export function navigateTenantView(nextView: TenantWorkspaceView): void {
   if (!tenant) return;
 
   setView(nextView);
+  setPlaneSignal(planeForView(nextView));
   persistWorkspaceState();
   void hydrateTenantView(nextView, tenant);
 }
