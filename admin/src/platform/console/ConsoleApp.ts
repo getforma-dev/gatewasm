@@ -374,6 +374,53 @@ export function ConsoleApp() {
   };
 
   function AccountShell() {
+    const [accountMenuOpen, setAccountMenuOpen] = createSignal(false);
+
+    // Close on outside click
+    const accountAvatarShell = h('div', { class: 'plane-avatar-shell' },
+      h('button', {
+        type: 'button',
+        class: 'plane-avatar hv',
+        'aria-haspopup': 'menu',
+        'aria-expanded': () => String(accountMenuOpen()),
+        onClick: () => setAccountMenuOpen((v: boolean) => !v),
+      }, () => {
+        const u = currentUser();
+        return u ? userInitials(u.name, u.email) : '--';
+      }),
+      createShow(accountMenuOpen, () =>
+        h('div', { class: 'plane-avatar-menu', role: 'menu' },
+          h('div', { class: 'plane-avatar-menu-header' },
+            h('div', { class: 'plane-avatar-menu-name' }, () => {
+              const u = currentUser();
+              return u ? userDisplayName(u.name, u.email) : '';
+            }),
+            h('div', { class: 'plane-avatar-menu-email' }, () => currentUser()?.email || ''),
+          ),
+          h('div', { class: 'plane-avatar-menu-divider' }),
+          h('button', {
+            type: 'button',
+            class: 'plane-avatar-menu-item hv',
+            role: 'menuitem',
+            onClick: () => { setAccountMenuOpen(false); handleThemeToggle(); },
+          }, () => themeMode() === 'dark' ? 'Light Mode' : 'Dark Mode'),
+          h('button', {
+            type: 'button',
+            class: 'plane-avatar-menu-item plane-avatar-menu-item-danger hv',
+            role: 'menuitem',
+            onClick: () => { setAccountMenuOpen(false); void signout(); },
+          }, 'Sign Out'),
+        ),
+      ),
+    ) as HTMLElement;
+
+    // Close menu on outside click
+    function handleAccountMenuClick(e: Event) {
+      if (!accountMenuOpen()) return;
+      if (!accountAvatarShell.contains(e.target as Node)) setAccountMenuOpen(false);
+    }
+    document.addEventListener('click', handleAccountMenuClick);
+
     return h('div', { class: 'account-shell' },
       h('header', { class: 'account-header' },
         h('div', { class: 'account-header-left' },
@@ -381,21 +428,7 @@ export function ConsoleApp() {
           h('span', { class: 'plane-product-name' }, 'fAuth'),
         ),
         h('div', { class: 'account-header-right' },
-          h('button', {
-            type: 'button',
-            class: 'plane-avatar hv',
-            onClick: handleThemeToggle,
-            title: () => themeMode() === 'dark' ? 'Switch to light mode' : 'Switch to dark mode',
-          }, () => themeMode() === 'dark' ? '\u263E' : '\u2600'),
-          h('button', {
-            type: 'button',
-            class: 'plane-avatar hv',
-            onClick: () => void signout(),
-            title: 'Sign out',
-          }, () => {
-            const u = currentUser();
-            return u ? userInitials(u.name, u.email) : '--';
-          }),
+          accountAvatarShell,
         ),
       ),
       h('div', { class: 'account-tabs' },
