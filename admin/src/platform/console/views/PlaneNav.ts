@@ -86,19 +86,24 @@ export function PlaneNav(props: PlaneNavProps) {
 
   // ── Plane switch with flash ────────────────────────────────────────────
 
+  let flashTimer: ReturnType<typeof setTimeout> | undefined;
+
   function switchPlane(nextPlane: Plane) {
     if (nextPlane === props.plane()) return;
     setFlashAccent(PLANE_ACCENTS[nextPlane]);
     setFlashing(true);
-    setTimeout(() => setFlashing(false), 200);
+    clearTimeout(flashTimer);
+    flashTimer = setTimeout(() => setFlashing(false), 200);
     props.onPlaneSwitch(nextPlane);
   }
+
+  onCleanup(() => clearTimeout(flashTimer));
 
   // ── Keyboard shortcuts ─────────────────────────────────────────────────
 
   function handleKeyDown(e: KeyboardEvent) {
-    const tag = (e.target as HTMLElement).tagName;
-    if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+    const el = e.target as HTMLElement;
+    if (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT' || el.isContentEditable) return;
 
     if (!e.altKey && !e.ctrlKey && !e.metaKey) {
       if (e.key === '1') { switchPlane('operator'); e.preventDefault(); }

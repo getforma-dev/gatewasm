@@ -80,8 +80,8 @@ export function OverviewView() {
           h('button', {
             type: 'button',
             class: 'btn btn-sm btn-ghost',
-            onClick: () => navigateTenantView('settings'),
-          }, 'Open Settings'),
+            onClick: () => navigateTenantView('integrate'),
+          }, 'Open Integrate'),
         ),
         ChecklistItem(
           'Preview the login page',
@@ -355,8 +355,8 @@ function ActivityFeedCard(
       h('button', {
         type: 'button',
         class: 'btn btn-sm btn-ghost',
-        onClick: () => navigateTenantView('users'),
-      }, 'Open Users'),
+        onClick: () => navigateTenantView('members'),
+      }, 'Open Members'),
     ),
     items().length === 0
       ? OverviewEmptyPanel(

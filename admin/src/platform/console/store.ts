@@ -223,6 +223,8 @@ function resetTenantScopedState(): void {
     setIntrospectData(null);
     setIntrospectToken(null);
     setIntrospectUnavailable(false);
+    setUserSessions([]);
+    setUserSessionsLoading(false);
     setIntegrateSectionSignal('guide');
     setOverviewWindowSignal('7d');
   });

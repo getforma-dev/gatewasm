@@ -1369,11 +1369,6 @@
   inset: 0;
   pointer-events: none;
   z-index: 999;
-  opacity: 0;
-  transition: opacity 100ms ease;
-}
-
-.flash-overlay.active {
   opacity: 0.07;
 }
 

@@ -223,7 +223,6 @@ function AccountTabBtn(id: AccountTab, label: string) {
 }
 
 function AccountShell() {
-  const user = currentUser();
   return h('div', { class: 'account-shell' },
     h('header', { class: 'account-header' },
       h('div', { class: 'account-header-left' },
@@ -236,7 +235,10 @@ function AccountShell() {
           class: 'plane-avatar hv',
           onClick: () => void signout(),
           title: 'Sign out',
-        }, user ? userInitials(user.name, user.email) : '--'),
+        }, () => {
+          const u = currentUser();
+          return u ? userInitials(u.name, u.email) : '--';
+        }),
       ),
     ),
     h('div', { class: 'account-tabs' },
