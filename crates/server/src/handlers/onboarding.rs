@@ -3004,6 +3004,58 @@ pub async fn remove_organization_member(
     Ok(Json(serde_json::json!({ "message": "Member removed" })))
 }
 
+/// GET /platform/self-serve/tenants/{id}/users/{user_id}/detail
+pub async fn get_tenant_user_detail(
+    State(state): State<AppState>,
+    Path((tenant_id, user_id)): Path<(String, String)>,
+    req: axum::extract::Request,
+) -> Result<impl IntoResponse, AppError> {
+    let platform_user = req.extensions().get::<PlatformUser>().cloned()
+        .ok_or(AppError::Unauthorized { error: "unauthorized", message: "Not authenticated".into() })?;
+
+    sqlx::query_scalar::<_, String>(
+        "SELECT id FROM tenants WHERE id = $1 AND owner_user_id = $2 AND status != 'deleted'",
+    ).bind(&tenant_id).bind(&platform_user.user_id)
+    .fetch_optional(&state.db).await?
+    .ok_or(AppError::NotFound { error: "tenant_not_found", message: "Tenant not found".into() })?;
+
+    let user = sqlx::query(
+        "SELECT id, email, name, email_verified, COALESCE(login_attempts, 0) AS login_attempts, \
+         locked_until, created_at \
+         FROM users WHERE id = $1 AND tenant_id = $2",
+    )
+    .bind(&user_id)
+    .bind(&tenant_id)
+    .fetch_optional(&state.db).await?
+    .ok_or(AppError::NotFound { error: "user_not_found", message: "User not found".into() })?;
+
+    // Get roles, permissions, providers, active sessions in one query
+    let detail: (serde_json::Value, serde_json::Value, serde_json::Value, i64) = sqlx::query_as(
+        "SELECT \
+           COALESCE((SELECT jsonb_agg(r.name) FROM roles r JOIN user_roles ur ON ur.role_id = r.id WHERE ur.user_id = $1), '[]'::jsonb), \
+           COALESCE((SELECT jsonb_agg(DISTINCT val) FROM (SELECT jsonb_array_elements_text(r.permissions_jsonb) AS val FROM roles r JOIN user_roles ur ON ur.role_id = r.id WHERE ur.user_id = $1) sub), '[]'::jsonb), \
+           COALESCE((SELECT jsonb_agg(provider) FROM credentials WHERE user_id = $1), '[]'::jsonb), \
+           (SELECT COUNT(*) FROM refresh_tokens WHERE user_id = $1 AND tenant_id = $2 AND revoked = FALSE AND expires_at > NOW())",
+    )
+    .bind(&user_id)
+    .bind(&tenant_id)
+    .fetch_one(&state.db).await?;
+
+    Ok(Json(serde_json::json!({
+        "id": user.get::<String, _>("id"),
+        "email": user.get::<String, _>("email"),
+        "name": user.get::<Option<String>, _>("name"),
+        "email_verified": user.get::<bool, _>("email_verified"),
+        "login_attempts": user.get::<i32, _>("login_attempts"),
+        "locked_until": user.get::<Option<chrono::DateTime<Utc>>, _>("locked_until").map(|d| d.to_rfc3339()),
+        "roles": detail.0,
+        "permissions": detail.1,
+        "providers": detail.2,
+        "active_sessions": detail.3,
+        "created_at": user.get::<chrono::DateTime<Utc>, _>("created_at").to_rfc3339(),
+    })))
+}
+
 /// GET /platform/login — Returning platform users sign in here.
 /// After authentication they always land in /platform/console, where
 /// tenant creation and setup now live.

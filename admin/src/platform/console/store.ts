@@ -182,6 +182,20 @@ export interface OrgMember {
   created_at: string;
 }
 
+export interface UserDetail {
+  id: string;
+  email: string;
+  name: string | null;
+  email_verified: boolean;
+  login_attempts: number;
+  locked_until: string | null;
+  roles: string[];
+  permissions: string[];
+  providers: string[];
+  active_sessions: number;
+  created_at: string;
+}
+
 export interface PlatformUser {
   id: string;
   email: string;
@@ -299,6 +313,7 @@ export const [invites, setInvites] = createSignal<TenantInvite[]>([]);
 export const [invitesLoading, setInvitesLoading] = createSignal(false);
 export const [organizations, setOrganizations] = createSignal<Organization[]>([]);
 export const [organizationsLoading, setOrganizationsLoading] = createSignal(false);
+export const [userDetail, setUserDetail] = createSignal<UserDetail | null>(null);
 
 let tenantDetailRequestSeq = 0;
 let usersRequestSeq = 0;
@@ -352,6 +367,7 @@ function resetTenantScopedState(): void {
     setInvitesLoading(false);
     setOrganizations([]);
     setOrganizationsLoading(false);
+    setUserDetail(null);
     setIntegrateSectionSignal('guide');
     setOverviewWindowSignal('7d');
   });
@@ -909,6 +925,16 @@ export async function removeOrgMember(tenantId: string, orgId: string, userId: s
   } catch (e) {
     toast.show(e instanceof Error ? e.message : 'Failed to remove member', 'error');
   }
+}
+
+export async function loadUserDetail(tenantId: string, userId: string): Promise<void> {
+  try {
+    const data = await api.get<UserDetail>(
+      '/platform/self-serve/tenants/' + encodeURIComponent(tenantId) + '/users/' + encodeURIComponent(userId) + '/detail',
+    );
+    if (selectedTenant()?.id !== tenantId) return;
+    setUserDetail(data);
+  } catch { setUserDetail(null); }
 }
 
 export async function loadJwks(slug: string): Promise<void> {

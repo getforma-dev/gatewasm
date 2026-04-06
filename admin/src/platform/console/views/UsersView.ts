@@ -7,7 +7,8 @@ import {
   loadUserSessions, userSessions, userSessionsLoading, setUserSessions,
   openSessionInspector,
   invites, invitesLoading, sendInvite, revokeInvite,
-  type UserSession, type TenantInvite,
+  loadUserDetail, userDetail, setUserDetail,
+  type UserSession, type TenantInvite, type UserDetail,
 } from '../store';
 
 export function UsersView() {
@@ -136,8 +137,10 @@ export function UsersView() {
                   setExpandedId(nextId);
                   if (nextId) {
                     void loadUserSessions(tenantState().id, user.id);
+                    void loadUserDetail(tenantState().id, user.id);
                   } else {
                     setUserSessions([]);
+                    setUserDetail(null);
                   }
                 },
               },
@@ -168,6 +171,18 @@ export function UsersView() {
                         DetailRow('Name', user.name || '(not set)'),
                         DetailRow('Verified', user.email_verified ? 'Yes' : 'No'),
                         DetailRow('Roles', user.roles.join(', ') || 'none'),
+                      ),
+                      createShow(
+                        () => userDetail() != null && userDetail()!.id === user.id,
+                        () => {
+                          const d = userDetail()!;
+                          return h('div', { class: 'detail-grid' },
+                            DetailRow('Login Attempts', String(d.login_attempts)),
+                            DetailRow('Lock Status', d.locked_until ? 'Locked until ' + new Date(d.locked_until).toLocaleString() : 'Not locked'),
+                            DetailRow('Providers', d.providers.join(', ') || 'none'),
+                            DetailRow('Permissions', d.permissions.join(', ') || 'none'),
+                          );
+                        },
                       ),
                     ),
                     // Right: sessions

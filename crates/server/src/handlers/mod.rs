@@ -449,6 +449,10 @@ fn create_router_inner(state: AppState, rate_limit_enabled: bool) -> Router {
             "/platform/self-serve/tenants/{id}/organizations/{org_id}/members/{user_id}",
             delete(onboarding::remove_organization_member),
         )
+        .route(
+            "/platform/self-serve/tenants/{id}/users/{user_id}/detail",
+            get(onboarding::get_tenant_user_detail),
+        )
         .layer(middleware::from_fn_with_state(
             state.clone(),
             require_platform_user,
