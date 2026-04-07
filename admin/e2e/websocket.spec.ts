@@ -25,6 +25,30 @@ async function getAccessToken(context: BrowserContext): Promise<string> {
   return data.access_token as string;
 }
 
+/** Make an authenticated JSON API call using Node's native fetch.
+ *  Playwright's BrowserContext.request doesn't reliably send JSON bodies,
+ *  so we use native fetch for triggering server-side events in WS tests. */
+async function apiPost(path: string, token: string, body: unknown): Promise<{ ok: boolean; status: number; data: any }> {
+  const res = await fetch(BASE + path, {
+    method: 'POST',
+    headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  const text = await res.text();
+  let data: any;
+  try { data = JSON.parse(text); } catch { data = text; }
+  return { ok: res.ok, status: res.status, data };
+}
+
+async function apiDelete(path: string, token: string, body?: unknown): Promise<{ ok: boolean; status: number }> {
+  const res = await fetch(BASE + path, {
+    method: 'DELETE',
+    headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  return { ok: res.ok, status: res.status };
+}
+
 /** Exchange an access token for a single-use WS ticket. */
 async function getWsTicket(context: BrowserContext, token: string): Promise<string> {
   const res = await context.request.post(BASE + '/ws/ticket', {
@@ -261,22 +285,15 @@ test.describe('WS Event Delivery', () => {
 
     tenantSlug = 'e2e-ws-' + Date.now().toString(36);
 
-    const res = await evtContext.request.post(BASE + '/platform/self-serve/tenants', {
-      headers: { Authorization: 'Bearer ' + accessToken },
-      data: { name: 'WS Test Tenant', slug: tenantSlug },
-    });
-    expect(res.ok()).toBeTruthy();
-    const tenant = await res.json();
-    tenantId = tenant.id as string;
+    const result = await apiPost('/platform/self-serve/tenants', accessToken, { name: 'WS Test Tenant', slug: tenantSlug });
+    expect(result.ok).toBe(true);
+    tenantId = (result.data.tenant?.id || result.data.id) as string;
   });
 
   test.afterAll(async () => {
     if (tenantId) {
       const token = await getAccessToken(evtContext);
-      await evtContext.request.delete(BASE + '/platform/self-serve/tenants/' + tenantId, {
-        headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
-        data: { confirm_slug: tenantSlug },
-      });
+      await apiDelete('/platform/self-serve/tenants/' + tenantId, token, { confirm_slug: tenantSlug });
     }
     await evtContext.close();
   });
@@ -295,11 +312,9 @@ test.describe('WS Event Delivery', () => {
 
     await ws.send(JSON.stringify({ type: 'subscribe', topics: ['team:changed'] }));
     const inviteEmail = 'invite-' + Date.now() + '@test.local';
-    const inviteRes = await evtContext.request.post(BASE + '/platform/admin/team/invites', {
-      headers: { Authorization: 'Bearer ' + token },
-      data: { email: inviteEmail, role: 'viewer', tenant_ids: [tenantId] },
-    });
-    expect(inviteRes.ok()).toBeTruthy();
+
+    const result = await apiPost('/platform/admin/team/invites', token, { email: inviteEmail, role: 'viewer', tenant_ids: [tenantId] });
+    expect(result.ok, `invite via apiPost failed: ${result.status} ${JSON.stringify(result.data)}`).toBe(true);
 
     await ws.waitForMessage(
       (msg) => msg.type === 'event' && msg.topic === 'team:changed' && msg.hint === 'invite_created',
@@ -337,10 +352,11 @@ test.describe('WS Event Delivery', () => {
     await ws.send(JSON.stringify({ type: 'subscribe', topics: ['tenant:activity'] }));
     // Trigger a platform login (emits tenant:activity with tenant_id "ten_platform")
     const loginEmail = 'ws-login-' + Date.now() + '@test.local';
-    // Register first, then login
-    await evtContext.request.post(BASE + '/auth/register', {
+    // Register first (X-Tenant-Slug header — cannot use apiPost Bearer auth helper)
+    await fetch(BASE + '/auth/register', {
+      method: 'POST',
       headers: { 'X-Tenant-Slug': 'platform', 'Content-Type': 'application/json' },
-      data: { email: loginEmail, password: 'E2eTestPassword123!', name: 'WS Login Test' },
+      body: JSON.stringify({ email: loginEmail, password: 'E2eTestPassword123!', name: 'WS Login Test' }),
     });
 
     await ws.waitForMessage(
@@ -375,9 +391,10 @@ test.describe('WS Event Delivery', () => {
     await ws.send(JSON.stringify({ type: 'subscribe', topics: ['tenant:activity', 'metrics:updated'] }));
     // Platform signup emits both tenant:activity and metrics:updated with "ten_platform"
     const email = 'ws-dual-' + Date.now() + '@test.local';
-    await evtContext.request.post(BASE + '/auth/register', {
+    await fetch(BASE + '/auth/register', {
+      method: 'POST',
       headers: { 'X-Tenant-Slug': 'platform', 'Content-Type': 'application/json' },
-      data: { email, password: 'E2eTestPassword123!', name: 'WS Dual Emit Test' },
+      body: JSON.stringify({ email, password: 'E2eTestPassword123!', name: 'WS Dual Emit Test' }),
     });
 
     await ws.waitForMessage(
@@ -418,10 +435,7 @@ test.describe('WS Event Delivery', () => {
     await ws.send(JSON.stringify({ type: 'subscribe', topics: ['metrics:updated'] }));
     // Trigger team:changed event (invite creation emits with ten_platform)
     const inviteEmail = 'ws-unsub-test-' + Date.now() + '@test.local';
-    await evtContext.request.post(BASE + '/platform/admin/team/invites', {
-      headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
-      data: { email: inviteEmail, role: 'viewer', tenant_ids: [tenantId] },
-    });
+    await apiPost('/platform/admin/team/invites', token, { email: inviteEmail, role: 'viewer', tenant_ids: [tenantId] });
 
     await evtPage.waitForTimeout(2000);
 
@@ -441,13 +455,9 @@ test.describe('WS Event Delivery', () => {
     // Create a second tenant
     const token = await getAccessToken(evtContext);
     const otherSlug = 'e2e-ws-other-' + Date.now().toString(36);
-    const createRes = await evtContext.request.post(BASE + '/platform/self-serve/tenants', {
-      headers: { Authorization: 'Bearer ' + token },
-      data: { name: 'WS Other Tenant', slug: otherSlug },
-    });
-    expect(createRes.ok()).toBeTruthy();
-    const otherTenant = await createRes.json();
-    const otherTenantId = otherTenant.id as string;
+    const createRes = await apiPost('/platform/self-serve/tenants', token, { name: 'WS Other Tenant', slug: otherSlug });
+    expect(createRes.ok).toBe(true);
+    const otherTenantId = (createRes.data.tenant?.id || createRes.data.id) as string;
 
     try {
       await evtPage.goto(BASE + '/platform/console');
@@ -460,9 +470,10 @@ test.describe('WS Event Delivery', () => {
       await ws.send(JSON.stringify({ type: 'subscribe', topics: ['tenant:activity'] }));
       // Register end user on the OTHER tenant — should not appear in this WS session
       const endUserEmail = 'end-user-other-' + Date.now() + '@test.local';
-      await evtContext.request.post(BASE + '/auth/register', {
-        headers: { 'X-Tenant-Slug': otherSlug },
-        data: { email: endUserEmail, password: 'E2eTestPassword123!', name: 'WS Other User' },
+      await fetch(BASE + '/auth/register', {
+        method: 'POST',
+        headers: { 'X-Tenant-Slug': otherSlug, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: endUserEmail, password: 'E2eTestPassword123!', name: 'WS Other User' }),
       });
 
       await evtPage.waitForTimeout(2000);
@@ -477,10 +488,7 @@ test.describe('WS Event Delivery', () => {
     } finally {
       // Clean up second tenant
       const cleanToken = await getAccessToken(evtContext);
-      await evtContext.request.delete(BASE + '/platform/self-serve/tenants/' + otherTenantId, {
-        headers: { Authorization: 'Bearer ' + cleanToken, 'Content-Type': 'application/json' },
-        data: { confirm_slug: otherSlug },
-      });
+      await apiDelete('/platform/self-serve/tenants/' + otherTenantId, cleanToken, { confirm_slug: otherSlug });
     }
   });
 
@@ -500,11 +508,8 @@ test.describe('WS Event Delivery', () => {
     await ws.send(JSON.stringify({ type: 'subscribe', topics: ['team:changed'] }));
     // Create first invite — should receive event
     const email1 = 'dyn-invite-1-' + Date.now() + '@test.local';
-    const invite1Res = await evtContext.request.post(BASE + '/platform/admin/team/invites', {
-      headers: { Authorization: 'Bearer ' + token },
-      data: { email: email1, role: 'viewer', tenant_ids: [tenantId] },
-    });
-    expect(invite1Res.ok()).toBeTruthy();
+    const invite1Res = await apiPost('/platform/admin/team/invites', token, { email: email1, role: 'viewer', tenant_ids: [tenantId] });
+    expect(invite1Res.ok, `invite1 failed: ${invite1Res.status}`).toBe(true);
 
     await ws.waitForMessage(
       (msg) => msg.type === 'event' && msg.topic === 'team:changed' && msg.hint === 'invite_created',
@@ -518,11 +523,8 @@ test.describe('WS Event Delivery', () => {
 
     // Create second invite — should NOT receive event after unsubscribe
     const email2 = 'dyn-invite-2-' + Date.now() + '@test.local';
-    const invite2Res = await evtContext.request.post(BASE + '/platform/admin/team/invites', {
-      headers: { Authorization: 'Bearer ' + token },
-      data: { email: email2, role: 'viewer', tenant_ids: [tenantId] },
-    });
-    expect(invite2Res.ok()).toBeTruthy();
+    const invite2Res = await apiPost('/platform/admin/team/invites', token, { email: email2, role: 'viewer', tenant_ids: [tenantId] });
+    expect(invite2Res.ok, `invite2 failed: ${invite2Res.status}`).toBe(true);
 
     await evtPage.waitForTimeout(2000);
 
