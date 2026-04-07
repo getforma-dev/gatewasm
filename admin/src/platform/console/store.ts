@@ -644,6 +644,10 @@ export async function createTenant(fields: { name: string; slug: string }): Prom
     );
 
     setTenants([created, ...tenants()]);
+    // Creating first tenant makes the user an account owner — refresh to update signals
+    if (!accountOwner()) {
+      await loadCurrentUser();
+    }
     toast.show('Tenant created', 'success');
     return created;
   } catch (e) {
