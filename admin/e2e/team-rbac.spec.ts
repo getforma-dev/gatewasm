@@ -301,7 +301,7 @@ test.describe.serial('Invite Lifecycle', () => {
 
 // ── Block 2: Role Enforcement ─────────────────────────────────────────────────
 
-test.describe('Role Enforcement', () => {
+test.describe.serial('Role Enforcement', () => {
   let ownerAToken: string;
   let ownerAEmail: string;
   let tenantA1: { id: string; slug: string };
@@ -375,7 +375,7 @@ test.describe('Role Enforcement', () => {
       },
     );
 
-    expect(res.status()).toBeGreaterThanOrEqual(403);
+    expect(res.status()).toBe(403);
   });
 
   test('viewer cannot rotate tenant API key', async ({ request }) => {
@@ -391,7 +391,7 @@ test.describe('Role Enforcement', () => {
       },
     );
 
-    expect(res.status()).toBeGreaterThanOrEqual(403);
+    expect(res.status()).toBe(403);
   });
 
   test('admin can access mutation endpoints', async ({ request }) => {

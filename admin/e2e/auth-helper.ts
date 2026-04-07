@@ -13,8 +13,7 @@
  * the slug_dispatch path rewriter can interfere with POST body forwarding.
  */
 import type { APIResponse, Browser, Page, BrowserContext } from '@playwright/test';
-
-const BASE = process.env.BASE_URL || 'http://127.0.0.1:3102';
+import { BASE } from './helpers';
 const TENANT_HEADER = { 'X-Tenant-Slug': 'platform' };
 const TEST_PASSWORD = 'E2eTestPassword123!';
 
