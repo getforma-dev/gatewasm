@@ -1,5 +1,5 @@
 use axum::{
-    extract::{FromRequest, Path, State},
+    extract::{FromRequest, Path, Query, State},
     response::IntoResponse,
     Json,
 };
@@ -13,7 +13,21 @@ use crate::middleware::platform_team::PlatformMember;
 use crate::middleware::platform_user::PlatformUser;
 use crate::AppState;
 
-use super::owner_claims;
+// ── Helpers ────────────────────────────────────────────────────────────
+
+/// Extract the `PlatformMember` from request extensions (set by
+/// `require_platform_member` middleware on team routes).
+fn caller(req: &axum::extract::Request) -> Result<PlatformMember, AppError> {
+    req.extensions()
+        .get::<PlatformMember>()
+        .cloned()
+        .ok_or(AppError::Unauthorized {
+            error: "unauthorized",
+            message: "Platform membership context missing".into(),
+        })
+}
+
+// ── Request / query types ─────────────────────────────────────────────
 
 #[derive(Debug, Deserialize)]
 pub struct CreateOwnerInviteRequest {
@@ -28,14 +42,130 @@ pub struct AcceptOwnerInviteRequest {
     pub token: String,
 }
 
-/// GET /platform/admin/invites — List provider-owner invites.
+#[derive(Debug, Deserialize)]
+pub struct ResolveInviteQuery {
+    pub token: String,
+}
+
+// ── GET /platform/admin/invites/resolve ────────────────────────────────
+
+/// Public endpoint (no auth) — resolves invite details for the login page.
+/// Returns invite email, role, tenant names, and whether the user already has an account.
+pub async fn resolve_invite(
+    State(state): State<AppState>,
+    Query(params): Query<ResolveInviteQuery>,
+) -> Result<impl IntoResponse, AppError> {
+    let token = params.token.trim();
+    if token.is_empty() {
+        return Err(AppError::BadRequest {
+            error: "missing_token",
+            message: "Invite token is required".into(),
+        });
+    }
+
+    let token_hash = signing::hash_token(token);
+
+    let invite = sqlx::query_as::<_, (String, String, String, Vec<String>, Option<String>, chrono::DateTime<Utc>)>(
+        "SELECT oi.email, oi.role, oi.status, oi.tenant_ids, oi.account_owner_user_id, oi.expires_at
+         FROM owner_invites oi
+         WHERE oi.token_hash = $1
+         LIMIT 1",
+    )
+    .bind(&token_hash)
+    .fetch_optional(&state.db)
+    .await?
+    .ok_or(AppError::NotFound {
+        error: "invite_not_found",
+        message: "Invite not found".into(),
+    })?;
+
+    let (invite_email, role, status, tenant_ids, account_owner_user_id, expires_at) = invite;
+
+    if status != "pending" {
+        return Err(AppError::BadRequest {
+            error: "invite_not_pending",
+            message: format!("This invite has been {}", status),
+        });
+    }
+
+    if expires_at < Utc::now() {
+        return Err(AppError::BadRequest {
+            error: "invite_expired",
+            message: "This invite has expired".into(),
+        });
+    }
+
+    // Verify the account owner is still active
+    if let Some(ref owner_id) = account_owner_user_id {
+        let owner_active: bool = sqlx::query_scalar(
+            "SELECT EXISTS(SELECT 1 FROM platform_members WHERE account_owner_user_id = $1 AND user_id = $1 AND status = 'active')",
+        )
+        .bind(owner_id)
+        .fetch_one(&state.db)
+        .await
+        .unwrap_or(false);
+
+        if !owner_active {
+            return Err(AppError::BadRequest {
+                error: "account_inactive",
+                message: "The inviting account is no longer active".into(),
+            });
+        }
+    }
+
+    // Check if a user already exists for this email
+    let user_exists: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM users WHERE lower(email) = lower($1) AND tenant_id = 'ten_platform')",
+    )
+    .bind(&invite_email)
+    .fetch_one(&state.db)
+    .await
+    .unwrap_or(false);
+
+    // Get inviter email
+    let inviter_email: Option<String> = if let Some(ref owner_id) = account_owner_user_id {
+        sqlx::query_scalar("SELECT email FROM users WHERE id = $1")
+            .bind(owner_id)
+            .fetch_optional(&state.db)
+            .await
+            .ok()
+            .flatten()
+    } else {
+        None
+    };
+
+    // Resolve tenant names
+    let tenant_names: Vec<String> = if tenant_ids.is_empty() {
+        vec![]
+    } else {
+        sqlx::query_as::<_, (String,)>("SELECT name FROM tenants WHERE id = ANY($1)")
+            .bind(&tenant_ids)
+            .fetch_all(&state.db)
+            .await
+            .unwrap_or_default()
+            .into_iter()
+            .map(|(n,)| n)
+            .collect()
+    };
+
+    Ok(Json(serde_json::json!({
+        "invite_email": invite_email,
+        "inviter_email": inviter_email,
+        "role": role,
+        "tenant_names": tenant_names,
+        "user_exists": user_exists,
+        "status": status,
+    })))
+}
+
+/// GET /platform/admin/team/invites — List invites scoped to caller's account.
 pub async fn list_owner_invites(
     State(state): State<AppState>,
     req: axum::extract::Request,
 ) -> Result<impl IntoResponse, AppError> {
-    let _claims = owner_claims(&req)?;
+    let me = caller(&req)?;
 
-    // Keep statuses accurate for read paths.
+    // Expire stale invites.
     let _ = sqlx::query(
         "UPDATE owner_invites
          SET status = 'expired', updated_at = NOW()
@@ -65,9 +195,11 @@ pub async fn list_owner_invites(
                 oi.expires_at, oi.accepted_at, oi.revoked_at, oi.created_at, oi.updated_at,
                 oi.role, oi.tenant_ids
          FROM owner_invites oi
+         WHERE oi.account_owner_user_id = $1
          ORDER BY oi.created_at DESC
          LIMIT 200",
     )
+    .bind(&me.user_id)
     .fetch_all(&state.db)
     .await?;
 
@@ -109,22 +241,12 @@ pub async fn list_owner_invites(
     Ok(Json(serde_json::json!({ "invites": invites })))
 }
 
-/// POST /platform/admin/invites — Create provider-owner invite.
+/// POST /platform/admin/team/invites — Create a team invite.
 pub async fn create_owner_invite(
     State(state): State<AppState>,
     req: axum::extract::Request,
 ) -> Result<impl IntoResponse, AppError> {
-    let claims = owner_claims(&req)?;
-
-    // Extract caller's PlatformMember for authorization.
-    let caller = req
-        .extensions()
-        .get::<PlatformMember>()
-        .cloned()
-        .ok_or(AppError::Unauthorized {
-            error: "unauthorized",
-            message: "Platform membership context missing".into(),
-        })?;
+    let me = caller(&req)?;
 
     let body: CreateOwnerInviteRequest =
         axum::Json::<CreateOwnerInviteRequest>::from_request(req, &state)
@@ -161,28 +283,42 @@ pub async fn create_owner_invite(
         .filter(|t| !t.is_empty())
         .collect();
 
-    if role == "admin" && !tenant_ids.is_empty() {
-        return Err(AppError::BadRequest {
-            error: "invalid_tenant_ids",
-            message: "Admin role must not specify tenant_ids (admins have access to all tenants)"
-                .into(),
-        });
-    }
-
-    if (role == "editor" || role == "viewer") && tenant_ids.is_empty() {
+    if tenant_ids.is_empty() {
         return Err(AppError::BadRequest {
             error: "missing_tenant_ids",
-            message: "Editor and viewer roles require at least one tenant_id".into(),
+            message: "At least one tenant_id is required".into(),
         });
     }
 
-    // ── Duplicate check ────────────────────────────────────────────────
+    // Validate all tenant IDs belong to this account owner.
+    let valid_count = sqlx::query_as::<_, (i64,)>(
+        "SELECT COUNT(*) FROM tenants \
+         WHERE id = ANY($1) AND owner_user_id = $2 AND status != 'deleted'",
+    )
+    .bind(&tenant_ids)
+    .bind(&me.user_id)
+    .fetch_one(&state.db)
+    .await
+    .map(|(c,)| c)
+    .unwrap_or(0);
+
+    if valid_count != tenant_ids.len() as i64 {
+        return Err(AppError::BadRequest {
+            error: "invalid_tenant_ids",
+            message: "One or more tenant IDs are invalid or not owned by you".into(),
+        });
+    }
+
+    // ── Duplicate check (scoped to this account) ──────────────────────
     let already_member = sqlx::query_as::<_, (String,)>(
         "SELECT pm.id FROM platform_members pm
          JOIN users u ON u.id = pm.user_id
-         WHERE lower(u.email) = lower($1) AND pm.status = 'active'
+         WHERE pm.account_owner_user_id = $1
+           AND lower(u.email) = lower($2)
+           AND pm.status = 'active'
          LIMIT 1",
     )
+    .bind(&me.user_id)
     .bind(&email)
     .fetch_optional(&state.db)
     .await?;
@@ -190,22 +326,7 @@ pub async fn create_owner_invite(
     if already_member.is_some() {
         return Err(AppError::Conflict {
             error: "already_member",
-            message: "This email is already an active platform team member".into(),
-        });
-    }
-
-    // ── Authorization ──────────────────────────────────────────────────
-    if role == "admin" && !caller.is_owner() {
-        return Err(AppError::Forbidden {
-            error: "insufficient_role",
-            message: "Only the owner can invite admins".into(),
-        });
-    }
-
-    if (role == "editor" || role == "viewer") && !caller.is_admin_or_above() {
-        return Err(AppError::Forbidden {
-            error: "insufficient_role",
-            message: "Only owner or admin can invite editors and viewers".into(),
+            message: "This email is already an active team member".into(),
         });
     }
 
@@ -217,28 +338,30 @@ pub async fn create_owner_invite(
 
     let mut tx = state.db.begin().await?;
 
-    // Ensure one active invite per email.
+    // Ensure one active invite per email per account.
     sqlx::query(
         "UPDATE owner_invites
          SET status = 'revoked', revoked_at = NOW(), updated_at = NOW()
-         WHERE status = 'pending' AND lower(email) = lower($1)",
+         WHERE status = 'pending' AND lower(email) = lower($1) AND account_owner_user_id = $2",
     )
     .bind(&email)
+    .bind(&me.user_id)
     .execute(&mut *tx)
     .await?;
 
     sqlx::query(
         "INSERT INTO owner_invites
-         (id, email, token_hash, invited_by_user_id, status, expires_at, role, tenant_ids, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, 'pending', $5, $6, $7, NOW(), NOW())",
+         (id, email, token_hash, invited_by_user_id, status, expires_at, role, tenant_ids, account_owner_user_id, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, 'pending', $5, $6, $7, $8, NOW(), NOW())",
     )
     .bind(&invite_id)
     .bind(&email)
     .bind(&token_hash)
-    .bind(&claims.sub)
+    .bind(&me.user_id)
     .bind(expires_at)
     .bind(&role)
     .bind(&tenant_ids)
+    .bind(&me.user_id)
     .execute(&mut *tx)
     .await?;
 
@@ -250,17 +373,6 @@ pub async fn create_owner_invite(
     );
 
     // ── Send invite email (best-effort) ────────────────────────────────
-    let inviter_email: String = sqlx::query_as::<_, (String,)>(
-        "SELECT email FROM users WHERE id = $1",
-    )
-    .bind(&claims.sub)
-    .fetch_optional(&state.db)
-    .await
-    .ok()
-    .flatten()
-    .map(|(e,)| e)
-    .unwrap_or_else(|| "unknown".to_string());
-
     // Resolve tenant names for the email body.
     let tenant_names: Vec<String> = if tenant_ids.is_empty() {
         vec![]
@@ -278,7 +390,7 @@ pub async fn create_owner_invite(
     };
 
     let (subject, text_body, html_body) =
-        crate::email::platform_team_invite_email_content(&invite_url, &role, &inviter_email, &tenant_names);
+        crate::email::platform_team_invite_email_content(&invite_url, &role, &me.email, &tenant_names);
 
     if let Err(err) = crate::email::send_email(&state.config, &email, &subject, &text_body, &html_body).await {
         tracing::warn!(
@@ -296,7 +408,7 @@ pub async fn create_owner_invite(
                 "email": email,
                 "status": "pending",
                 "expires_at": expires_at.to_rfc3339(),
-                "invited_by_user_id": claims.sub,
+                "invited_by_user_id": me.user_id,
                 "role": role,
                 "tenant_ids": tenant_ids,
             },
@@ -306,21 +418,22 @@ pub async fn create_owner_invite(
     ))
 }
 
-/// POST /platform/admin/invites/{id}/revoke
-/// — Revoke a pending provider-owner invite.
+/// POST /platform/admin/team/invites/{id}/revoke
+/// — Revoke a pending invite (scoped to caller's account).
 pub async fn revoke_owner_invite(
     State(state): State<AppState>,
     Path(invite_id): Path<String>,
     req: axum::extract::Request,
 ) -> Result<impl IntoResponse, AppError> {
-    let _claims = owner_claims(&req)?;
+    let me = caller(&req)?;
 
     let updated = sqlx::query(
         "UPDATE owner_invites
          SET status = 'revoked', revoked_at = NOW(), updated_at = NOW()
-         WHERE id = $1 AND status = 'pending'",
+         WHERE id = $1 AND status = 'pending' AND account_owner_user_id = $2",
     )
     .bind(&invite_id)
+    .bind(&me.user_id)
     .execute(&state.db)
     .await?;
 
@@ -339,6 +452,7 @@ pub async fn revoke_owner_invite(
 }
 
 /// POST /platform/admin/invites/accept — Accept an owner invite as a platform user.
+/// (This route stays under require_platform_user, not team routes.)
 pub async fn accept_owner_invite(
     State(state): State<AppState>,
     req: axum::extract::Request,
@@ -375,16 +489,17 @@ pub async fn accept_owner_invite(
     let invite = sqlx::query_as::<
         _,
         (
-            String,
-            String,
-            String,
-            chrono::DateTime<Utc>,
-            Option<String>,
-            String,
-            Vec<String>,
+            String,                    // id
+            String,                    // email
+            String,                    // status
+            chrono::DateTime<Utc>,     // expires_at
+            Option<String>,            // accepted_by_user_id
+            String,                    // role
+            Vec<String>,               // tenant_ids
+            Option<String>,            // account_owner_user_id
         ),
     >(
-        "SELECT id, email, status, expires_at, accepted_by_user_id, role, tenant_ids
+        "SELECT id, email, status, expires_at, accepted_by_user_id, role, tenant_ids, account_owner_user_id
          FROM owner_invites
          WHERE token_hash = $1
          LIMIT 1
@@ -398,7 +513,13 @@ pub async fn accept_owner_invite(
         message: "Invite not found".into(),
     })?;
 
-    let (invite_id, invite_email, status, expires_at, accepted_by_user_id, invite_role, invite_tenant_ids) = invite;
+    let (invite_id, invite_email, status, expires_at, accepted_by_user_id, invite_role, invite_tenant_ids, invite_account_owner) = invite;
+
+    let invite_account_owner = invite_account_owner.ok_or(AppError::BadRequest {
+        error: "invalid_invite",
+        message: "This invite is missing account context and cannot be accepted".into(),
+    })?;
+
     let invite_email_norm = normalize_email(&invite_email);
     if invite_email_norm != user_email {
         return Err(AppError::Forbidden {
@@ -452,27 +573,27 @@ pub async fn accept_owner_invite(
     .execute(&mut *tx)
     .await?;
 
-    // ── Create platform_members row ────────────────────────────────────
+    // ── Create platform_members row (scoped to inviter's account) ─────
     let member_id = format!("pm_{}", uuid::Uuid::new_v4());
 
     sqlx::query(
-        "INSERT INTO platform_members (id, user_id, role, invited_by_user_id, status, created_at, updated_at)
-         SELECT $1, $2, $3, oi.invited_by_user_id, 'active', NOW(), NOW()
-         FROM owner_invites oi WHERE oi.id = $4
-         ON CONFLICT (user_id) DO UPDATE SET role = EXCLUDED.role, updated_at = NOW()",
+        "INSERT INTO platform_members (id, account_owner_user_id, user_id, invited_by_user_id, status, created_at, updated_at)
+         VALUES ($1, $2, $3, (SELECT invited_by_user_id FROM owner_invites WHERE id = $4), 'active', NOW(), NOW())
+         ON CONFLICT (account_owner_user_id, user_id) DO NOTHING",
     )
     .bind(&member_id)
+    .bind(&invite_account_owner)
     .bind(&platform_user.user_id)
-    .bind(&invite_role)
     .bind(&invite_id)
     .execute(&mut *tx)
     .await?;
 
-    // ── Create platform_member_tenants rows ────────────────────────────
+    // ── Create platform_member_tenants rows with per-tenant role ──────
     // Retrieve the actual member_id (may differ if ON CONFLICT hit).
     let actual_member_id: String = sqlx::query_as::<_, (String,)>(
-        "SELECT id FROM platform_members WHERE user_id = $1",
+        "SELECT id FROM platform_members WHERE account_owner_user_id = $1 AND user_id = $2",
     )
+    .bind(&invite_account_owner)
     .bind(&platform_user.user_id)
     .fetch_one(&mut *tx)
     .await
@@ -481,13 +602,14 @@ pub async fn accept_owner_invite(
     for tid in &invite_tenant_ids {
         let pmt_id = format!("pmt_{}", uuid::Uuid::new_v4());
         sqlx::query(
-            "INSERT INTO platform_member_tenants (id, member_id, tenant_id, granted_by_user_id, created_at, updated_at)
-             VALUES ($1, $2, $3, (SELECT invited_by_user_id FROM owner_invites WHERE id = $4), NOW(), NOW())
-             ON CONFLICT (member_id, tenant_id) DO NOTHING",
+            "INSERT INTO platform_member_tenants (id, member_id, tenant_id, role, granted_by_user_id, created_at, updated_at)
+             VALUES ($1, $2, $3, $4, (SELECT invited_by_user_id FROM owner_invites WHERE id = $5), NOW(), NOW())
+             ON CONFLICT (member_id, tenant_id) DO UPDATE SET role = EXCLUDED.role, updated_at = NOW()",
         )
         .bind(&pmt_id)
         .bind(&actual_member_id)
         .bind(tid)
+        .bind(&invite_role)
         .bind(&invite_id)
         .execute(&mut *tx)
         .await?;

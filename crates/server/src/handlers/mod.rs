@@ -41,7 +41,7 @@ use crate::middleware::entitlements::{
 use crate::middleware::management_auth::{require_management_auth, require_platform_admin};
 use crate::middleware::platform_owner::require_platform_owner;
 use crate::middleware::platform_team::{
-    require_tenant_access, require_write_access, resolve_platform_member,
+    require_tenant_access, resolve_platform_member,
 };
 use crate::middleware::platform_user::require_platform_user;
 use crate::middleware::rate_limit;
@@ -77,6 +77,16 @@ fn create_router_inner(state: AppState, rate_limit_enabled: bool) -> Router {
             enforce_compliance,
         ))
         .layer(middleware::from_fn_with_state(state.clone(), require_auth));
+
+    // Resend-verification: auth-protected + rate-limited (reuse register_limiter: 3/10min)
+    let resend_verification_route = Router::new()
+        .route("/auth/resend-verification", post(auth::resend_verification))
+        .layer(middleware::from_fn_with_state(state.clone(), require_auth));
+    let resend_verification_route = if rate_limit_enabled {
+        resend_verification_route.layer(rate_limit::register_limiter())
+    } else {
+        resend_verification_route
+    };
 
     // MFA endpoints are auth-protected but exempt from compliance-middleware
     // lockouts so users can complete MFA enrollment/challenge.
@@ -171,6 +181,7 @@ fn create_router_inner(state: AppState, rate_limit_enabled: bool) -> Router {
         .merge(webauthn_authed_routes)
         .merge(webauthn_login_routes)
         .merge(protected)
+        .merge(resend_verification_route)
         .layer(middleware::from_fn_with_state(
             state.clone(),
             extract_tenant,
@@ -476,7 +487,6 @@ fn create_router_inner(state: AppState, rate_limit_enabled: bool) -> Router {
             "/platform/self-serve/tenants/{id}/webhooks/{webhook_id}/test",
             post(onboarding::test_tenant_webhook),
         )
-        .layer(middleware::from_fn(require_write_access))
         .layer(middleware::from_fn_with_state(
             state.clone(),
             require_tenant_access,
@@ -541,27 +551,21 @@ fn create_router_inner(state: AppState, rate_limit_enabled: bool) -> Router {
             "/platform/admin/payments",
             get(owner::list_payments).post(owner::create_payment),
         )
-        .route(
-            "/platform/admin/invites",
-            get(owner::list_owner_invites).post(owner::create_owner_invite),
-        )
-        .route(
-            "/platform/admin/invites/{id}/revoke",
-            post(owner::revoke_owner_invite),
-        )
         .layer(middleware::from_fn_with_state(state.clone(), require_platform_owner))
         .layer(middleware::from_fn_with_state(state.clone(), require_auth));
 
-    // ── Platform Team API (JWT + platform member, admin required for mutations) ──
+    // ── Platform Team API (JWT + account owner only) ──────────────────
+    // Invite routes live here too — they're customer team management, not platform owner ops.
     let team_routes = Router::new()
         .route("/", axum::routing::get(owner::list_team_members))
         .route("/{id}", axum::routing::get(owner::get_team_member))
         .route("/{id}", axum::routing::patch(owner::update_team_member))
         .route("/{id}", axum::routing::delete(owner::remove_team_member))
-        .route("/{id}/tenants", axum::routing::put(owner::set_member_tenants))
+        .route("/invites", axum::routing::get(owner::list_owner_invites).post(owner::create_owner_invite))
+        .route("/invites/{id}/revoke", axum::routing::post(owner::revoke_owner_invite))
         .layer(axum::middleware::from_fn_with_state(
             state.clone(),
-            crate::middleware::platform_team::require_platform_team_admin,
+            crate::middleware::platform_team::require_account_owner,
         ))
         .layer(axum::middleware::from_fn_with_state(
             state.clone(),
@@ -582,6 +586,13 @@ fn create_router_inner(state: AppState, rate_limit_enabled: bool) -> Router {
             state.clone(),
             require_platform_user,
         ));
+
+    // ── Public invite resolution (no auth required) ──────────────
+    let invite_resolve_routes = Router::new()
+        .route(
+            "/platform/admin/invites/resolve",
+            get(owner::resolve_invite),
+        );
 
     // ── Compliance API (require management auth + tenant) ──────────
     let compliance_routes = Router::new()
@@ -627,6 +638,7 @@ fn create_router_inner(state: AppState, rate_limit_enabled: bool) -> Router {
         .merge(self_serve_routes)
         .merge(admin_routes)
         .merge(owner_invite_accept_routes)
+        .merge(invite_resolve_routes)
         .merge(owner_api_routes)
         .nest("/platform/admin/team", team_routes)
         .merge(compliance_routes)

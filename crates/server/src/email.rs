@@ -176,7 +176,8 @@ async fn send_via_smtp(
 // HTML wrapper
 // ---------------------------------------------------------------------------
 
-/// Wraps inner HTML content in a responsive, Outlook-compatible email shell.
+/// Wraps inner HTML content in a dark-themed, Outlook-compatible email shell.
+/// Uses fAuth brand: dark background (#0a0a0c), dark card (#111114), warm gold accent (#c4a265).
 fn email_html_wrapper(inner: &str) -> String {
     format!(
         r#"<!DOCTYPE html>
@@ -185,28 +186,31 @@ fn email_html_wrapper(inner: &str) -> String {
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta http-equiv="X-UA-Compatible" content="IE=edge">
-<title>Forma Auth</title>
+<title>fAuth</title>
+<!--[if mso]>
+<style>body,table,td{{font-family:Arial,sans-serif !important;}}</style>
+<![endif]-->
 </head>
-<body style="margin:0;padding:0;background-color:#f4f4f7;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;">
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#f4f4f7;">
+<body style="margin:0;padding:0;background-color:#0a0a0c;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;-webkit-font-smoothing:antialiased;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#0a0a0c;">
   <tr>
     <td align="center" style="padding:40px 16px;">
-      <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background-color:#ffffff;border-radius:8px;overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,0.08);">
+      <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background-color:#111114;border-radius:8px;overflow:hidden;border:1px solid #1e1e24;">
         <!-- Header -->
         <tr>
-          <td style="padding:32px 40px 0 40px;">
-            <p style="margin:0 0 4px;font-size:13px;font-weight:600;color:#6b7280;text-transform:uppercase;letter-spacing:0.5px;">Forma Auth</p>
+          <td style="padding:32px 40px 0 40px;background-color:#111114;">
+            <p style="margin:0 0 4px;font-size:14px;font-weight:700;color:#c4a265;letter-spacing:0.5px;">fAuth</p>
           </td>
         </tr>
         <!-- Body -->
         <tr>
-          <td style="padding:24px 40px 40px 40px;font-size:16px;line-height:1.6;color:#1f2937;">
+          <td style="padding:24px 40px 40px 40px;font-size:16px;line-height:1.6;color:#e8e6e3;background-color:#111114;">
             {inner}
           </td>
         </tr>
         <!-- Footer -->
         <tr>
-          <td style="padding:20px 40px;border-top:1px solid #e5e7eb;font-size:12px;color:#9ca3af;text-align:center;">
+          <td style="padding:20px 40px;border-top:1px solid #1e1e24;font-size:12px;color:#6b6a72;text-align:center;background-color:#111114;">
             &copy; {year} Forma &middot; Secure authentication infrastructure
           </td>
         </tr>
@@ -222,12 +226,13 @@ fn email_html_wrapper(inner: &str) -> String {
 }
 
 /// Renders a CTA button for email templates (table-based for Outlook).
+/// Warm gold background (#c4a265) with dark text (#0a0a0c).
 fn email_button(href: &str, label: &str) -> String {
     format!(
         r#"<table role="presentation" cellpadding="0" cellspacing="0" style="margin:24px 0;">
   <tr>
-    <td align="center" style="background-color:#4f46e5;border-radius:6px;">
-      <a href="{href}" target="_blank" style="display:inline-block;padding:14px 32px;font-size:16px;font-weight:600;color:#ffffff;text-decoration:none;border-radius:6px;">{label}</a>
+    <td align="center" style="background-color:#c4a265;border-radius:6px;">
+      <a href="{href}" target="_blank" style="display:inline-block;padding:14px 32px;font-size:16px;font-weight:600;color:#0a0a0c;text-decoration:none;border-radius:6px;">{label}</a>
     </td>
   </tr>
 </table>"#,
@@ -263,12 +268,12 @@ pub fn verification_email_content(
     );
 
     let inner = format!(
-        r#"<h1 style="margin:0 0 16px;font-size:22px;font-weight:700;color:#111827;">Verify your email</h1>
+        r#"<h1 style="margin:0 0 16px;font-size:22px;font-weight:700;color:#e8e6e3;">Verify your email</h1>
 <p style="margin:0 0 8px;">Welcome to <strong>{escaped_app_name}</strong>. Please verify your email address to get started.</p>
 {button}
-<p style="margin:0;font-size:13px;color:#6b7280;">If the button doesn't work, copy and paste this link into your browser:</p>
-<p style="margin:4px 0 0;font-size:13px;word-break:break-all;color:#4f46e5;"><a href="{escaped_link}" style="color:#4f46e5;">{escaped_link}</a></p>
-<p style="margin:16px 0 0;font-size:13px;color:#6b7280;">This link expires in 24 hours.</p>"#,
+<p style="margin:0;font-size:13px;color:#6b6a72;">If the button doesn't work, copy and paste this link into your browser:</p>
+<p style="margin:4px 0 0;font-size:13px;word-break:break-all;color:#c4a265;"><a href="{escaped_link}" style="color:#c4a265;">{escaped_link}</a></p>
+<p style="margin:16px 0 0;font-size:13px;color:#6b6a72;">This link expires in 24 hours.</p>"#,
         escaped_app_name = escaped_app_name,
         button = email_button(&escaped_link, "Verify email address"),
         escaped_link = escaped_link,
@@ -301,12 +306,12 @@ pub fn password_reset_email_content(
     );
 
     let inner = format!(
-        r#"<h1 style="margin:0 0 16px;font-size:22px;font-weight:700;color:#111827;">Reset your password</h1>
+        r#"<h1 style="margin:0 0 16px;font-size:22px;font-weight:700;color:#e8e6e3;">Reset your password</h1>
 <p style="margin:0 0 8px;">We received a request to reset your <strong>{escaped_app_name}</strong> password. Click the button below to choose a new one.</p>
 {button}
-<p style="margin:0;font-size:13px;color:#6b7280;">If the button doesn't work, copy and paste this link into your browser:</p>
-<p style="margin:4px 0 0;font-size:13px;word-break:break-all;color:#4f46e5;"><a href="{escaped_link}" style="color:#4f46e5;">{escaped_link}</a></p>
-<p style="margin:16px 0 0;font-size:13px;color:#6b7280;">This link expires in 1 hour. If you didn't request this, you can safely ignore this email.</p>"#,
+<p style="margin:0;font-size:13px;color:#6b6a72;">If the button doesn't work, copy and paste this link into your browser:</p>
+<p style="margin:4px 0 0;font-size:13px;word-break:break-all;color:#c4a265;"><a href="{escaped_link}" style="color:#c4a265;">{escaped_link}</a></p>
+<p style="margin:16px 0 0;font-size:13px;color:#6b6a72;">This link expires in 1 hour. If you didn't request this, you can safely ignore this email.</p>"#,
         escaped_app_name = escaped_app_name,
         button = email_button(&escaped_link, "Reset password"),
         escaped_link = escaped_link,
@@ -344,12 +349,12 @@ pub fn tenant_invite_email_content(
     );
 
     let inner = format!(
-        r#"<h1 style="margin:0 0 16px;font-size:22px;font-weight:700;color:#111827;">You're invited</h1>
+        r#"<h1 style="margin:0 0 16px;font-size:22px;font-weight:700;color:#e8e6e3;">You're invited</h1>
 <p style="margin:0 0 8px;">You have been invited to join <strong>{escaped_app_name}</strong> with the role <strong>{escaped_role_name}</strong>.</p>
 {inviter_html}{button}
-<p style="margin:0;font-size:13px;color:#6b7280;">If the button doesn't work, copy and paste this link into your browser:</p>
-<p style="margin:4px 0 0;font-size:13px;word-break:break-all;color:#4f46e5;"><a href="{escaped_invite_url}" style="color:#4f46e5;">{escaped_invite_url}</a></p>
-<p style="margin:16px 0 0;font-size:13px;color:#6b7280;">This invite expires soon.</p>"#,
+<p style="margin:0;font-size:13px;color:#6b6a72;">If the button doesn't work, copy and paste this link into your browser:</p>
+<p style="margin:4px 0 0;font-size:13px;word-break:break-all;color:#c4a265;"><a href="{escaped_invite_url}" style="color:#c4a265;">{escaped_invite_url}</a></p>
+<p style="margin:16px 0 0;font-size:13px;color:#6b6a72;">This invite expires soon.</p>"#,
         escaped_app_name = escaped_app_name,
         escaped_role_name = escaped_role_name,
         inviter_html = inviter_html,
@@ -393,14 +398,14 @@ pub fn platform_team_invite_email_content(
     );
 
     let inner = format!(
-        r#"<h1 style="margin:0 0 16px;font-size:22px;font-weight:700;color:#111827;">You're invited to fAuth</h1>
+        r#"<h1 style="margin:0 0 16px;font-size:22px;font-weight:700;color:#e8e6e3;">You're invited to fAuth</h1>
 <p style="margin:0 0 8px;">You have been invited to join as <strong>{escaped_role_display}</strong>.</p>
 <p style="margin:0 0 8px;">Invited by <strong>{escaped_invited_by}</strong>.</p>
 <p style="margin:0 0 16px;">{escaped_tenant_line}</p>
 {button}
-<p style="margin:0;font-size:13px;color:#6b7280;">If the button doesn't work, copy and paste this link into your browser:</p>
-<p style="margin:4px 0 0;font-size:13px;word-break:break-all;color:#4f46e5;"><a href="{escaped_invite_url}" style="color:#4f46e5;">{escaped_invite_url}</a></p>
-<p style="margin:16px 0 0;font-size:13px;color:#6b7280;">This invite expires soon.</p>"#,
+<p style="margin:0;font-size:13px;color:#6b6a72;">If the button doesn't work, copy and paste this link into your browser:</p>
+<p style="margin:4px 0 0;font-size:13px;word-break:break-all;color:#c4a265;"><a href="{escaped_invite_url}" style="color:#c4a265;">{escaped_invite_url}</a></p>
+<p style="margin:16px 0 0;font-size:13px;color:#6b6a72;">This invite expires soon.</p>"#,
         escaped_role_display = escaped_role_display,
         escaped_invited_by = escaped_invited_by,
         escaped_tenant_line = escaped_tenant_line,

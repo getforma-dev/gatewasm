@@ -16,7 +16,7 @@ use crate::jwt::signing;
 use crate::middleware::entitlements::ensure_user_capacity;
 use crate::middleware::fingerprint::extract_client_ip;
 use crate::middleware::tenant::TenantContext;
-use crate::responses::MessageResponse;
+
 use crate::types::*;
 use crate::AppState;
 
@@ -1695,15 +1695,35 @@ pub async fn me(
             .flatten()
             .unwrap_or((claims.name.clone(), None, false, false));
 
-    let platform_role: Option<String> = sqlx::query_as::<_, (String,)>(
-        "SELECT role FROM platform_members WHERE user_id = $1 AND status = 'active'"
+    // Check if user is an account owner (has a self-referencing platform_members row).
+    let is_account_owner: bool = sqlx::query_scalar(
+        "SELECT EXISTS(
+           SELECT 1 FROM platform_members
+           WHERE user_id = $1 AND account_owner_user_id = $1 AND status = 'active'
+         )"
     )
     .bind(&claims.sub)
-    .fetch_optional(&state.db)
+    .fetch_one(&state.db)
     .await
-    .ok()
-    .flatten()
-    .map(|(r,)| r);
+    .unwrap_or(false);
+
+    // For non-owners, find their highest per-tenant role across all team memberships.
+    let platform_role: Option<String> = if is_account_owner {
+        None // Account owners don't need a per-tenant role — they have full access
+    } else {
+        sqlx::query_scalar(
+            "SELECT pmt.role FROM platform_members pm \
+             JOIN platform_member_tenants pmt ON pmt.member_id = pm.id \
+             WHERE pm.user_id = $1 AND pm.status = 'active' \
+             ORDER BY CASE pmt.role WHEN 'admin' THEN 0 WHEN 'editor' THEN 1 WHEN 'viewer' THEN 2 END \
+             LIMIT 1"
+        )
+        .bind(&claims.sub)
+        .fetch_optional(&state.db)
+        .await
+        .ok()
+        .flatten()
+    };
 
     Ok(Json(serde_json::json!({
         "id": claims.sub,
@@ -1716,6 +1736,7 @@ pub async fn me(
         "auth_method": claims.auth_method,
         "mfa_verified": claims.mfa_verified,
         "mfa_enabled": mfa_enabled,
+        "is_account_owner": is_account_owner,
         "platform_role": platform_role,
     })))
 }
@@ -1813,7 +1834,108 @@ pub async fn verify_email(
         .await;
     }
 
-    Ok(Json(MessageResponse { message: "Email verified successfully" }))
+    // Redirect to console with a branded HTML page instead of raw JSON.
+    let redirect_url = if tenant_id.as_deref() == Some("ten_platform") {
+        "/platform/console?verified=true"
+    } else {
+        "/platform/login?verified=true"
+    };
+
+    let html = format!(
+        r#"<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="refresh" content="2;url={redirect_url}">
+<title>Email Verified — fAuth</title>
+<style>
+  body {{ margin:0; background:#0a0a0c; color:#e8e6e3; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif; display:flex; align-items:center; justify-content:center; min-height:100vh; }}
+  .card {{ background:#111114; border:1px solid #1e1e24; border-radius:12px; padding:48px; text-align:center; max-width:400px; }}
+  .check {{ font-size:48px; margin-bottom:16px; color:#c4a265; }}
+  h1 {{ font-size:20px; margin:0 0 8px; color:#e8e6e3; }}
+  p {{ font-size:14px; color:#6b6a72; margin:0; }}
+  a {{ color:#c4a265; text-decoration:none; }}
+  a:hover {{ text-decoration:underline; }}
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="check">&#10003;</div>
+  <h1>Email Verified</h1>
+  <p>Redirecting you to the dashboard...</p>
+  <p style="margin-top:16px;"><a href="{redirect_url}">Click here if not redirected</a></p>
+</div>
+</body>
+</html>"#,
+        redirect_url = redirect_url,
+    );
+
+    Ok(axum::response::Html(html).into_response())
+}
+
+/// POST /t/{slug}/auth/resend-verification — Resend verification email.
+/// Authenticated. Rate-limited to 1 per 60s per user (applied at route level).
+pub async fn resend_verification(
+    State(state): State<AppState>,
+    req: axum::extract::Request,
+) -> Result<impl IntoResponse, AppError> {
+    let claims = req
+        .extensions()
+        .get::<signing::Claims>()
+        .ok_or(AppError::Unauthorized {
+            error: "unauthorized",
+            message: "Not authenticated".into(),
+        })?;
+
+    let user = sqlx::query_as::<_, (String, String, bool)>(
+        "SELECT id, email, COALESCE(email_verified, FALSE) FROM users WHERE id = $1",
+    )
+    .bind(&claims.sub)
+    .fetch_optional(&state.db)
+    .await?
+    .ok_or(AppError::NotFound {
+        error: "user_not_found",
+        message: "User not found".into(),
+    })?;
+
+    let (user_id, email, verified) = user;
+
+    if verified {
+        return Ok(Json(serde_json::json!({ "message": "Email is already verified" })));
+    }
+
+    let token = format!("vt_{}", uuid::Uuid::new_v4());
+    let expires = Utc::now() + chrono::Duration::hours(24);
+
+    sqlx::query(
+        "UPDATE users SET verification_token = $1, verification_token_expires = $2 WHERE id = $3",
+    )
+    .bind(&token)
+    .bind(expires)
+    .bind(&user_id)
+    .execute(&state.db)
+    .await?;
+
+    let tenant_slug = claims.tenant_id.as_deref().unwrap_or("platform");
+    let slug = if tenant_slug == "ten_platform" {
+        "platform"
+    } else {
+        tenant_slug
+    };
+    let (subject, text_body, html_body) =
+        crate::email::verification_email_content(&state.config.server_url, slug, "fAuth", &token);
+
+    if let Err(err) =
+        crate::email::send_email(&state.config, &email, &subject, &text_body, &html_body).await
+    {
+        tracing::warn!(to = %email, error = %err, "Failed to send verification email");
+        return Err(AppError::InternalError {
+            error: "email_failed",
+            message: "Failed to send verification email".into(),
+        });
+    }
+
+    Ok(Json(serde_json::json!({ "message": "Verification email sent" })))
 }
 
 #[cfg(test)]

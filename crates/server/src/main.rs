@@ -294,6 +294,8 @@ async fn bootstrap_platform_plane(pool: &PgPool, config: &AppConfig) {
     }
 
     // ── Backfill: ensure platform_members row for users who own tenants ──
+    // Each tenant owner gets a self-referencing row (account_owner_user_id = user_id)
+    // indicating they are the account owner of their own team.
     let tenant_owners = sqlx::query_as::<_, (String,)>(
         "SELECT DISTINCT owner_user_id FROM tenants
          WHERE owner_user_id IS NOT NULL AND status != 'deleted' AND id != 'ten_platform'"
@@ -304,9 +306,9 @@ async fn bootstrap_platform_plane(pool: &PgPool, config: &AppConfig) {
 
     for (owner_user_id,) in &tenant_owners {
         sqlx::query(
-            "INSERT INTO platform_members (id, user_id, role, status, created_at, updated_at)
-             VALUES ($1, $2, 'owner', 'active', NOW(), NOW())
-             ON CONFLICT (user_id) DO NOTHING"
+            "INSERT INTO platform_members (id, account_owner_user_id, user_id, status, created_at, updated_at)
+             VALUES ($1, $2, $2, 'active', NOW(), NOW())
+             ON CONFLICT (account_owner_user_id, user_id) DO NOTHING"
         )
         .bind(format!("pmem_{}", uuid::Uuid::new_v4()))
         .bind(owner_user_id)

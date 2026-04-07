@@ -4,10 +4,11 @@
 // as opaque calls and emits ISLAND_START/ISLAND_END opcodes.
 // ---------------------------------------------------------------------------
 
-import { h } from 'formajs';
+import { h, createShow } from 'formajs';
 import { AuthCard } from './AuthCard';
 import { MfaPanel } from './MfaPanel';
 import { FAuthMark } from '../console/helpers';
+import { inviteInfo, inviteLoading, ownerInviteToken } from './store';
 
 // ── Page component ──────────────────────────────────────────────────────
 // Static shell (hero, card head, footer) + island function calls.
@@ -48,23 +49,52 @@ export function LoginPage() {
 
     // ── Auth section ──────────────────────────────────────────────
     h('section', { class: 'auth' },
+      // Invite banner (shown when invite token resolves)
+      createShow(
+        () => inviteInfo() !== null && !inviteLoading(),
+        () => h('div', { class: 'invite-banner' },
+          h('p', { class: 'invite-banner-text' },
+            () => {
+              const info = inviteInfo()!;
+              const who = info.inviter_email || 'A team member';
+              const role = info.role.charAt(0).toUpperCase() + info.role.slice(1);
+              const where = info.tenant_names.length > 0
+                ? ' on ' + info.tenant_names.join(', ')
+                : '';
+              return who + ' invited you to join as ' + role + where;
+            },
+          ),
+        ),
+      ),
+
       h('div', { class: 'card' },
-        // Card head (pure static)
+        // Card head (dynamic when invite present)
         h('div', { class: 'card-head' },
-          h('h2', null, 'Platform Login'),
-          h('p', null, 'Sign in to manage your tenants and account settings.'),
+          h('h2', null, () => {
+            const info = inviteInfo();
+            if (!info) return 'Platform Login';
+            return info.user_exists ? 'Sign in to accept invite' : 'Create an account to accept';
+          }),
+          h('p', null, () => {
+            const info = inviteInfo();
+            if (!info) return 'Sign in to manage your tenants and account settings.';
+            return 'You need a fAuth account to join the team.';
+          }),
         ),
 
         // Islands: function calls trigger Rule 11 → ISLAND_START/END
         AuthCard(),
         MfaPanel(),
 
-        // "New here?" footer (pure static)
+        // "New here?" footer
         h('div', {
           class: 'new-here mt-lg divider-top text-center text-sm text-muted-dim',
         },
           'New here? ',
-          h('a', { href: '/platform/onboarding' }, 'Start onboarding'),
+          h('a', {
+            href: () => '/platform/onboarding' +
+              (ownerInviteToken ? '?owner_invite=' + encodeURIComponent(ownerInviteToken) : ''),
+          }, 'Start onboarding'),
         ),
       ),
     ),

@@ -26,6 +26,7 @@ export interface Tenant {
   login_redirect_url: string | null;
   management_api_key?: string;
   access?: 'own' | 'team';
+  team_role?: string; // "admin" | "editor" | "viewer" — only for access === 'team'
   created_at: string;
 }
 
@@ -264,21 +265,26 @@ export type Plane = 'operator' | 'organization' | 'enduser';
 export type AppMode = 'account' | 'workspace';
 export type AccountTab = 'tenants' | 'team' | 'api-keys' | 'account-settings';
 
+export interface TenantAssignment {
+  tenant_id: string;
+  tenant_name: string;
+  role: 'admin' | 'editor' | 'viewer';
+}
+
 export interface PlatformMember {
   id: string;
   user_id: string;
-  role: 'owner' | 'admin' | 'editor' | 'viewer';
+  is_account_owner: boolean;
   status: 'active' | 'suspended';
   invited_by_user_id: string | null;
   email: string;
-  name: string;
+  name: string | null;
   last_login_at: string | null;
   created_at: string;
-  tenant_count: number;
-  tenants?: { id: string; name: string; slug: string }[];
+  tenant_assignments: TenantAssignment[];
 }
 
-export type PlatformRole = 'owner' | 'admin' | 'editor' | 'viewer';
+export type PlatformRole = 'admin' | 'editor' | 'viewer';
 
 interface PlaneTab {
   id: string;
@@ -395,6 +401,8 @@ const [webhooksLoading, setWebhooksLoading] = createSignal(false);
 export { webhooksLoading };
 const [platformRole, setPlatformRole] = createSignal<PlatformRole | null>(null);
 export { platformRole };
+const [accountOwner, setAccountOwner] = createSignal(false);
+export { accountOwner };
 const [teamMembers, setTeamMembers] = createSignal<PlatformMember[]>([]);
 export { teamMembers };
 const [teamLoading, setTeamLoading] = createSignal(false);
@@ -512,8 +520,9 @@ export async function rotateTenantKey(tenantId: string): Promise<string | null> 
 
 async function loadCurrentUser(): Promise<void> {
   try {
-    const data = await api.get<PlatformUser & { platform_role?: PlatformRole }>('/auth/me');
+    const data = await api.get<PlatformUser & { is_account_owner?: boolean; platform_role?: PlatformRole }>('/auth/me');
     setCurrentUser(data);
+    setAccountOwner(data.is_account_owner ?? false);
     if (data.platform_role) {
       setPlatformRole(data.platform_role);
     }
@@ -1402,6 +1411,15 @@ export async function init(): Promise<void> {
       await Promise.all([loadTenants(), loadCurrentUser()]);
     }
 
+    // Check for verified toast
+    const verifiedParam = new URLSearchParams(window.location.search).get('verified');
+    if (verifiedParam === 'true') {
+      toast.show('Email verified successfully', 'success');
+      const cleanUrl = new URL(window.location.href);
+      cleanUrl.searchParams.delete('verified');
+      history.replaceState(null, '', cleanUrl.pathname + cleanUrl.search);
+    }
+
     // URL determines mode — no localStorage override
     const urlMatch = window.location.pathname.match(/^\/platform\/console\/([^/]+)/);
     if (urlMatch) {
@@ -1457,7 +1475,10 @@ export async function loadTeamMemberDetail(memberId: string): Promise<PlatformMe
   }
 }
 
-export async function updateTeamMember(memberId: string, fields: { role?: string; status?: string }): Promise<boolean> {
+export async function updateTeamMember(
+  memberId: string,
+  fields: { status?: string; tenant_assignments?: { tenant_id: string; role: string }[] },
+): Promise<boolean> {
   try {
     await api.request('/platform/admin/team/' + encodeURIComponent(memberId), { method: 'PATCH', body: fields });
     toast.show('Member updated', 'success');
@@ -1481,26 +1502,23 @@ export async function removeTeamMember(memberId: string): Promise<boolean> {
   }
 }
 
-export async function setMemberTenants(memberId: string, tenantIds: string[]): Promise<boolean> {
+export async function resendVerification(): Promise<boolean> {
   try {
-    await api.request('/platform/admin/team/' + encodeURIComponent(memberId) + '/tenants', {
-      method: 'PUT',
-      body: { tenant_ids: tenantIds },
-    });
-    toast.show('Tenant access updated', 'success');
+    await api.post('/t/platform/auth/resend-verification', {});
+    toast.show('Verification email sent — check your inbox', 'success');
     return true;
   } catch (e) {
-    toast.show(e instanceof Error ? e.message : 'Failed to update tenant access', 'error');
+    toast.show(e instanceof Error ? e.message : 'Failed to send verification email', 'error');
     return false;
   }
 }
 
 export async function sendTeamInvite(email: string, role: string, tenantIds: string[]): Promise<{ invite_url: string } | null> {
   try {
-    const data = await api.post<{ invite_url: string }>('/platform/admin/invites', {
+    const data = await api.post<{ invite_url: string }>('/platform/admin/team/invites', {
       email,
       role,
-      tenant_ids: tenantIds.length > 0 ? tenantIds : undefined,
+      tenant_ids: tenantIds,
     });
     toast.show('Invite sent to ' + email, 'success');
     await loadTeamMembers();
@@ -1513,7 +1531,7 @@ export async function sendTeamInvite(email: string, role: string, tenantIds: str
 
 export async function revokeTeamInvite(inviteId: string): Promise<boolean> {
   try {
-    await api.post('/platform/admin/invites/' + encodeURIComponent(inviteId) + '/revoke', {});
+    await api.post('/platform/admin/team/invites/' + encodeURIComponent(inviteId) + '/revoke', {});
     toast.show('Invite revoked', 'success');
     return true;
   } catch (e) {
@@ -1524,7 +1542,7 @@ export async function revokeTeamInvite(inviteId: string): Promise<boolean> {
 
 export async function loadTeamInvites(): Promise<any[]> {
   try {
-    const data = await api.get<{ invites: any[] }>('/platform/admin/invites');
+    const data = await api.get<{ invites: any[] }>('/platform/admin/team/invites');
     return data.invites;
   } catch {
     return [];
@@ -1532,13 +1550,13 @@ export async function loadTeamInvites(): Promise<any[]> {
 }
 
 export function canEdit(): boolean {
+  if (accountOwner()) return true;
   const role = platformRole();
-  // If platform_role is not set (backend doesn't return it), default to allowing edits
-  // since the self-serve flow only lets tenant owners access the console
-  if (!role) return true;
-  return role === 'owner' || role === 'admin' || role === 'editor';
+  // If no role is set and not an owner, default to read-only
+  if (!role) return false;
+  return role === 'admin' || role === 'editor';
 }
 
 export function isOwner(): boolean {
-  return platformRole() === 'owner';
+  return accountOwner();
 }

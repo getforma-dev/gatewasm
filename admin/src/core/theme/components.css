@@ -1445,6 +1445,18 @@
   gap: 8px;
 }
 
+.verify-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 28px;
+  background: rgba(251, 191, 36, 0.06);
+  border-bottom: 1px solid rgba(251, 191, 36, 0.15);
+  font-size: 0.82rem;
+  color: var(--warning);
+}
+
 .account-tabs {
   display: flex;
   gap: 0;

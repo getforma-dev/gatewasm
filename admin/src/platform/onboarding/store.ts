@@ -42,7 +42,13 @@ import { randomState, generatePKCE } from '../../core/utils';
 // ── Post-auth routing ───────────────────────────────────────────────────
 
 async function routeAfterAuth(): Promise<void> {
-  window.location.href = '/platform/console';
+  // Preserve owner_invite param so the console can auto-accept after registration
+  const params = new URLSearchParams(window.location.search);
+  const invite = params.get('owner_invite');
+  const target = invite
+    ? '/platform/console?owner_invite=' + encodeURIComponent(invite)
+    : '/platform/console';
+  window.location.href = target;
 }
 
 // ── OAuth ───────────────────────────────────────────────────────────────

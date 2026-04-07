@@ -69,6 +69,35 @@ if (code) {
   } catch { /* noop */ }
 }
 
+// ── Invite resolution ─────────────────────────────────────────────────
+export const [inviteInfo, setInviteInfo] = createSignal<{
+  invite_email: string;
+  inviter_email: string | null;
+  role: string;
+  tenant_names: string[];
+  user_exists: boolean;
+} | null>(null);
+export const [inviteLoading, setInviteLoading] = createSignal(false);
+
+if (ownerInviteToken) {
+  setInviteLoading(true);
+  fetch(serverUrl + '/platform/admin/invites/resolve?token=' + encodeURIComponent(ownerInviteToken))
+    .then((r) => r.ok ? r.json() : null)
+    .then((data: any) => {
+      if (data) {
+        setInviteInfo(data);
+        // Auto-fill email after DOM is ready
+        requestAnimationFrame(() => {
+          if (emailInput) emailInput.value = data.invite_email;
+        });
+      }
+    })
+    .catch(() => { /* resolve failed — show normal login */ })
+    .finally(() => setInviteLoading(false));
+}
+
+export { ownerInviteToken };
+
 // ── Helpers ───────────────────────────────────────────────────────────
 
 import { randomState, generatePKCE, decodeJwtClaims, copyText } from '../../core/utils';

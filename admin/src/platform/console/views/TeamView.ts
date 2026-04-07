@@ -1,16 +1,16 @@
 import { h, createSignal, createShow } from 'formajs';
 import { CopyButton } from '../../../core/components/ui/CopyButton';
 import {
-  teamMembers, teamLoading, platformRole, tenants,
+  teamMembers, teamLoading, accountOwner, tenants,
   loadTeamMembers, loadTeamMemberDetail,
-  updateTeamMember, removeTeamMember, setMemberTenants,
+  updateTeamMember, removeTeamMember,
   sendTeamInvite, revokeTeamInvite, loadTeamInvites,
   type PlatformMember, type PlatformRole,
 } from '../store';
 
 // ── Types ──────────────────────────────────────────────────────────────
 
-type RoleFilter = 'all' | PlatformRole;
+type RoleFilter = 'all' | 'owner' | PlatformRole;
 
 // ── TeamView (main) ────────────────────────────────────────────────────
 
@@ -29,7 +29,8 @@ export function TeamView() {
     const f = filter();
     const members = teamMembers();
     if (f === 'all') return members;
-    return members.filter((m) => m.role === f);
+    if (f === 'owner') return members.filter((m) => m.is_account_owner);
+    return members.filter((m) => m.tenant_assignments?.some((a) => a.role === f));
   };
 
   const pendingInvites = () => invites().filter((i) => i.status === 'pending');
@@ -45,10 +46,6 @@ export function TeamView() {
     void loadTeamMemberDetail(memberId).then((detail) => {
       if (expandedId() === memberId) setExpandedDetail(detail);
     });
-  }
-
-  async function handleRoleChange(member: PlatformMember, newRole: string) {
-    await updateTeamMember(member.id, { role: newRole });
   }
 
   async function handleRemove(member: PlatformMember) {
@@ -70,7 +67,7 @@ export function TeamView() {
       ),
       h('div', { class: 'view-header-actions' },
         createShow(
-          () => platformRole() === 'owner' || platformRole() === 'admin',
+          () => accountOwner(),
           () => h('button', {
             type: 'button',
             class: 'btn btn-primary',
@@ -157,39 +154,27 @@ export function TeamView() {
                 h('div', { class: 'user-row-main' },
                   h('div', { class: 'user-email' },
                     member.email || member.name,
-                    h('span', { class: 'badge badge-subtle' }, member.role),
+                    member.is_account_owner
+                      ? h('span', { class: 'badge badge-subtle' }, 'Owner')
+                      : member.tenant_assignments?.length > 0
+                        ? h('span', { class: 'badge badge-subtle' },
+                            member.tenant_assignments.length + ' ' +
+                            (member.tenant_assignments.length === 1 ? 'tenant' : 'tenants'))
+                        : null,
                     member.status === 'suspended'
                       ? h('span', { class: 'badge badge-danger' }, 'Suspended')
                       : null,
                   ),
                   h('div', { class: 'user-meta text-muted' },
                     'Joined ' + new Date(member.created_at).toLocaleDateString(),
-                    member.tenant_count > 0
-                      ? ' \u00b7 ' + member.tenant_count + ' ' + (member.tenant_count === 1 ? 'tenant' : 'tenants')
+                    !member.is_account_owner && member.tenant_assignments?.length > 0
+                      ? ' \u00b7 ' + [...new Set(member.tenant_assignments.map((a) => a.role))].join(', ')
                       : '',
                   ),
                 ),
                 h('div', { class: 'user-row-actions' },
-                  // Role dropdown — only for non-owner members, and only if caller can edit
-                  member.role !== 'owner' && (platformRole() === 'owner' || platformRole() === 'admin')
-                    ? h('select', {
-                        class: 'filter-select',
-                        value: member.role,
-                        onClick: (e: Event) => e.stopPropagation(),
-                        onChange: (e: Event) => {
-                          e.stopPropagation();
-                          void handleRoleChange(member, (e.target as HTMLSelectElement).value);
-                        },
-                      },
-                        platformRole() === 'owner'
-                          ? h('option', { value: 'admin' }, 'Admin')
-                          : null,
-                        h('option', { value: 'editor' }, 'Editor'),
-                        h('option', { value: 'viewer' }, 'Viewer'),
-                      )
-                    : null,
-                  // Remove button — only for non-owner members
-                  member.role !== 'owner' && (platformRole() === 'owner' || platformRole() === 'admin')
+                  // Remove button — only for non-owner members, and only if caller is account owner
+                  !member.is_account_owner && accountOwner()
                     ? h('button', {
                         type: 'button',
                         class: 'btn btn-sm btn-ghost btn-danger',
@@ -235,8 +220,6 @@ function InviteModal(onClose: () => void, onInvitesUpdate: (inv: any[]) => void)
   const [sending, setSending] = createSignal(false);
   const [inviteUrl, setInviteUrl] = createSignal<string | null>(null);
 
-  const isScopedRole = () => role() === 'editor' || role() === 'viewer';
-
   function toggleTenant(id: string) {
     const current = selectedTenantIds();
     if (current.includes(id)) {
@@ -248,7 +231,7 @@ function InviteModal(onClose: () => void, onInvitesUpdate: (inv: any[]) => void)
 
   const canSend = () => {
     if (!email().trim()) return false;
-    if (isScopedRole() && selectedTenantIds().length === 0) return false;
+    if (selectedTenantIds().length === 0) return false; // all roles require tenant selection
     return true;
   };
 
@@ -312,35 +295,30 @@ function InviteModal(onClose: () => void, onInvitesUpdate: (inv: any[]) => void)
               value: role,
               onChange: (e: Event) => setRole((e.target as HTMLSelectElement).value),
             },
-              platformRole() === 'owner'
-                ? h('option', { value: 'admin' }, 'Admin')
-                : null,
+              h('option', { value: 'admin' }, 'Admin'),
               h('option', { value: 'editor' }, 'Editor'),
               h('option', { value: 'viewer' }, 'Viewer'),
             ),
           ),
 
-          // Tenant multi-select — only for scoped roles
-          createShow(
-            isScopedRole,
-            () => h('div', { class: 'modal-field' },
-              h('label', null, 'Tenant Access'),
-              h('div', { class: 'tenant-checkbox-list' },
-                () => tenants().map((t) =>
-                  h('label', { class: 'tenant-checkbox-item', key: t.id },
-                    h('input', {
-                      type: 'checkbox',
-                      checked: () => selectedTenantIds().includes(t.id),
-                      onChange: () => toggleTenant(t.id),
-                    }),
-                    h('span', null, t.name + ' (/t/' + t.slug + ')'),
-                  ),
+          // Tenant multi-select — always required (all roles are per-tenant)
+          h('div', { class: 'modal-field' },
+            h('label', null, 'Tenant Access'),
+            h('div', { class: 'tenant-checkbox-list' },
+              () => tenants().map((t) =>
+                h('label', { class: 'tenant-checkbox-item', key: t.id },
+                  h('input', {
+                    type: 'checkbox',
+                    checked: () => selectedTenantIds().includes(t.id),
+                    onChange: () => toggleTenant(t.id),
+                  }),
+                  h('span', null, t.name + ' (/t/' + t.slug + ')'),
                 ),
               ),
-              createShow(
-                () => tenants().length === 0,
-                () => h('p', { class: 'text-muted' }, 'No tenants available.'),
-              ),
+            ),
+            createShow(
+              () => tenants().length === 0,
+              () => h('p', { class: 'text-muted' }, 'No tenants available.'),
             ),
           ),
 
@@ -373,7 +351,7 @@ function MemberDetail(member: PlatformMember) {
         h('div', { class: 'card-label' }, 'Profile'),
         h('div', { class: 'detail-grid' },
           DetailRow('Email', member.email),
-          DetailRow('Role', member.role),
+          DetailRow('Role', member.is_account_owner ? 'Owner' : (member.tenant_assignments?.length > 0 ? [...new Set(member.tenant_assignments.map((a) => a.role))].join(', ') : 'No assignments')),
           DetailRow('Status', member.status),
           DetailRow('Joined', new Date(member.created_at).toLocaleDateString()),
           DetailRow('Last Login', member.last_login_at ? new Date(member.last_login_at).toLocaleDateString() : 'Never'),
@@ -383,16 +361,16 @@ function MemberDetail(member: PlatformMember) {
         ),
       ),
 
-      // Right: tenant access (only for editor/viewer)
-      (member.role === 'editor' || member.role === 'viewer')
+      // Right: tenant access (for all non-owner members)
+      !member.is_account_owner
         ? h('div', { class: 'user-detail-sessions' },
             h('div', { class: 'card-label' }, 'Tenant Access'),
-            member.tenants && member.tenants.length > 0
+            member.tenant_assignments && member.tenant_assignments.length > 0
               ? h('div', { class: 'tenant-access-list' },
-                  ...member.tenants.map((t) =>
+                  ...member.tenant_assignments.map((a) =>
                     h('div', { class: 'tenant-access-item' },
-                      h('span', null, t.name),
-                      h('span', { class: 'text-muted' }, '/t/' + t.slug),
+                      h('span', null, a.tenant_name),
+                      h('span', { class: 'badge badge-subtle' }, a.role),
                     ),
                   ),
                 )
@@ -407,24 +385,39 @@ function MemberDetail(member: PlatformMember) {
 // ── TenantAssigner ─────────────────────────────────────────────────────
 
 function TenantAssigner(member: PlatformMember) {
-  const currentIds = (member.tenants || []).map((t) => t.id);
-  const [selected, setSelected] = createSignal<string[]>(currentIds);
+  // Build initial state: { tenantId -> role } from current assignments
+  const currentAssignments = new Map(
+    (member.tenant_assignments || []).map((a) => [a.tenant_id, a.role]),
+  );
+  const [assignments, setAssignments] = createSignal<Map<string, string>>(currentAssignments);
   const [saving, setSaving] = createSignal(false);
 
-  const allTenants = tenants;
+  // Only show tenants owned by the account owner (access === 'own'), not team-assigned from other accounts
+  const allTenants = () => tenants().filter((t: any) => t.access === 'own' || !t.access);
 
   function toggleTenant(id: string) {
-    const cur = selected();
-    if (cur.includes(id)) {
-      setSelected(cur.filter((x) => x !== id));
+    const cur = new Map(assignments());
+    if (cur.has(id)) {
+      cur.delete(id);
     } else {
-      setSelected([...cur, id]);
+      cur.set(id, 'editor'); // default role for new assignment
     }
+    setAssignments(cur);
+  }
+
+  function setTenantRole(id: string, role: string) {
+    const cur = new Map(assignments());
+    cur.set(id, role);
+    setAssignments(cur);
   }
 
   async function handleSave() {
     setSaving(true);
-    await setMemberTenants(member.id, selected());
+    const tenantAssignments = Array.from(assignments().entries()).map(([tenant_id, role]) => ({
+      tenant_id,
+      role,
+    }));
+    await updateTeamMember(member.id, { tenant_assignments: tenantAssignments });
     setSaving(false);
   }
 
@@ -435,10 +428,22 @@ function TenantAssigner(member: PlatformMember) {
         h('label', { class: 'tenant-checkbox-item', key: t.id },
           h('input', {
             type: 'checkbox',
-            checked: () => selected().includes(t.id),
+            checked: () => assignments().has(t.id),
             onChange: () => toggleTenant(t.id),
           }),
           h('span', null, t.name + ' (/t/' + t.slug + ')'),
+          assignments().has(t.id)
+            ? h('select', {
+                class: 'filter-select',
+                value: () => assignments().get(t.id) || 'editor',
+                onClick: (e: Event) => e.stopPropagation(),
+                onChange: (e: Event) => setTenantRole(t.id, (e.target as HTMLSelectElement).value),
+              },
+                h('option', { value: 'admin' }, 'Admin'),
+                h('option', { value: 'editor' }, 'Editor'),
+                h('option', { value: 'viewer' }, 'Viewer'),
+              )
+            : null,
         ),
       ),
     ),

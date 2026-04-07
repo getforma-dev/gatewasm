@@ -391,11 +391,12 @@ pub async fn create_tenant(
     .execute(&mut *tx)
     .await?;
 
-    // Ensure caller has a platform_members row (owner of their own workspaces)
+    // Ensure caller has a platform_members row (owner of their own workspaces).
+    // Self-referencing row: account_owner_user_id = user_id means "I am the account owner".
     sqlx::query(
-        "INSERT INTO platform_members (id, user_id, role, status, created_at, updated_at)
-         VALUES ($1, $2, 'owner', 'active', NOW(), NOW())
-         ON CONFLICT (user_id) DO NOTHING"
+        "INSERT INTO platform_members (id, account_owner_user_id, user_id, status, created_at, updated_at)
+         VALUES ($1, $2, $2, 'active', NOW(), NOW())
+         ON CONFLICT (account_owner_user_id, user_id) DO NOTHING"
     )
     .bind(format!("pmem_{}", uuid::Uuid::new_v4()))
     .bind(&user.user_id)
@@ -500,16 +501,7 @@ pub async fn list_my_tenants(
             message: "Not authenticated".into(),
         })?;
 
-    let member = sqlx::query_as::<_, (String, String)>(
-        "SELECT id, role FROM platform_members WHERE user_id = $1 AND status = 'active'"
-    )
-    .bind(&user.user_id)
-    .fetch_optional(&state.db)
-    .await?;
-
-    let is_scoped = member.as_ref().map_or(false, |(_, role)| role == "editor" || role == "viewer");
-
-    // Fetch own tenants (always)
+    // Fetch own tenants (always — user is the tenant owner)
     let own_rows = sqlx::query(
         "SELECT id, name, slug, status, allowed_providers, max_users, \
          COALESCE(plan, 'trial') AS plan, trial_ends_at, created_at, \
@@ -522,47 +514,34 @@ pub async fn list_my_tenants(
     .fetch_all(&state.db)
     .await?;
 
-    // Fetch team-assigned tenants (for scoped roles only, excluding own)
-    let team_rows = if is_scoped {
-        let (member_id, _) = member.unwrap();
-        sqlx::query(
-            "SELECT t.id, t.name, t.slug, t.status, t.allowed_providers, t.max_users, \
-             COALESCE(t.plan, 'trial') AS plan, t.trial_ends_at, t.created_at, \
-             t.onboarding_completed, t.onboarding_step, t.preferred_tab, \
-             t.branding_primary_color, t.login_redirect_url \
-             FROM tenants t \
-             JOIN platform_member_tenants pmt ON pmt.tenant_id = t.id \
-             WHERE pmt.member_id = $1 AND t.status != 'deleted' AND t.owner_user_id != $2 \
-             ORDER BY t.created_at DESC",
-        )
-        .bind(&member_id)
-        .bind(&user.user_id)
-        .fetch_all(&state.db)
-        .await?
-    } else if member.is_some() {
-        // Owner/admin: get ALL non-owned tenants
-        sqlx::query(
-            "SELECT id, name, slug, status, allowed_providers, max_users, \
-             COALESCE(plan, 'trial') AS plan, trial_ends_at, created_at, \
-             onboarding_completed, onboarding_step, preferred_tab, \
-             branding_primary_color, login_redirect_url \
-             FROM tenants WHERE owner_user_id != $1 AND status != 'deleted' AND id != 'ten_platform' \
-             ORDER BY created_at DESC",
-        )
-        .bind(&user.user_id)
-        .fetch_all(&state.db)
-        .await?
-    } else {
-        vec![]
-    };
+    // Fetch team-assigned tenants (via platform_member_tenants, excluding own)
+    // This covers invited members who have per-tenant role assignments on
+    // another account owner's tenants.
+    let team_rows = sqlx::query(
+        "SELECT t.id, t.name, t.slug, t.status, t.allowed_providers, t.max_users, \
+         COALESCE(t.plan, 'trial') AS plan, t.trial_ends_at, t.created_at, \
+         t.onboarding_completed, t.onboarding_step, t.preferred_tab, \
+         t.branding_primary_color, t.login_redirect_url, pmt.role AS team_role \
+         FROM platform_members pm \
+         JOIN platform_member_tenants pmt ON pmt.member_id = pm.id \
+         JOIN tenants t ON t.id = pmt.tenant_id \
+         WHERE pm.user_id = $1 \
+           AND pm.account_owner_user_id != $1 \
+           AND pm.status = 'active' \
+           AND t.status != 'deleted' \
+         ORDER BY t.created_at DESC",
+    )
+    .bind(&user.user_id)
+    .fetch_all(&state.db)
+    .await?;
 
-    fn row_to_json(row: &sqlx::postgres::PgRow, server_url: &str, access: &str) -> serde_json::Value {
+    fn row_to_json(row: &sqlx::postgres::PgRow, server_url: &str, access: &str, team_role: Option<&str>) -> serde_json::Value {
         use sqlx::Row;
         let slug: String = row.get("slug");
         let redirect_url: Option<String> = row.get("login_redirect_url");
         let resolved_redirect =
             resolve_login_redirect(server_url, &slug, redirect_url.as_deref());
-        serde_json::json!({
+        let mut val = serde_json::json!({
             "id": row.get::<String, _>("id"),
             "name": row.get::<String, _>("name"),
             "slug": slug,
@@ -578,17 +557,25 @@ pub async fn list_my_tenants(
             "primary_color": row.get::<Option<String>, _>("branding_primary_color"),
             "login_redirect_url": resolved_redirect,
             "access": access,
-        })
+        });
+        if let Some(role) = team_role {
+            val.as_object_mut().unwrap().insert("team_role".to_string(), serde_json::json!(role));
+        }
+        val
     }
 
     let mut items: Vec<serde_json::Value> = own_rows
         .iter()
-        .map(|row| row_to_json(row, &state.config.server_url, "own"))
+        .map(|row| row_to_json(row, &state.config.server_url, "own", None))
         .collect();
     items.extend(
         team_rows
             .iter()
-            .map(|row| row_to_json(row, &state.config.server_url, "team")),
+            .map(|row| {
+                use sqlx::Row;
+                let team_role: String = row.get("team_role");
+                row_to_json(row, &state.config.server_url, "team", Some(&team_role))
+            }),
     );
 
     Ok(Json(serde_json::json!({
@@ -602,7 +589,7 @@ pub async fn get_my_tenant(
     Path(tenant_id): Path<String>,
     req: axum::extract::Request,
 ) -> Result<impl IntoResponse, AppError> {
-    let user = req
+    let _user = req
         .extensions()
         .get::<PlatformUser>()
         .cloned()
@@ -618,10 +605,9 @@ pub async fn get_my_tenant(
          login_redirect_url, \
          onboarding_completed, onboarding_step, preferred_tab, \
          created_at, updated_at \
-         FROM tenants WHERE id = $1 AND owner_user_id = $2 AND status != 'deleted'",
+         FROM tenants WHERE id = $1 AND status != 'deleted'",
     )
     .bind(&tenant_id)
-    .bind(&user.user_id)
     .fetch_optional(&state.db)
     .await?
     .ok_or(AppError::NotFound {
@@ -674,7 +660,7 @@ pub async fn update_my_tenant(
     Path(tenant_id): Path<String>,
     req: axum::extract::Request,
 ) -> Result<impl IntoResponse, AppError> {
-    let user = req
+    let _user = req
         .extensions()
         .get::<PlatformUser>()
         .cloned()
@@ -683,13 +669,12 @@ pub async fn update_my_tenant(
             message: "Not authenticated".into(),
         })?;
 
-    // Verify ownership
+    // Verify tenant exists (access already validated by require_tenant_access middleware)
     let existing_tenant = sqlx::query(
         "SELECT slug, login_redirect_url FROM tenants \
-         WHERE id = $1 AND owner_user_id = $2 AND status != 'deleted'",
+         WHERE id = $1 AND status != 'deleted'",
     )
     .bind(&tenant_id)
-    .bind(&user.user_id)
     .fetch_optional(&state.db)
     .await?
     .ok_or(AppError::NotFound {
@@ -1001,7 +986,7 @@ pub async fn rotate_my_tenant_key(
             message: "Not authenticated".into(),
         })?;
 
-    // Verify ownership
+    // Verify ownership — only the tenant owner can rotate keys (destructive operation)
     let exists = sqlx::query_scalar::<_, String>(
         "SELECT id FROM tenants WHERE id = $1 AND owner_user_id = $2 AND status != 'deleted'",
     )
@@ -1043,7 +1028,7 @@ pub async fn tenant_stats(
     Query(query): Query<TenantStatsQuery>,
     req: axum::extract::Request,
 ) -> Result<impl IntoResponse, AppError> {
-    let user = req
+    let _user = req
         .extensions()
         .get::<PlatformUser>()
         .cloned()
@@ -1054,10 +1039,9 @@ pub async fn tenant_stats(
 
     // Verify ownership
     sqlx::query_scalar::<_, String>(
-        "SELECT id FROM tenants WHERE id = $1 AND owner_user_id = $2 AND status != 'deleted'",
+        "SELECT id FROM tenants WHERE id = $1 AND status != 'deleted'",
     )
     .bind(&tenant_id)
-    .bind(&user.user_id)
     .fetch_optional(&state.db)
     .await?
     .ok_or(AppError::NotFound {
@@ -1369,7 +1353,7 @@ pub async fn list_tenant_users(
     Path(tenant_id): Path<String>,
     req: axum::extract::Request,
 ) -> Result<impl IntoResponse, AppError> {
-    let user = req
+    let _user = req
         .extensions()
         .get::<PlatformUser>()
         .cloned()
@@ -1380,10 +1364,9 @@ pub async fn list_tenant_users(
 
     // Verify ownership
     sqlx::query_scalar::<_, String>(
-        "SELECT id FROM tenants WHERE id = $1 AND owner_user_id = $2 AND status != 'deleted'",
+        "SELECT id FROM tenants WHERE id = $1 AND status != 'deleted'",
     )
     .bind(&tenant_id)
-    .bind(&user.user_id)
     .fetch_optional(&state.db)
     .await?
     .ok_or(AppError::NotFound {
@@ -1433,7 +1416,7 @@ pub async fn block_tenant_user(
     Path((tenant_id, user_id)): Path<(String, String)>,
     req: axum::extract::Request,
 ) -> Result<impl IntoResponse, AppError> {
-    let platform_user = req
+    let _platform_user = req
         .extensions()
         .get::<PlatformUser>()
         .cloned()
@@ -1443,10 +1426,9 @@ pub async fn block_tenant_user(
         })?;
 
     sqlx::query_scalar::<_, String>(
-        "SELECT id FROM tenants WHERE id = $1 AND owner_user_id = $2 AND status != 'deleted'",
+        "SELECT id FROM tenants WHERE id = $1 AND status != 'deleted'",
     )
     .bind(&tenant_id)
-    .bind(&platform_user.user_id)
     .fetch_optional(&state.db)
     .await?
     .ok_or(AppError::NotFound {
@@ -1478,7 +1460,7 @@ pub async fn unblock_tenant_user(
     Path((tenant_id, user_id)): Path<(String, String)>,
     req: axum::extract::Request,
 ) -> Result<impl IntoResponse, AppError> {
-    let platform_user = req
+    let _platform_user = req
         .extensions()
         .get::<PlatformUser>()
         .cloned()
@@ -1488,10 +1470,9 @@ pub async fn unblock_tenant_user(
         })?;
 
     sqlx::query_scalar::<_, String>(
-        "SELECT id FROM tenants WHERE id = $1 AND owner_user_id = $2 AND status != 'deleted'",
+        "SELECT id FROM tenants WHERE id = $1 AND status != 'deleted'",
     )
     .bind(&tenant_id)
-    .bind(&platform_user.user_id)
     .fetch_optional(&state.db)
     .await?
     .ok_or(AppError::NotFound {
@@ -1523,7 +1504,7 @@ pub async fn revoke_tenant_user_sessions(
     Path((tenant_id, user_id)): Path<(String, String)>,
     req: axum::extract::Request,
 ) -> Result<impl IntoResponse, AppError> {
-    let platform_user = req
+    let _platform_user = req
         .extensions()
         .get::<PlatformUser>()
         .cloned()
@@ -1533,10 +1514,9 @@ pub async fn revoke_tenant_user_sessions(
         })?;
 
     sqlx::query_scalar::<_, String>(
-        "SELECT id FROM tenants WHERE id = $1 AND owner_user_id = $2 AND status != 'deleted'",
+        "SELECT id FROM tenants WHERE id = $1 AND status != 'deleted'",
     )
     .bind(&tenant_id)
-    .bind(&platform_user.user_id)
     .fetch_optional(&state.db)
     .await?
     .ok_or(AppError::NotFound {
@@ -1561,7 +1541,7 @@ pub async fn list_tenant_user_sessions(
     Path((tenant_id, user_id)): Path<(String, String)>,
     req: axum::extract::Request,
 ) -> Result<impl IntoResponse, AppError> {
-    let platform_user = req
+    let _platform_user = req
         .extensions()
         .get::<PlatformUser>()
         .cloned()
@@ -1571,10 +1551,9 @@ pub async fn list_tenant_user_sessions(
         })?;
 
     sqlx::query_scalar::<_, String>(
-        "SELECT id FROM tenants WHERE id = $1 AND owner_user_id = $2 AND status != 'deleted'",
+        "SELECT id FROM tenants WHERE id = $1 AND status != 'deleted'",
     )
     .bind(&tenant_id)
-    .bind(&platform_user.user_id)
     .fetch_optional(&state.db)
     .await?
     .ok_or(AppError::NotFound {
@@ -1632,7 +1611,7 @@ pub async fn list_tenant_audit_log(
     Path(tenant_id): Path<String>,
     req: axum::extract::Request,
 ) -> Result<impl IntoResponse, AppError> {
-    let platform_user = req
+    let _platform_user = req
         .extensions()
         .get::<PlatformUser>()
         .cloned()
@@ -1642,10 +1621,9 @@ pub async fn list_tenant_audit_log(
         })?;
 
     sqlx::query_scalar::<_, String>(
-        "SELECT id FROM tenants WHERE id = $1 AND owner_user_id = $2 AND status != 'deleted'",
+        "SELECT id FROM tenants WHERE id = $1 AND status != 'deleted'",
     )
     .bind(&tenant_id)
-    .bind(&platform_user.user_id)
     .fetch_optional(&state.db)
     .await?
     .ok_or(AppError::NotFound {
@@ -1694,7 +1672,7 @@ pub async fn list_tenant_sessions(
     Path(tenant_id): Path<String>,
     req: axum::extract::Request,
 ) -> Result<impl IntoResponse, AppError> {
-    let platform_user = req
+    let _platform_user = req
         .extensions()
         .get::<PlatformUser>()
         .cloned()
@@ -1704,10 +1682,9 @@ pub async fn list_tenant_sessions(
         })?;
 
     sqlx::query_scalar::<_, String>(
-        "SELECT id FROM tenants WHERE id = $1 AND owner_user_id = $2 AND status != 'deleted'",
+        "SELECT id FROM tenants WHERE id = $1 AND status != 'deleted'",
     )
     .bind(&tenant_id)
-    .bind(&platform_user.user_id)
     .fetch_optional(&state.db)
     .await?
     .ok_or(AppError::NotFound {
@@ -1754,7 +1731,7 @@ pub async fn list_tenant_passkeys(
     Path(tenant_id): Path<String>,
     req: axum::extract::Request,
 ) -> Result<impl IntoResponse, AppError> {
-    let platform_user = req
+    let _platform_user = req
         .extensions()
         .get::<PlatformUser>()
         .cloned()
@@ -1764,10 +1741,9 @@ pub async fn list_tenant_passkeys(
         })?;
 
     sqlx::query_scalar::<_, String>(
-        "SELECT id FROM tenants WHERE id = $1 AND owner_user_id = $2 AND status != 'deleted'",
+        "SELECT id FROM tenants WHERE id = $1 AND status != 'deleted'",
     )
     .bind(&tenant_id)
-    .bind(&platform_user.user_id)
     .fetch_optional(&state.db)
     .await?
     .ok_or(AppError::NotFound {
@@ -1814,7 +1790,7 @@ pub async fn list_tenant_roles(
     Path(tenant_id): Path<String>,
     req: axum::extract::Request,
 ) -> Result<impl IntoResponse, AppError> {
-    let platform_user = req
+    let _platform_user = req
         .extensions()
         .get::<PlatformUser>()
         .cloned()
@@ -1824,10 +1800,9 @@ pub async fn list_tenant_roles(
         })?;
 
     sqlx::query_scalar::<_, String>(
-        "SELECT id FROM tenants WHERE id = $1 AND owner_user_id = $2 AND status != 'deleted'",
+        "SELECT id FROM tenants WHERE id = $1 AND status != 'deleted'",
     )
     .bind(&tenant_id)
-    .bind(&platform_user.user_id)
     .fetch_optional(&state.db)
     .await?
     .ok_or(AppError::NotFound {
@@ -1869,7 +1844,7 @@ pub async fn create_tenant_role(
     Path(tenant_id): Path<String>,
     req: axum::extract::Request,
 ) -> Result<impl IntoResponse, AppError> {
-    let platform_user = req
+    let _platform_user = req
         .extensions()
         .get::<PlatformUser>()
         .cloned()
@@ -1879,10 +1854,9 @@ pub async fn create_tenant_role(
         })?;
 
     sqlx::query_scalar::<_, String>(
-        "SELECT id FROM tenants WHERE id = $1 AND owner_user_id = $2 AND status != 'deleted'",
+        "SELECT id FROM tenants WHERE id = $1 AND status != 'deleted'",
     )
     .bind(&tenant_id)
-    .bind(&platform_user.user_id)
     .fetch_optional(&state.db)
     .await?
     .ok_or(AppError::NotFound {
@@ -1952,7 +1926,7 @@ pub async fn update_tenant_role(
     Path((tenant_id, role_id)): Path<(String, String)>,
     req: axum::extract::Request,
 ) -> Result<impl IntoResponse, AppError> {
-    let platform_user = req
+    let _platform_user = req
         .extensions()
         .get::<PlatformUser>()
         .cloned()
@@ -1962,10 +1936,9 @@ pub async fn update_tenant_role(
         })?;
 
     sqlx::query_scalar::<_, String>(
-        "SELECT id FROM tenants WHERE id = $1 AND owner_user_id = $2 AND status != 'deleted'",
+        "SELECT id FROM tenants WHERE id = $1 AND status != 'deleted'",
     )
     .bind(&tenant_id)
-    .bind(&platform_user.user_id)
     .fetch_optional(&state.db)
     .await?
     .ok_or(AppError::NotFound {
@@ -2038,7 +2011,7 @@ pub async fn delete_tenant_role(
     Path((tenant_id, role_id)): Path<(String, String)>,
     req: axum::extract::Request,
 ) -> Result<impl IntoResponse, AppError> {
-    let platform_user = req
+    let _platform_user = req
         .extensions()
         .get::<PlatformUser>()
         .cloned()
@@ -2048,10 +2021,9 @@ pub async fn delete_tenant_role(
         })?;
 
     sqlx::query_scalar::<_, String>(
-        "SELECT id FROM tenants WHERE id = $1 AND owner_user_id = $2 AND status != 'deleted'",
+        "SELECT id FROM tenants WHERE id = $1 AND status != 'deleted'",
     )
     .bind(&tenant_id)
-    .bind(&platform_user.user_id)
     .fetch_optional(&state.db)
     .await?
     .ok_or(AppError::NotFound {
@@ -2102,7 +2074,7 @@ pub async fn get_hosted_page(
     Path(tenant_id): Path<String>,
     req: axum::extract::Request,
 ) -> Result<impl IntoResponse, AppError> {
-    let user = req
+    let _user = req
         .extensions()
         .get::<PlatformUser>()
         .cloned()
@@ -2113,10 +2085,9 @@ pub async fn get_hosted_page(
 
     // Verify ownership
     sqlx::query_scalar::<_, String>(
-        "SELECT id FROM tenants WHERE id = $1 AND owner_user_id = $2 AND status != 'deleted'",
+        "SELECT id FROM tenants WHERE id = $1 AND status != 'deleted'",
     )
     .bind(&tenant_id)
-    .bind(&user.user_id)
     .fetch_optional(&state.db)
     .await?
     .ok_or(AppError::NotFound {
@@ -2167,7 +2138,7 @@ pub async fn update_hosted_page(
     Path(tenant_id): Path<String>,
     req: axum::extract::Request,
 ) -> Result<impl IntoResponse, AppError> {
-    let user = req
+    let _user = req
         .extensions()
         .get::<PlatformUser>()
         .cloned()
@@ -2177,10 +2148,9 @@ pub async fn update_hosted_page(
         })?;
 
     sqlx::query_scalar::<_, String>(
-        "SELECT id FROM tenants WHERE id = $1 AND owner_user_id = $2 AND status != 'deleted'",
+        "SELECT id FROM tenants WHERE id = $1 AND status != 'deleted'",
     )
     .bind(&tenant_id)
-    .bind(&user.user_id)
     .fetch_optional(&state.db)
     .await?
     .ok_or(AppError::NotFound {
@@ -2269,7 +2239,7 @@ pub async fn get_tenant_security_config(
     Path(tenant_id): Path<String>,
     req: axum::extract::Request,
 ) -> Result<impl IntoResponse, AppError> {
-    let platform_user = req
+    let _platform_user = req
         .extensions()
         .get::<PlatformUser>()
         .cloned()
@@ -2279,10 +2249,9 @@ pub async fn get_tenant_security_config(
         })?;
 
     sqlx::query_scalar::<_, String>(
-        "SELECT id FROM tenants WHERE id = $1 AND owner_user_id = $2 AND status != 'deleted'",
+        "SELECT id FROM tenants WHERE id = $1 AND status != 'deleted'",
     )
     .bind(&tenant_id)
-    .bind(&platform_user.user_id)
     .fetch_optional(&state.db)
     .await?
     .ok_or(AppError::NotFound {
@@ -2314,7 +2283,7 @@ pub async fn update_tenant_security_config(
     Path(tenant_id): Path<String>,
     req: axum::extract::Request,
 ) -> Result<impl IntoResponse, AppError> {
-    let platform_user = req
+    let _platform_user = req
         .extensions()
         .get::<PlatformUser>()
         .cloned()
@@ -2324,10 +2293,9 @@ pub async fn update_tenant_security_config(
         })?;
 
     sqlx::query_scalar::<_, String>(
-        "SELECT id FROM tenants WHERE id = $1 AND owner_user_id = $2 AND status != 'deleted'",
+        "SELECT id FROM tenants WHERE id = $1 AND status != 'deleted'",
     )
     .bind(&tenant_id)
-    .bind(&platform_user.user_id)
     .fetch_optional(&state.db)
     .await?
     .ok_or(AppError::NotFound {
@@ -2410,7 +2378,7 @@ pub async fn list_tenant_invites_selfserve(
         .ok_or(AppError::Unauthorized { error: "unauthorized", message: "Not authenticated".into() })?;
 
     sqlx::query_scalar::<_, String>(
-        "SELECT id FROM tenants WHERE id = $1 AND owner_user_id = $2 AND status != 'deleted'",
+        "SELECT id FROM tenants WHERE id = $1 AND status != 'deleted'",
     ).bind(&tenant_id).bind(&platform_user.user_id)
     .fetch_optional(&state.db).await?
     .ok_or(AppError::NotFound { error: "tenant_not_found", message: "Tenant not found".into() })?;
@@ -2455,7 +2423,7 @@ pub async fn create_tenant_invite_selfserve(
         .ok_or(AppError::Unauthorized { error: "unauthorized", message: "Not authenticated".into() })?;
 
     sqlx::query_scalar::<_, String>(
-        "SELECT id FROM tenants WHERE id = $1 AND owner_user_id = $2 AND status != 'deleted'",
+        "SELECT id FROM tenants WHERE id = $1 AND status != 'deleted'",
     ).bind(&tenant_id).bind(&platform_user.user_id)
     .fetch_optional(&state.db).await?
     .ok_or(AppError::NotFound { error: "tenant_not_found", message: "Tenant not found".into() })?;
@@ -2510,7 +2478,7 @@ pub async fn revoke_tenant_invite_selfserve(
         .ok_or(AppError::Unauthorized { error: "unauthorized", message: "Not authenticated".into() })?;
 
     sqlx::query_scalar::<_, String>(
-        "SELECT id FROM tenants WHERE id = $1 AND owner_user_id = $2 AND status != 'deleted'",
+        "SELECT id FROM tenants WHERE id = $1 AND status != 'deleted'",
     ).bind(&tenant_id).bind(&platform_user.user_id)
     .fetch_optional(&state.db).await?
     .ok_or(AppError::NotFound { error: "tenant_not_found", message: "Tenant not found".into() })?;
@@ -2553,7 +2521,7 @@ pub async fn list_tenant_organizations(
     Path(tenant_id): Path<String>,
     req: axum::extract::Request,
 ) -> Result<impl IntoResponse, AppError> {
-    let platform_user = req
+    let _platform_user = req
         .extensions()
         .get::<PlatformUser>()
         .cloned()
@@ -2563,10 +2531,9 @@ pub async fn list_tenant_organizations(
         })?;
 
     sqlx::query_scalar::<_, String>(
-        "SELECT id FROM tenants WHERE id = $1 AND owner_user_id = $2 AND status != 'deleted'",
+        "SELECT id FROM tenants WHERE id = $1 AND status != 'deleted'",
     )
     .bind(&tenant_id)
-    .bind(&platform_user.user_id)
     .fetch_optional(&state.db)
     .await?
     .ok_or(AppError::NotFound {
@@ -2607,7 +2574,7 @@ pub async fn create_tenant_organization(
     Path(tenant_id): Path<String>,
     req: axum::extract::Request,
 ) -> Result<impl IntoResponse, AppError> {
-    let platform_user = req
+    let _platform_user = req
         .extensions()
         .get::<PlatformUser>()
         .cloned()
@@ -2617,10 +2584,9 @@ pub async fn create_tenant_organization(
         })?;
 
     sqlx::query_scalar::<_, String>(
-        "SELECT id FROM tenants WHERE id = $1 AND owner_user_id = $2 AND status != 'deleted'",
+        "SELECT id FROM tenants WHERE id = $1 AND status != 'deleted'",
     )
     .bind(&tenant_id)
-    .bind(&platform_user.user_id)
     .fetch_optional(&state.db)
     .await?
     .ok_or(AppError::NotFound {
@@ -2713,7 +2679,7 @@ pub async fn get_tenant_organization(
     Path((tenant_id, org_id)): Path<(String, String)>,
     req: axum::extract::Request,
 ) -> Result<impl IntoResponse, AppError> {
-    let platform_user = req
+    let _platform_user = req
         .extensions()
         .get::<PlatformUser>()
         .cloned()
@@ -2723,10 +2689,9 @@ pub async fn get_tenant_organization(
         })?;
 
     sqlx::query_scalar::<_, String>(
-        "SELECT id FROM tenants WHERE id = $1 AND owner_user_id = $2 AND status != 'deleted'",
+        "SELECT id FROM tenants WHERE id = $1 AND status != 'deleted'",
     )
     .bind(&tenant_id)
-    .bind(&platform_user.user_id)
     .fetch_optional(&state.db)
     .await?
     .ok_or(AppError::NotFound {
@@ -2763,7 +2728,7 @@ pub async fn update_tenant_organization(
     Path((tenant_id, org_id)): Path<(String, String)>,
     req: axum::extract::Request,
 ) -> Result<impl IntoResponse, AppError> {
-    let platform_user = req
+    let _platform_user = req
         .extensions()
         .get::<PlatformUser>()
         .cloned()
@@ -2773,10 +2738,9 @@ pub async fn update_tenant_organization(
         })?;
 
     sqlx::query_scalar::<_, String>(
-        "SELECT id FROM tenants WHERE id = $1 AND owner_user_id = $2 AND status != 'deleted'",
+        "SELECT id FROM tenants WHERE id = $1 AND status != 'deleted'",
     )
     .bind(&tenant_id)
-    .bind(&platform_user.user_id)
     .fetch_optional(&state.db)
     .await?
     .ok_or(AppError::NotFound {
@@ -2868,7 +2832,7 @@ pub async fn delete_tenant_organization(
     Path((tenant_id, org_id)): Path<(String, String)>,
     req: axum::extract::Request,
 ) -> Result<impl IntoResponse, AppError> {
-    let platform_user = req
+    let _platform_user = req
         .extensions()
         .get::<PlatformUser>()
         .cloned()
@@ -2878,10 +2842,9 @@ pub async fn delete_tenant_organization(
         })?;
 
     sqlx::query_scalar::<_, String>(
-        "SELECT id FROM tenants WHERE id = $1 AND owner_user_id = $2 AND status != 'deleted'",
+        "SELECT id FROM tenants WHERE id = $1 AND status != 'deleted'",
     )
     .bind(&tenant_id)
-    .bind(&platform_user.user_id)
     .fetch_optional(&state.db)
     .await?
     .ok_or(AppError::NotFound {
@@ -2918,7 +2881,7 @@ pub async fn list_organization_members(
     Path((tenant_id, org_id)): Path<(String, String)>,
     req: axum::extract::Request,
 ) -> Result<impl IntoResponse, AppError> {
-    let platform_user = req
+    let _platform_user = req
         .extensions()
         .get::<PlatformUser>()
         .cloned()
@@ -2928,10 +2891,9 @@ pub async fn list_organization_members(
         })?;
 
     sqlx::query_scalar::<_, String>(
-        "SELECT id FROM tenants WHERE id = $1 AND owner_user_id = $2 AND status != 'deleted'",
+        "SELECT id FROM tenants WHERE id = $1 AND status != 'deleted'",
     )
     .bind(&tenant_id)
-    .bind(&platform_user.user_id)
     .fetch_optional(&state.db)
     .await?
     .ok_or(AppError::NotFound {
@@ -2973,7 +2935,7 @@ pub async fn add_organization_member(
     Path((tenant_id, org_id)): Path<(String, String)>,
     req: axum::extract::Request,
 ) -> Result<impl IntoResponse, AppError> {
-    let platform_user = req
+    let _platform_user = req
         .extensions()
         .get::<PlatformUser>()
         .cloned()
@@ -2983,10 +2945,9 @@ pub async fn add_organization_member(
         })?;
 
     sqlx::query_scalar::<_, String>(
-        "SELECT id FROM tenants WHERE id = $1 AND owner_user_id = $2 AND status != 'deleted'",
+        "SELECT id FROM tenants WHERE id = $1 AND status != 'deleted'",
     )
     .bind(&tenant_id)
-    .bind(&platform_user.user_id)
     .fetch_optional(&state.db)
     .await?
     .ok_or(AppError::NotFound {
@@ -3064,7 +3025,7 @@ pub async fn remove_organization_member(
     Path((tenant_id, org_id, user_id)): Path<(String, String, String)>,
     req: axum::extract::Request,
 ) -> Result<impl IntoResponse, AppError> {
-    let platform_user = req
+    let _platform_user = req
         .extensions()
         .get::<PlatformUser>()
         .cloned()
@@ -3074,10 +3035,9 @@ pub async fn remove_organization_member(
         })?;
 
     sqlx::query_scalar::<_, String>(
-        "SELECT id FROM tenants WHERE id = $1 AND owner_user_id = $2 AND status != 'deleted'",
+        "SELECT id FROM tenants WHERE id = $1 AND status != 'deleted'",
     )
     .bind(&tenant_id)
-    .bind(&platform_user.user_id)
     .fetch_optional(&state.db)
     .await?
     .ok_or(AppError::NotFound {
@@ -3115,7 +3075,7 @@ pub async fn get_tenant_user_detail(
         .ok_or(AppError::Unauthorized { error: "unauthorized", message: "Not authenticated".into() })?;
 
     sqlx::query_scalar::<_, String>(
-        "SELECT id FROM tenants WHERE id = $1 AND owner_user_id = $2 AND status != 'deleted'",
+        "SELECT id FROM tenants WHERE id = $1 AND status != 'deleted'",
     ).bind(&tenant_id).bind(&platform_user.user_id)
     .fetch_optional(&state.db).await?
     .ok_or(AppError::NotFound { error: "tenant_not_found", message: "Tenant not found".into() })?;
@@ -3165,7 +3125,7 @@ pub async fn list_tenant_webhooks(
     Path(tenant_id): Path<String>,
     req: axum::extract::Request,
 ) -> Result<impl IntoResponse, AppError> {
-    let platform_user = req
+    let _platform_user = req
         .extensions()
         .get::<PlatformUser>()
         .cloned()
@@ -3175,10 +3135,9 @@ pub async fn list_tenant_webhooks(
         })?;
 
     sqlx::query_scalar::<_, String>(
-        "SELECT id FROM tenants WHERE id = $1 AND owner_user_id = $2 AND status != 'deleted'",
+        "SELECT id FROM tenants WHERE id = $1 AND status != 'deleted'",
     )
     .bind(&tenant_id)
-    .bind(&platform_user.user_id)
     .fetch_optional(&state.db)
     .await?
     .ok_or(AppError::NotFound {
@@ -3218,7 +3177,7 @@ pub async fn create_tenant_webhook(
     Path(tenant_id): Path<String>,
     req: axum::extract::Request,
 ) -> Result<impl IntoResponse, AppError> {
-    let platform_user = req
+    let _platform_user = req
         .extensions()
         .get::<PlatformUser>()
         .cloned()
@@ -3228,10 +3187,9 @@ pub async fn create_tenant_webhook(
         })?;
 
     sqlx::query_scalar::<_, String>(
-        "SELECT id FROM tenants WHERE id = $1 AND owner_user_id = $2 AND status != 'deleted'",
+        "SELECT id FROM tenants WHERE id = $1 AND status != 'deleted'",
     )
     .bind(&tenant_id)
-    .bind(&platform_user.user_id)
     .fetch_optional(&state.db)
     .await?
     .ok_or(AppError::NotFound {
@@ -3346,7 +3304,7 @@ pub async fn get_tenant_webhook(
     Path((tenant_id, webhook_id)): Path<(String, String)>,
     req: axum::extract::Request,
 ) -> Result<impl IntoResponse, AppError> {
-    let platform_user = req
+    let _platform_user = req
         .extensions()
         .get::<PlatformUser>()
         .cloned()
@@ -3356,10 +3314,9 @@ pub async fn get_tenant_webhook(
         })?;
 
     sqlx::query_scalar::<_, String>(
-        "SELECT id FROM tenants WHERE id = $1 AND owner_user_id = $2 AND status != 'deleted'",
+        "SELECT id FROM tenants WHERE id = $1 AND status != 'deleted'",
     )
     .bind(&tenant_id)
-    .bind(&platform_user.user_id)
     .fetch_optional(&state.db)
     .await?
     .ok_or(AppError::NotFound {
@@ -3399,7 +3356,7 @@ pub async fn update_tenant_webhook(
     Path((tenant_id, webhook_id)): Path<(String, String)>,
     req: axum::extract::Request,
 ) -> Result<impl IntoResponse, AppError> {
-    let platform_user = req
+    let _platform_user = req
         .extensions()
         .get::<PlatformUser>()
         .cloned()
@@ -3409,10 +3366,9 @@ pub async fn update_tenant_webhook(
         })?;
 
     sqlx::query_scalar::<_, String>(
-        "SELECT id FROM tenants WHERE id = $1 AND owner_user_id = $2 AND status != 'deleted'",
+        "SELECT id FROM tenants WHERE id = $1 AND status != 'deleted'",
     )
     .bind(&tenant_id)
-    .bind(&platform_user.user_id)
     .fetch_optional(&state.db)
     .await?
     .ok_or(AppError::NotFound {
@@ -3507,7 +3463,7 @@ pub async fn delete_tenant_webhook(
     Path((tenant_id, webhook_id)): Path<(String, String)>,
     req: axum::extract::Request,
 ) -> Result<impl IntoResponse, AppError> {
-    let platform_user = req
+    let _platform_user = req
         .extensions()
         .get::<PlatformUser>()
         .cloned()
@@ -3517,10 +3473,9 @@ pub async fn delete_tenant_webhook(
         })?;
 
     sqlx::query_scalar::<_, String>(
-        "SELECT id FROM tenants WHERE id = $1 AND owner_user_id = $2 AND status != 'deleted'",
+        "SELECT id FROM tenants WHERE id = $1 AND status != 'deleted'",
     )
     .bind(&tenant_id)
-    .bind(&platform_user.user_id)
     .fetch_optional(&state.db)
     .await?
     .ok_or(AppError::NotFound {
@@ -3552,7 +3507,7 @@ pub async fn list_webhook_deliveries(
     Path((tenant_id, webhook_id)): Path<(String, String)>,
     req: axum::extract::Request,
 ) -> Result<impl IntoResponse, AppError> {
-    let platform_user = req
+    let _platform_user = req
         .extensions()
         .get::<PlatformUser>()
         .cloned()
@@ -3562,10 +3517,9 @@ pub async fn list_webhook_deliveries(
         })?;
 
     sqlx::query_scalar::<_, String>(
-        "SELECT id FROM tenants WHERE id = $1 AND owner_user_id = $2 AND status != 'deleted'",
+        "SELECT id FROM tenants WHERE id = $1 AND status != 'deleted'",
     )
     .bind(&tenant_id)
-    .bind(&platform_user.user_id)
     .fetch_optional(&state.db)
     .await?
     .ok_or(AppError::NotFound {
@@ -3624,7 +3578,7 @@ pub async fn test_tenant_webhook(
     Path((tenant_id, webhook_id)): Path<(String, String)>,
     req: axum::extract::Request,
 ) -> Result<impl IntoResponse, AppError> {
-    let platform_user = req
+    let _platform_user = req
         .extensions()
         .get::<PlatformUser>()
         .cloned()
@@ -3634,10 +3588,9 @@ pub async fn test_tenant_webhook(
         })?;
 
     sqlx::query_scalar::<_, String>(
-        "SELECT id FROM tenants WHERE id = $1 AND owner_user_id = $2 AND status != 'deleted'",
+        "SELECT id FROM tenants WHERE id = $1 AND status != 'deleted'",
     )
     .bind(&tenant_id)
-    .bind(&platform_user.user_id)
     .fetch_optional(&state.db)
     .await?
     .ok_or(AppError::NotFound {

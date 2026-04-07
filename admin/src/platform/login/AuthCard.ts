@@ -11,6 +11,7 @@ import {
   startOAuth, loginWithEmail, persistRememberedEmail,
   requestPasswordReset, beginMfaRecoveryFlow,
   setInfo, copyText,
+  inviteInfo,
 } from './store';
 
 export function AuthCard() {
@@ -85,6 +86,8 @@ export function AuthCard() {
           type: 'email',
           placeholder: 'you@company.com',
           autocomplete: 'email',
+          readonly: () => inviteInfo() !== null,
+          style: () => inviteInfo() ? 'opacity:0.7;cursor:not-allowed;' : '',
           ref: (el: HTMLInputElement) => { setEmailInput(el); },
           onBlur: persistRememberedEmail,
         }),

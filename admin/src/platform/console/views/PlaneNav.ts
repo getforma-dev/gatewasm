@@ -123,6 +123,15 @@ export function PlaneNav(props: PlaneNavProps) {
       onClick: () => setTenantMenuOpen(!tenantMenuOpen()),
     },
       h('span', { class: 'plane-tenant-name' }, () => props.tenant()?.name || ''),
+      () => {
+        const t = props.tenant();
+        if (t && (t as any).access === 'team' && (t as any).team_role) {
+          const role = (t as any).team_role as string;
+          return h('span', { class: 'badge badge-subtle', style: 'margin-left:6px;font-size:0.7rem;' },
+            role.charAt(0).toUpperCase() + role.slice(1));
+        }
+        return null;
+      },
       h('span', { class: 'plane-tenant-chevron' }, '\u25BE'),
     ),
     createShow(tenantMenuOpen, () =>

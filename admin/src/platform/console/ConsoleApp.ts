@@ -30,19 +30,59 @@ import {
   plane, setPlane, type Plane, type ConsoleView,
   type TenantWorkspaceView,
   mode, accountTab, setAccountTab, type AccountTab,
-  platformRole,
+  accountOwner,
   canEdit,
   serverUrl,
+  resendVerification,
 } from './store';
 
 function TenantsList() {
   const [showCreate, setShowCreate] = createSignal(false);
 
+  const ownTenants = () => tenants().filter((t: any) => t.access !== 'team');
+  const teamTenants = () => tenants().filter((t: any) => t.access === 'team');
+
   const tenantCountLabel = () => {
-    const count = tenants().length;
-    if (count === 0) return 'Create your first workspace to get started';
-    return count === 1 ? '1 workspace' : count + ' workspaces';
+    const own = ownTenants().length;
+    const team = teamTenants().length;
+    if (own === 0 && team === 0) return 'Create your first workspace to get started';
+    const parts: string[] = [];
+    if (own > 0) parts.push(own === 1 ? '1 workspace' : own + ' workspaces');
+    if (team > 0) parts.push(team === 1 ? '1 shared' : team + ' shared');
+    return parts.join(' · ');
   };
+
+  function TenantCard(tenant: any) {
+    const isTeam = tenant.access === 'team';
+    const teamRole = tenant.team_role as string | undefined;
+    return h('button', {
+      type: 'button',
+      class: 'tenant-card' + (isTeam ? ' tenant-card-team' : ''),
+      key: tenant.id,
+      onClick: () => selectTenant(tenant),
+    },
+      h('div', { class: 'tenant-card-top' },
+        h('div', { class: 'tenant-card-copy' },
+          h('div', { class: 'tenant-card-title' }, tenant.name),
+          h('div', { class: 'tenant-card-path' }, '/t/' + tenant.slug),
+        ),
+        isTeam && teamRole
+          ? h('span', { class: 'tenant-card-badge tenant-card-badge-role' },
+              teamRole.charAt(0).toUpperCase() + teamRole.slice(1))
+          : h('span', {
+              class: 'tenant-card-badge' + (tenant.onboarding_completed ? '' : ' tenant-card-badge-pending'),
+            }, tenant.onboarding_completed ? 'Ready' : 'Setup'),
+      ),
+      h('div', { class: 'tenant-card-meta' },
+        TenantMeta('Plan', tenant.plan),
+        TenantMeta('Status', tenant.status),
+        isTeam
+          ? TenantMeta('Access', teamRole || 'member')
+          : TenantMeta('Surface', tenant.onboarding_completed ? 'Workspace' : 'Setup'),
+      ),
+      h('div', { class: 'tenant-card-footer' }, isTeam ? 'Open shared workspace' : 'Open workspace'),
+    );
+  }
 
   return h('div', { class: 'console-view console-view-tenants' },
     h('div', { class: 'view-header view-header-split' },
@@ -61,7 +101,7 @@ function TenantsList() {
       ),
     ),
 
-    // Empty state
+    // Empty state (no workspaces at all)
     createShow(
       () => tenants().length === 0,
       () => h('div', { class: 'console-card tenant-empty-hero' },
@@ -83,33 +123,21 @@ function TenantsList() {
       ),
     ),
 
-    // Workspace card grid (full width)
+    // Own workspace cards
     createShow(
-      () => tenants().length > 0,
+      () => ownTenants().length > 0,
       () => h('div', { class: 'tenant-card-grid' },
-        () => tenants().map((tenant) =>
-          h('button', {
-            type: 'button',
-            class: 'tenant-card',
-            key: tenant.id,
-            onClick: () => selectTenant(tenant),
-          },
-            h('div', { class: 'tenant-card-top' },
-              h('div', { class: 'tenant-card-copy' },
-                h('div', { class: 'tenant-card-title' }, tenant.name),
-                h('div', { class: 'tenant-card-path' }, '/t/' + tenant.slug),
-              ),
-              h('span', {
-                class: 'tenant-card-badge' + (tenant.onboarding_completed ? '' : ' tenant-card-badge-pending'),
-              }, tenant.onboarding_completed ? 'Ready' : 'Setup'),
-            ),
-            h('div', { class: 'tenant-card-meta' },
-              TenantMeta('Plan', tenant.plan),
-              TenantMeta('Status', tenant.status),
-              TenantMeta('Surface', tenant.onboarding_completed ? 'Workspace' : 'Setup'),
-            ),
-            h('div', { class: 'tenant-card-footer' }, 'Open workspace'),
-          ),
+        () => ownTenants().map((tenant: any) => TenantCard(tenant)),
+      ),
+    ),
+
+    // Team workspace cards (separate section)
+    createShow(
+      () => teamTenants().length > 0,
+      () => h('div', { class: 'team-tenants-section' },
+        h('div', { class: 'card-label' }, 'Shared With You'),
+        h('div', { class: 'tenant-card-grid' },
+          () => teamTenants().map((tenant: any) => TenantCard(tenant)),
         ),
       ),
     ),
@@ -425,10 +453,22 @@ export function ConsoleApp() {
           accountAvatarShell,
         ),
       ),
+      // Email verification banner
+      createShow(
+        () => currentUser() !== null && !currentUser()!.email_verified,
+        () => h('div', { class: 'verify-banner' },
+          h('span', null, 'Verify your email address to secure your account. Check your inbox.'),
+          h('button', {
+            type: 'button',
+            class: 'btn btn-sm btn-ghost',
+            onClick: () => void resendVerification(),
+          }, 'Resend'),
+        ),
+      ),
       h('div', { class: 'account-tabs' },
         AccountTabBtn('tenants', 'Tenants'),
         createShow(
-          () => platformRole() === 'owner' || platformRole() === 'admin',
+          () => accountOwner(),
           () => AccountTabBtn('team', 'Members'),
         ),
         AccountTabBtn('api-keys', 'API Keys'),
