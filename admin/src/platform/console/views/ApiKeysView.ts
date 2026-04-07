@@ -3,6 +3,9 @@ import { CopyButton } from '../../../core/components/ui/CopyButton';
 import { tenants, rotateTenantKey, type Tenant } from '../store';
 
 export function ApiKeysView() {
+  const ownTenants = () => tenants().filter((t) => t.access !== 'team');
+  const teamTenants = () => tenants().filter((t) => t.access === 'team');
+
   return h('div', { class: 'console-view' },
     h('div', { class: 'view-header' },
       h('div', { class: 'view-header-body' },
@@ -11,6 +14,8 @@ export function ApiKeysView() {
         h('p', { class: 'view-subtitle text-muted' }, 'Management API keys for your tenants'),
       ),
     ),
+
+    // No tenants at all
     createShow(
       () => tenants().length === 0,
       () => h('div', { class: 'console-card' },
@@ -20,17 +25,35 @@ export function ApiKeysView() {
         ),
       ),
     ),
+
+    // Your Workspaces section
     createShow(
-      () => tenants().length > 0,
+      () => ownTenants().length > 0,
       () => h('div', { class: 'console-card list-shell' },
         h('div', { class: 'list-shell-head' },
           h('div', { class: 'section-copy' },
-            h('div', { class: 'card-label' }, 'Tenant Keys'),
-            h('p', { class: 'card-copy' }, () => tenants().length + ' tenant' + (tenants().length !== 1 ? 's' : '')),
+            h('div', { class: 'card-label' }, 'Your Workspaces'),
+            h('p', { class: 'card-copy' }, () => ownTenants().length + ' tenant' + (ownTenants().length !== 1 ? 's' : '')),
           ),
         ),
         h('div', { class: 'user-list user-list-shell' },
-          () => tenants().map((t) => TenantKeyRow(t)),
+          () => ownTenants().map((t) => TenantKeyRow(t)),
+        ),
+      ),
+    ),
+
+    // Team Workspaces section
+    createShow(
+      () => teamTenants().length > 0,
+      () => h('div', { class: 'console-card list-shell' },
+        h('div', { class: 'list-shell-head' },
+          h('div', { class: 'section-copy' },
+            h('div', { class: 'card-label' }, 'Team Workspaces'),
+            h('p', { class: 'card-copy' }, () => teamTenants().length + ' tenant' + (teamTenants().length !== 1 ? 's' : '') + ' shared with you'),
+          ),
+        ),
+        h('div', { class: 'user-list user-list-shell' },
+          () => teamTenants().map((t) => TenantKeyRow(t)),
         ),
       ),
     ),

@@ -498,7 +498,21 @@ pub async fn list_my_tenants(
 
     let is_scoped = member.as_ref().map_or(false, |(_, role)| role == "editor" || role == "viewer");
 
-    let rows = if is_scoped {
+    // Fetch own tenants (always)
+    let own_rows = sqlx::query(
+        "SELECT id, name, slug, status, allowed_providers, max_users, \
+         COALESCE(plan, 'trial') AS plan, trial_ends_at, created_at, \
+         onboarding_completed, onboarding_step, preferred_tab, \
+         branding_primary_color, login_redirect_url \
+         FROM tenants WHERE owner_user_id = $1 AND status != 'deleted' \
+         ORDER BY created_at DESC",
+    )
+    .bind(&user.user_id)
+    .fetch_all(&state.db)
+    .await?;
+
+    // Fetch team-assigned tenants (for scoped roles only, excluding own)
+    let team_rows = if is_scoped {
         let (member_id, _) = member.unwrap();
         sqlx::query(
             "SELECT t.id, t.name, t.slug, t.status, t.allowed_providers, t.max_users, \
@@ -507,51 +521,64 @@ pub async fn list_my_tenants(
              t.branding_primary_color, t.login_redirect_url \
              FROM tenants t \
              JOIN platform_member_tenants pmt ON pmt.tenant_id = t.id \
-             WHERE pmt.member_id = $1 AND t.status != 'deleted' \
+             WHERE pmt.member_id = $1 AND t.status != 'deleted' AND t.owner_user_id != $2 \
              ORDER BY t.created_at DESC",
         )
         .bind(&member_id)
+        .bind(&user.user_id)
         .fetch_all(&state.db)
         .await?
-    } else {
+    } else if member.is_some() {
+        // Owner/admin: get ALL non-owned tenants
         sqlx::query(
             "SELECT id, name, slug, status, allowed_providers, max_users, \
              COALESCE(plan, 'trial') AS plan, trial_ends_at, created_at, \
              onboarding_completed, onboarding_step, preferred_tab, \
              branding_primary_color, login_redirect_url \
-             FROM tenants WHERE owner_user_id = $1 AND status != 'deleted' \
+             FROM tenants WHERE owner_user_id != $1 AND status != 'deleted' AND id != 'ten_platform' \
              ORDER BY created_at DESC",
         )
         .bind(&user.user_id)
         .fetch_all(&state.db)
         .await?
+    } else {
+        vec![]
     };
 
-    let items: Vec<serde_json::Value> = rows
-        .into_iter()
-        .map(|row| {
-            let slug: String = row.get("slug");
-            let redirect_url: Option<String> = row.get("login_redirect_url");
-            let resolved_redirect =
-                resolve_login_redirect(&state.config.server_url, &slug, redirect_url.as_deref());
-            serde_json::json!({
-                "id": row.get::<String, _>("id"),
-                "name": row.get::<String, _>("name"),
-                "slug": slug,
-                "status": row.get::<String, _>("status"),
-                "allowed_providers": row.get::<serde_json::Value, _>("allowed_providers"),
-                "max_users": row.get::<i32, _>("max_users"),
-                "plan": row.get::<String, _>("plan"),
-                "trial_ends_at": row.get::<Option<chrono::DateTime<Utc>>, _>("trial_ends_at").map(|t| t.to_rfc3339()),
-                "created_at": row.get::<chrono::DateTime<Utc>, _>("created_at").to_rfc3339(),
-                "onboarding_completed": row.get::<bool, _>("onboarding_completed"),
-                "onboarding_step": row.get::<i16, _>("onboarding_step"),
-                "preferred_tab": row.get::<Option<String>, _>("preferred_tab"),
-                "primary_color": row.get::<Option<String>, _>("branding_primary_color"),
-                "login_redirect_url": resolved_redirect,
-            })
+    fn row_to_json(row: &sqlx::postgres::PgRow, server_url: &str, access: &str) -> serde_json::Value {
+        use sqlx::Row;
+        let slug: String = row.get("slug");
+        let redirect_url: Option<String> = row.get("login_redirect_url");
+        let resolved_redirect =
+            resolve_login_redirect(server_url, &slug, redirect_url.as_deref());
+        serde_json::json!({
+            "id": row.get::<String, _>("id"),
+            "name": row.get::<String, _>("name"),
+            "slug": slug,
+            "status": row.get::<String, _>("status"),
+            "allowed_providers": row.get::<serde_json::Value, _>("allowed_providers"),
+            "max_users": row.get::<i32, _>("max_users"),
+            "plan": row.get::<String, _>("plan"),
+            "trial_ends_at": row.get::<Option<chrono::DateTime<Utc>>, _>("trial_ends_at").map(|t| t.to_rfc3339()),
+            "created_at": row.get::<chrono::DateTime<Utc>, _>("created_at").to_rfc3339(),
+            "onboarding_completed": row.get::<bool, _>("onboarding_completed"),
+            "onboarding_step": row.get::<i16, _>("onboarding_step"),
+            "preferred_tab": row.get::<Option<String>, _>("preferred_tab"),
+            "primary_color": row.get::<Option<String>, _>("branding_primary_color"),
+            "login_redirect_url": resolved_redirect,
+            "access": access,
         })
+    }
+
+    let mut items: Vec<serde_json::Value> = own_rows
+        .iter()
+        .map(|row| row_to_json(row, &state.config.server_url, "own"))
         .collect();
+    items.extend(
+        team_rows
+            .iter()
+            .map(|row| row_to_json(row, &state.config.server_url, "team")),
+    );
 
     Ok(Json(serde_json::json!({
         "tenants": items,

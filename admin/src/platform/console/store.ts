@@ -25,6 +25,7 @@ export interface Tenant {
   primary_color: string | null;
   login_redirect_url: string | null;
   management_api_key?: string;
+  access?: 'own' | 'team';
   created_at: string;
 }
 
