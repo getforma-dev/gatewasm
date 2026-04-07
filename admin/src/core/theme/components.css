@@ -2677,6 +2677,18 @@
   color: var(--text-muted);
 }
 
+.invite-tenant-search {
+  margin-bottom: 6px;
+  font-size: 0.82rem;
+}
+
+.invite-tenant-empty {
+  padding: 16px;
+  text-align: center;
+  font-size: 0.82rem;
+  color: var(--text-muted);
+}
+
 .btn-link {
   background: none;
   border: none;

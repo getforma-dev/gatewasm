@@ -214,11 +214,14 @@ export function TeamView() {
 // ── InviteModal ────────────────────────────────────────────────────────
 
 function InviteModal(onClose: () => void, onInvitesUpdate: (inv: any[]) => void) {
-  const [email, setEmail] = createSignal('');
+  const [emailsRaw, setEmailsRaw] = createSignal('');
   const [role, setRole] = createSignal<string>('admin');
   const [selectedTenantIds, setSelectedTenantIds] = createSignal<string[]>([]);
   const [sending, setSending] = createSignal(false);
-  const [inviteUrl, setInviteUrl] = createSignal<string | null>(null);
+  const [results, setResults] = createSignal<{ email: string; ok: boolean; url?: string; error?: string }[]>([]);
+
+  const parsedEmails = () =>
+    emailsRaw().split(/[,;\n]+/).map((e) => e.trim().toLowerCase()).filter((e) => e && e.includes('@'));
 
   function toggleTenant(id: string) {
     const current = selectedTenantIds();
@@ -230,25 +233,37 @@ function InviteModal(onClose: () => void, onInvitesUpdate: (inv: any[]) => void)
   }
 
   const canSend = () => {
-    if (!email().trim()) return false;
-    if (selectedTenantIds().length === 0) return false; // all roles require tenant selection
+    if (parsedEmails().length === 0) return false;
+    if (selectedTenantIds().length === 0) return false;
     return true;
   };
 
   async function handleSend() {
     if (!canSend()) return;
     setSending(true);
-    const result = await sendTeamInvite(email().trim(), role(), selectedTenantIds());
-    setSending(false);
-    if (result) {
-      setInviteUrl(result.invite_url);
-      // Refresh invites list
-      const fresh = await loadTeamInvites();
-      onInvitesUpdate(fresh);
+    const emails = parsedEmails();
+    const sent: { email: string; ok: boolean; url?: string; error?: string }[] = [];
+    for (const addr of emails) {
+      const result = await sendTeamInvite(addr, role(), selectedTenantIds());
+      if (result) {
+        sent.push({ email: addr, ok: true, url: result.invite_url });
+      } else {
+        sent.push({ email: addr, ok: false, error: 'Failed to send' });
+      }
     }
+    setResults(sent);
+    setSending(false);
+    const fresh = await loadTeamInvites();
+    onInvitesUpdate(fresh);
   }
 
+  const [tenantSearch, setTenantSearch] = createSignal('');
   const ownTenants = () => tenants().filter((t: any) => t.access === 'own' || !t.access);
+  const filteredTenants = () => {
+    const q = tenantSearch().toLowerCase().trim();
+    if (!q) return ownTenants();
+    return ownTenants().filter((t) => t.name.toLowerCase().includes(q) || t.slug.toLowerCase().includes(q));
+  };
   const allSelected = () => ownTenants().length > 0 && selectedTenantIds().length === ownTenants().length;
 
   function selectAll() {
@@ -275,13 +290,29 @@ function InviteModal(onClose: () => void, onInvitesUpdate: (inv: any[]) => void)
 
         // ── Success state ─────────────────────────────────────────
         createShow(
-          () => inviteUrl() !== null,
+          () => results().length > 0,
           () => h('div', null,
-            h('p', { style: 'margin:0 0 12px;color:var(--success);font-weight:500;' }, 'Invite sent!'),
-            h('p', { class: 'text-muted', style: 'margin:0 0 8px;font-size:0.82rem;' }, 'Share this link with the invitee:'),
-            h('div', { class: 'invite-url-row' },
-              h('code', { class: 'invite-url-code' }, () => inviteUrl()!),
-              CopyButton({ text: () => inviteUrl() || '', label: 'Copy' }),
+            h('p', { style: 'margin:0 0 12px;font-weight:500;' },
+              () => {
+                const r = results();
+                const ok = r.filter((x) => x.ok).length;
+                const fail = r.length - ok;
+                if (fail === 0) return h('span', { style: 'color:var(--success)' }, ok === 1 ? 'Invite sent!' : ok + ' invites sent!');
+                return h('span', null,
+                  ok > 0 ? h('span', { style: 'color:var(--success)' }, ok + ' sent') : null,
+                  ok > 0 && fail > 0 ? ', ' : '',
+                  fail > 0 ? h('span', { style: 'color:var(--danger)' }, fail + ' failed') : null,
+                );
+              },
+            ),
+            h('div', { style: 'display:flex;flex-direction:column;gap:6px;margin-bottom:12px;' },
+              () => results().map((r) =>
+                h('div', { style: 'display:flex;align-items:center;gap:8px;font-size:0.82rem;' },
+                  h('span', { style: r.ok ? 'color:var(--success)' : 'color:var(--danger)' }, r.ok ? '\u2713' : '\u2717'),
+                  h('span', null, r.email),
+                  r.ok && r.url ? CopyButton({ text: () => r.url || '', label: 'Copy link' }) : null,
+                ),
+              ),
             ),
             h('div', { class: 'modal-actions' },
               h('button', { type: 'button', class: 'btn btn-primary', onClick: onClose }, 'Done'),
@@ -291,18 +322,19 @@ function InviteModal(onClose: () => void, onInvitesUpdate: (inv: any[]) => void)
 
         // ── Form state ────────────────────────────────────────────
         createShow(
-          () => inviteUrl() === null,
+          () => results().length === 0,
           () => h('div', null,
-            // Email + Role side by side
+            // Email + Role
             h('div', { class: 'invite-form-row' },
               h('div', { class: 'invite-form-field invite-form-email' },
-                h('label', { class: 'field-label' }, 'Email'),
-                h('input', {
-                  type: 'email',
+                h('label', { class: 'field-label' }, () => 'Email' + (parsedEmails().length > 1 ? 's (' + parsedEmails().length + ')' : '')),
+                h('textarea', {
                   class: 'input',
-                  placeholder: 'colleague@example.com',
-                  value: email,
-                  onInput: (e: Event) => setEmail((e.target as HTMLInputElement).value),
+                  rows: 2,
+                  placeholder: 'colleague@example.com, another@team.com',
+                  value: emailsRaw,
+                  onInput: (e: Event) => setEmailsRaw((e.target as HTMLTextAreaElement).value),
+                  style: 'resize:vertical;min-height:38px;font-family:inherit;',
                 }),
               ),
               h('div', { class: 'invite-form-field invite-form-role' },
@@ -347,8 +379,19 @@ function InviteModal(onClose: () => void, onInvitesUpdate: (inv: any[]) => void)
                 () => ownTenants().length === 0,
                 () => h('p', { class: 'text-muted', style: 'font-size:0.82rem;' }, 'Create a workspace first to invite members.'),
               ),
+              // Search (show when 4+ tenants)
+              createShow(
+                () => ownTenants().length >= 4,
+                () => h('input', {
+                  type: 'text',
+                  class: 'input invite-tenant-search',
+                  placeholder: 'Search workspaces...',
+                  value: tenantSearch,
+                  onInput: (e: Event) => setTenantSearch((e.target as HTMLInputElement).value),
+                }),
+              ),
               h('div', { class: 'invite-tenant-list' },
-                () => ownTenants().map((t) =>
+                () => filteredTenants().map((t) =>
                   h('label', { class: 'invite-tenant-item', key: t.id },
                     h('input', {
                       type: 'checkbox',
@@ -361,6 +404,17 @@ function InviteModal(onClose: () => void, onInvitesUpdate: (inv: any[]) => void)
                     ),
                   ),
                 ),
+                // No results
+                createShow(
+                  () => ownTenants().length > 0 && filteredTenants().length === 0,
+                  () => h('div', { class: 'invite-tenant-empty' }, 'No workspaces match "' + tenantSearch() + '"'),
+                ),
+              ),
+              // Selection count
+              createShow(
+                () => selectedTenantIds().length > 0,
+                () => h('p', { class: 'text-muted', style: 'font-size:0.75rem;margin:6px 0 0;' },
+                  () => selectedTenantIds().length + ' workspace' + (selectedTenantIds().length !== 1 ? 's' : '') + ' selected'),
               ),
             ),
 
