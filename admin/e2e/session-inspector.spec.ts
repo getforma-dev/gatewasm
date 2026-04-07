@@ -1,7 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { loginAsTestUser } from './auth-helper';
-
-const BASE = process.env.BASE_URL || 'http://localhost:3001';
+import { BASE } from './helpers';
 
 test('platform login hides owner MFA until required', async ({ page }) => {
   await page.goto('/platform/login');

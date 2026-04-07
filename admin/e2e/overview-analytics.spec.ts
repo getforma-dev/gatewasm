@@ -1,7 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { loginAsTestUser } from './auth-helper';
-
-const BASE = process.env.BASE_URL || 'http://localhost:3001';
+import { BASE } from './helpers';
 
 async function createAccessToken(context: Awaited<ReturnType<typeof loginAsTestUser>>['context']) {
   const refresh = await context.request.post(BASE + '/t/platform/auth/token', {

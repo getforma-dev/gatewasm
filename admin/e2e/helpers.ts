@@ -1,5 +1,7 @@
 import { Page, expect } from '@playwright/test';
 
+export const BASE = process.env.BASE_URL || 'http://127.0.0.1:3102';
+
 /**
  * Collect console errors during page load. Filters known CSP violations.
  * Call BEFORE page.goto().

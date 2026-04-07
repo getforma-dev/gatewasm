@@ -1,6 +1,5 @@
 import { test, expect } from '@playwright/test';
-
-const BASE = process.env.BASE_URL || 'http://localhost:3001';
+import { BASE } from './helpers';
 
 async function postJsonWithRetry(request: any, url: string, options: any, attempts = 4) {
   let response: any;

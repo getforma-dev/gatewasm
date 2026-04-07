@@ -10,8 +10,7 @@
 
 import { test, expect } from '@playwright/test';
 import { loginAsTestUser } from './auth-helper';
-
-const BASE = process.env.BASE_URL || 'http://localhost:3001';
+import { BASE } from './helpers';
 
 // ── Helper: get access token from context ──────────────────────────────
 async function getAccessToken(context: any): Promise<string> {
