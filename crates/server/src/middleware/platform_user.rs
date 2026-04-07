@@ -58,20 +58,8 @@ pub async fn require_platform_user(
         }
     }
 
-    // Platform owner emails cannot use the self-serve API
-    if state
-        .config
-        .platform_owner_emails
-        .iter()
-        .any(|e| e.eq_ignore_ascii_case(&claims.email))
-    {
-        return Err(AppError::Forbidden {
-            error: "owner_cannot_self_serve",
-            message:
-                "Platform owner accounts cannot create tenants. Use a separate account for testing."
-                    .into(),
-        });
-    }
+    // Platform owner emails are now allowed on self-serve API
+    // (they need access to the console for team management, tenant creation, etc.)
 
     req.extensions_mut().insert(PlatformUser {
         user_id: claims.sub,
