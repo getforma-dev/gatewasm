@@ -46,6 +46,11 @@ async fn run_migrations(pool: &PgPool) -> Result<(), sqlx::Error> {
             "hosted pages",
             include_str!("pg_migrations/003_hosted_pages.sql"),
         ),
+        (
+            4,
+            "platform members",
+            include_str!("pg_migrations/004_platform_members.sql"),
+        ),
     ];
 
     for &(version, label, sql) in migrations {
