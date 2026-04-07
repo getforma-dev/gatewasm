@@ -467,10 +467,7 @@ export function ConsoleApp() {
       ),
       h('div', { class: 'account-tabs' },
         AccountTabBtn('tenants', 'Tenants'),
-        createShow(
-          () => accountOwner(),
-          () => AccountTabBtn('team', 'Members'),
-        ),
+        AccountTabBtn('team', 'Members'),
         AccountTabBtn('api-keys', 'API Keys'),
         AccountTabBtn('account-settings', 'Settings'),
       ),
