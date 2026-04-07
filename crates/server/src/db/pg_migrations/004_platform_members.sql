@@ -45,3 +45,10 @@ CREATE INDEX idx_platform_member_tenants_tenant ON public.platform_member_tenant
 ALTER TABLE public.owner_invites ADD COLUMN IF NOT EXISTS role text NOT NULL DEFAULT 'editor';
 ALTER TABLE public.owner_invites ADD COLUMN IF NOT EXISTS tenant_ids text[] NOT NULL DEFAULT '{}';
 ALTER TABLE public.owner_invites ADD COLUMN IF NOT EXISTS account_owner_user_id text REFERENCES public.users(id);
+
+-- Fix: the global unique index only allowed one pending invite per email across ALL accounts.
+-- With per-account scoping, two different account owners should be able to invite the same email.
+DROP INDEX IF EXISTS uq_owner_invites_pending_email;
+CREATE UNIQUE INDEX uq_owner_invites_pending_email_account
+  ON public.owner_invites (lower(email), account_owner_user_id)
+  WHERE (status = 'pending');

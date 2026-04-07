@@ -1859,7 +1859,7 @@ pub async fn verify_email(
 <div class="card">
   <div class="check">&#10003;</div>
   <h1>Email Verified</h1>
-  <p>Redirecting you to the dashboard...</p>
+  <p>Redirecting you to sign in...</p>
   <p style="margin-top:16px;"><a href="{redirect_url}">Click here if not redirected</a></p>
 </div>
 </body>
@@ -1871,7 +1871,7 @@ pub async fn verify_email(
 }
 
 /// POST /t/{slug}/auth/resend-verification — Resend verification email.
-/// Authenticated. Rate-limited to 1 per 60s per user (applied at route level).
+/// Authenticated. Rate-limited via register_limiter (5 burst per IP).
 pub async fn resend_verification(
     State(state): State<AppState>,
     req: axum::extract::Request,
