@@ -9,6 +9,7 @@ import { mount } from 'formajs';
 import { createAuth } from '../../core/hooks/createAuth';
 import { createApi } from '../../core/hooks/createApi';
 import { createToast } from '../../core/hooks/createToast';
+import { createSocket } from '../../core/hooks/createSocket';
 import { TenantAdmin } from './TenantAdmin';
 import { createTenantAdminStore } from './store';
 
@@ -17,7 +18,8 @@ const config = (window as any).__TENANT__;
 const auth = createAuth({ serverUrl: '', tenant: config?.slug || 'default' });
 const api = createApi(auth);
 const toast = createToast();
-const store = createTenantAdminStore(api, toast);
+const socket = createSocket(auth);
+const store = createTenantAdminStore(api, toast, socket);
 
 async function boot() {
   try {
@@ -25,6 +27,7 @@ async function boot() {
     await auth.ensureRole('admin');
     await store.loadStats();
     auth.startAutoRefresh();
+    socket.connect(window.location.origin + '/ws/ticket');
   } catch {
     window.location.href = '/t/' + (config?.slug || 'default') + '/login';
     return;

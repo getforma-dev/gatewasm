@@ -7,3 +7,5 @@ export type { ToastController } from './createToast';
 export { createFilters } from './createFilters';
 export { createPager } from './createPager';
 export { createKeyboard } from './createKeyboard';
+export { createSocket } from './createSocket';
+export type { Socket } from './createSocket';

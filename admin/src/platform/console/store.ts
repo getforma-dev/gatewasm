@@ -2,6 +2,7 @@ import { createSignal, batch } from 'formajs';
 import { createAuth } from '../../core/hooks/createAuth';
 import { createApi } from '../../core/hooks/createApi';
 import { createToast } from '../../core/hooks/createToast';
+import { createSocket } from '../../core/hooks/createSocket';
 import type { IntrospectData } from '../../core/types';
 
 // ── Module-level singletons (shared across ConsoleApp island) ───────────
@@ -10,6 +11,8 @@ export const serverUrl: string = (window as any).__FORMA_SERVER_URL__ || window.
 const auth = createAuth({ serverUrl, tenant: 'platform' });
 const api = createApi(auth);
 export const toast = createToast();
+const socket = createSocket(auth);
+export { socket };
 
 // ── Types ───────────────────────────────────────────────────────────────
 
@@ -1425,6 +1428,31 @@ export function initRouting(): void {
   });
 }
 
+// ── WebSocket invalidation subscriptions ────────────────────────────────
+
+socket.subscribe('team:changed', () => {
+  loadTeamMembers();
+  loadTeamInvites();
+});
+
+socket.subscribe('metrics:updated', () => {
+  const t = selectedTenant();
+  if (t && view() === 'overview') {
+    loadTenantDetail(t.id);
+  }
+});
+
+socket.subscribe('tenant:activity', () => {
+  const t = selectedTenant();
+  if (!t) return;
+  if (view() === 'audit-log') {
+    loadAuditLog(t.id);
+  }
+  if (view() === 'sessions') {
+    loadAllSessions(t.id);
+  }
+});
+
 // ── Lifecycle ───────────────────────────────────────────────────────────
 
 export async function init(): Promise<void> {
@@ -1483,6 +1511,7 @@ export async function init(): Promise<void> {
       if (tenant) {
         switchToWorkspaceInternal(tenant);
         auth.startAutoRefresh();
+        socket.connect(serverUrl + '/ws/ticket');
         return;
       }
       // Slug not found — clean up the URL, stay in account mode
@@ -1493,6 +1522,7 @@ export async function init(): Promise<void> {
     // Don't restore workspace state from localStorage — URL is the source of truth
 
     auth.startAutoRefresh();
+    socket.connect(serverUrl + '/ws/ticket');
   } catch {
     window.location.href = '/platform/login';
     throw new Error('auth_redirect');
@@ -1501,6 +1531,7 @@ export async function init(): Promise<void> {
 
 export async function signout(): Promise<void> {
   clearOverviewRefresh();
+  socket.disconnect();
   auth.stopAutoRefresh();
   setCurrentUser(null);
   await auth.logout();

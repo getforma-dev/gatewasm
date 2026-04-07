@@ -5,6 +5,7 @@
 import { createStore, batch } from 'formajs';
 import type { Api } from '../../core/hooks/createApi';
 import type { ToastController } from '../../core/hooks/createToast';
+import type { Socket } from '../../core/hooks/createSocket';
 import { createPager } from '../../core/hooks/createPager';
 import type { TenantAdminView } from '../../core/types';
 
@@ -63,7 +64,7 @@ export interface AuditEntry {
 
 // -- Factory ----------------------------------------------------------------
 
-export function createTenantAdminStore(api: Api, toast: ToastController) {
+export function createTenantAdminStore(api: Api, toast: ToastController, socket: Socket) {
 
   // -- Core store -----------------------------------------------------------
 
@@ -163,6 +164,20 @@ export function createTenantAdminStore(api: Api, toast: ToastController) {
       });
     });
   }
+
+  // -- WebSocket invalidation subscriptions ----------------------------------
+
+  socket.subscribe('tenant:activity', () => {
+    if (store.view === 'stats') {
+      loadStats();
+    }
+    if (store.view === 'users') {
+      loadUsers();
+    }
+    if (store.view === 'audit') {
+      loadAuditLog();
+    }
+  });
 
   // -- View data orchestration ----------------------------------------------
 
