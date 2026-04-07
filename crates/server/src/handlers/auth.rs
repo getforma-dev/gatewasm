@@ -1302,34 +1302,14 @@ pub async fn login(
         );
     }
 
-    // Ensure platform_members row exists for configured owners + update last_login_at
+    // Update last_login_at for platform members (best-effort)
     if tenant_id.as_deref() == Some("ten_platform") {
-        let is_configured_owner = state
-            .config
-            .platform_owner_emails
-            .iter()
-            .any(|e| e.eq_ignore_ascii_case(&db_email));
-
-        if is_configured_owner {
-            // Upsert owner membership — handles the case where user didn't exist at bootstrap time
-            let _ = sqlx::query(
-                "INSERT INTO platform_members (id, user_id, role, status, last_login_at, created_at, updated_at)
-                 VALUES ($1, $2, 'owner', 'active', NOW(), NOW(), NOW())
-                 ON CONFLICT (user_id) DO UPDATE SET role = 'owner', last_login_at = NOW(), updated_at = NOW()"
-            )
-            .bind(format!("pmem_{}", uuid::Uuid::new_v4()))
-            .bind(&user_id)
-            .execute(&state.db)
-            .await;
-        } else {
-            // Non-owner: just update last_login_at if they're already a member
-            let _ = sqlx::query(
-                "UPDATE platform_members SET last_login_at = NOW(), updated_at = NOW() WHERE user_id = $1"
-            )
-            .bind(&user_id)
-            .execute(&state.db)
-            .await;
-        }
+        let _ = sqlx::query(
+            "UPDATE platform_members SET last_login_at = NOW(), updated_at = NOW() WHERE user_id = $1"
+        )
+        .bind(&user_id)
+        .execute(&state.db)
+        .await;
     }
 
     if let Some(token) = invite_token.as_deref() {

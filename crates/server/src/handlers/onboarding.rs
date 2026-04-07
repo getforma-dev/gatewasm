@@ -391,6 +391,17 @@ pub async fn create_tenant(
     .execute(&mut *tx)
     .await?;
 
+    // Ensure caller has a platform_members row (owner of their own workspaces)
+    sqlx::query(
+        "INSERT INTO platform_members (id, user_id, role, status, created_at, updated_at)
+         VALUES ($1, $2, 'owner', 'active', NOW(), NOW())
+         ON CONFLICT (user_id) DO NOTHING"
+    )
+    .bind(format!("pmem_{}", uuid::Uuid::new_v4()))
+    .bind(&user.user_id)
+    .execute(&mut *tx)
+    .await?;
+
     tx.commit().await?;
 
     let row = sqlx::query(

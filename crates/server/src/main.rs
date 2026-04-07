@@ -293,28 +293,30 @@ async fn bootstrap_platform_plane(pool: &PgPool, config: &AppConfig) {
         }
     }
 
-    // ── Ensure platform_members row exists for each owner ────────────
-    for owner_email in &config.platform_owner_emails {
-        let owner_user = sqlx::query_as::<_, (String,)>(
-            "SELECT id FROM users WHERE lower(email) = lower($1) AND tenant_id = 'ten_platform'"
-        )
-        .bind(owner_email)
-        .fetch_optional(pool)
-        .await;
+    // ── Backfill: ensure platform_members row for users who own tenants ──
+    let tenant_owners = sqlx::query_as::<_, (String,)>(
+        "SELECT DISTINCT owner_user_id FROM tenants
+         WHERE owner_user_id IS NOT NULL AND status != 'deleted' AND id != 'ten_platform'"
+    )
+    .fetch_all(pool)
+    .await
+    .unwrap_or_default();
 
-        if let Ok(Some((user_id,))) = owner_user {
-            sqlx::query(
-                "INSERT INTO platform_members (id, user_id, role, status, created_at, updated_at)
-                 VALUES ($1, $2, 'owner', 'active', NOW(), NOW())
-                 ON CONFLICT (user_id) DO UPDATE SET role = 'owner', updated_at = NOW()"
-            )
-            .bind(format!("pmem_{}", uuid::Uuid::new_v4()))
-            .bind(&user_id)
-            .execute(pool)
-            .await
-            .ok();
-            tracing::info!(email = %owner_email, "platform_members: owner row ensured");
-        }
+    for (owner_user_id,) in &tenant_owners {
+        sqlx::query(
+            "INSERT INTO platform_members (id, user_id, role, status, created_at, updated_at)
+             VALUES ($1, $2, 'owner', 'active', NOW(), NOW())
+             ON CONFLICT (user_id) DO NOTHING"
+        )
+        .bind(format!("pmem_{}", uuid::Uuid::new_v4()))
+        .bind(owner_user_id)
+        .execute(pool)
+        .await
+        .ok();
+    }
+
+    if !tenant_owners.is_empty() {
+        tracing::info!(count = tenant_owners.len(), "platform_members: backfilled tenant owners");
     }
 }
 
