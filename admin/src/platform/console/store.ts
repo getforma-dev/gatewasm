@@ -1402,8 +1402,24 @@ export async function init(): Promise<void> {
     const inviteParam = initParams.get('owner_invite');
     if (inviteParam) {
       try {
-        await api.post('/platform/admin/invites/accept', { token: inviteParam });
-        toast.show('Invite accepted! Welcome to the team.', 'success');
+        // Use direct fetch (not api.post) because the accept endpoint is NOT
+        // tenant-scoped — it lives at /platform/admin/invites/accept, not under /t/{slug}/
+        const token = auth.accessToken();
+        const res = await fetch(serverUrl + '/platform/admin/invites/accept', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { Authorization: 'Bearer ' + token } : {}),
+          },
+          credentials: 'include',
+          body: JSON.stringify({ token: inviteParam }),
+        });
+        if (res.ok) {
+          toast.show('Invite accepted! Welcome to the team.', 'success');
+        } else {
+          const data = await res.json().catch(() => ({}));
+          toast.show(data.message || 'Failed to accept invite', 'error');
+        }
       } catch (e) {
         const msg = e instanceof Error ? e.message : 'Failed to accept invite';
         toast.show(msg, 'error');
