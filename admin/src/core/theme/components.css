@@ -3177,23 +3177,6 @@
   cursor: not-allowed;
 }
 
-.clip-btn-secondary {
-  clip-path: polygon(5px 0, 100% 0, calc(100% - 5px) 100%, 0 100%);
-  background: transparent;
-  color: var(--accent);
-  border: 1px solid var(--accent-border);
-  padding: 0.45rem 1.25rem;
-  font-family: Rajdhani, sans-serif;
-  font-weight: 600;
-  font-size: 0.78rem;
-  letter-spacing: 0.04em;
-  cursor: pointer;
-  transition: all 150ms ease;
-}
-
-.clip-btn-secondary:hover {
-  background: var(--accent-glow);
-}
 
 /* ── Accent cell — table first column styling ──────────────────────── */
 
