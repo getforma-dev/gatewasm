@@ -205,23 +205,27 @@ test.describe('WS Ticket Auth & Connection Lifecycle', () => {
   // -------------------------------------------------------------------------
   // Test 5 — WS upgrade rejects reused ticket
   // -------------------------------------------------------------------------
-  test('WS upgrade rejects reused ticket', async () => {
-    await sharedPage.goto(BASE + '/platform/console');
-    const token = await getAccessToken(sharedContext);
-    const ticket = await getWsTicket(sharedContext, token);
+  test('WS upgrade rejects reused ticket', async ({ browser }) => {
+    const { context: freshCtx, page: freshPage } = await loginAsTestUser(browser);
+    const token = await getAccessToken(freshCtx);
+    const ticket = await getWsTicket(freshCtx, token);
+    await freshPage.goto(BASE + '/platform/console');
+    await freshPage.waitForLoadState('networkidle');
 
     // First connection burns the ticket
-    const ws1 = await connectWebSocket(sharedPage, ticket);
+    const ws1 = await connectWebSocket(freshPage, ticket);
     await ws1.waitForOpen();
     await ws1.close();
     await ws1.waitForClose();
 
     // Navigate to a fresh page so the old WS state is gone
-    await sharedPage.goto(BASE + '/platform/console');
+    await freshPage.goto(BASE + '/platform/console');
+    await freshPage.waitForLoadState('networkidle');
 
     // Second connection with the same (now consumed) ticket must be rejected
-    const ws2 = await connectWebSocket(sharedPage, ticket);
+    const ws2 = await connectWebSocket(freshPage, ticket);
     await ws2.waitForClose();
+    await freshCtx.close();
   });
 
   // -------------------------------------------------------------------------
@@ -550,46 +554,51 @@ test.describe('WS Health & Connection Count', () => {
     const { context, page } = await loginAsTestUser(browser);
 
     try {
+      // Use about:blank to avoid the console app opening its own WS connection
+      await page.goto('about:blank');
+
       // Get baseline ws_connections from /health
       const healthRes = await context.request.get(BASE + '/health');
       expect(healthRes.ok()).toBeTruthy();
       const healthData = await healthRes.json();
       const baseline: number = healthData.ws_connections ?? 0;
 
-      // Open first WS connection
-      await page.goto(BASE + '/platform/console');
-      await page.waitForLoadState('networkidle');
+      // Use about:blank pages to avoid the console app opening its own WS connections.
+      // We need a loaded page for page.evaluate, but about:blank works for that.
 
       const token1 = await getAccessToken(context);
       const ticket1 = await getWsTicket(context, token1);
+
+      // Open first WS connection from about:blank page
       const ws1 = await connectWebSocket(page, ticket1);
       await ws1.waitForOpen();
+      await page.waitForTimeout(500);
 
-      // Verify count = baseline + 1
+      // Verify count increased by 1
       const health1 = await context.request.get(BASE + '/health');
       const data1 = await health1.json();
       expect(data1.ws_connections).toBe(baseline + 1);
 
-      // Open a second connection on a new page in the same context
+      // Open a second connection on a new about:blank page
       const page2 = await context.newPage();
-      await page2.goto(BASE + '/platform/console');
-      await page2.waitForLoadState('networkidle');
+      await page2.goto('about:blank');
 
       const token2 = await getAccessToken(context);
       const ticket2 = await getWsTicket(context, token2);
       const ws2 = await connectWebSocket(page2, ticket2);
       await ws2.waitForOpen();
+      await page2.waitForTimeout(500);
 
-      // Verify count = baseline + 2
+      // Verify count increased by 2
       const health2 = await context.request.get(BASE + '/health');
       const data2 = await health2.json();
       expect(data2.ws_connections).toBe(baseline + 2);
 
-      // Close first connection and wait for server to register the close
+      // Close first connection
       await ws1.close();
       await page.waitForTimeout(500);
 
-      // Verify count = baseline + 1
+      // Verify count decreased by 1
       const health3 = await context.request.get(BASE + '/health');
       const data3 = await health3.json();
       expect(data3.ws_connections).toBe(baseline + 1);
