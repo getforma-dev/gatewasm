@@ -124,7 +124,7 @@ async fn handle_connection(
             result = bus_rx.recv() => {
                 match result {
                     Ok(event) => {
-                        if event.tenant_id.to_string() == info.tenant_id
+                        if event.tenant_id == info.tenant_id
                             && subscribed_topics.contains(&event.topic)
                         {
                             let msg = serde_json::json!({

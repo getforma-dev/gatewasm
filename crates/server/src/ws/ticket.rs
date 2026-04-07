@@ -48,6 +48,11 @@ impl TicketStore {
             }
         })
     }
+
+    /// Remove all expired tickets. Call from the background cleanup loop.
+    pub fn cleanup_expired(&self) {
+        self.tickets.retain(|_, info| info.created_at.elapsed() < TICKET_TTL);
+    }
 }
 
 /// POST /ws/ticket — Create a single-use WebSocket ticket.

@@ -117,9 +117,14 @@ export function createSocket(auth: Auth): Socket {
             }
           }
         } else if (msg.type === 'auth_expired') {
+          // Prevent onclose from also triggering reconnect
+          intentionalClose = true;
           if (ws) ws.close();
           auth.silentRefresh()
-            .then(() => openConnection())
+            .then(() => {
+              intentionalClose = false;
+              openConnection();
+            })
             .catch(() => setState('disconnected'));
           return;
         }

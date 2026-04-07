@@ -4,11 +4,10 @@ pub mod ticket;
 
 use serde::Serialize;
 use tokio::sync::broadcast;
-use uuid::Uuid;
 
 #[derive(Clone, Debug, Serialize)]
 pub struct WsEvent {
-    pub tenant_id: Uuid,
+    pub tenant_id: String,
     pub topic: String,
     pub hint: Option<String>,
     pub timestamp: i64,

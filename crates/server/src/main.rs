@@ -84,6 +84,7 @@ async fn main() {
     let ssf_pool = state.db.clone();
     let ssf_keys = state.keys.clone();
     let shutdown_tx_for_signal = state.shutdown_tx.clone();
+    let bg_ticket_store = state.ticket_store.clone();
 
     // Router
     let trace_layer = tower_http::trace::TraceLayer::new_for_http()
@@ -202,6 +203,7 @@ async fn main() {
                 middleware::dpop::cleanup_expired_jti(&retry_pool).await;
                 handlers::par::cleanup_expired_par(&retry_pool).await;
                 bg_tenant_cache.evict_expired();
+                bg_ticket_store.cleanup_expired();
                 db::cleanup_stale_refresh_tokens(&retry_pool).await;
             }
         }
