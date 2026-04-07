@@ -7,22 +7,9 @@ use chrono::{DateTime, Utc};
 use serde::Deserialize;
 
 use crate::error::AppError;
-use crate::middleware::platform_team::PlatformMember;
 use crate::AppState;
 
-// ── Helpers ────────────────────────────────────────────────────────────
-
-/// Extract the `PlatformMember` from request extensions (set by
-/// `require_platform_member` middleware).
-fn caller(req: &axum::extract::Request) -> Result<PlatformMember, AppError> {
-    req.extensions()
-        .get::<PlatformMember>()
-        .cloned()
-        .ok_or(AppError::Unauthorized {
-            error: "unauthorized",
-            message: "Platform membership context missing".into(),
-        })
-}
+use super::caller;
 
 // ── Request bodies ─────────────────────────────────────────────────────
 

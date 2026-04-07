@@ -1392,8 +1392,10 @@ export async function init(): Promise<void> {
     await auth.silentRefresh();
     await Promise.all([loadTenants(), loadCurrentUser()]);
 
-    // Check for pending invite acceptance
-    const inviteParam = new URLSearchParams(window.location.search).get('owner_invite');
+    // Handle query params (invite acceptance, verified toast)
+    const initParams = new URLSearchParams(window.location.search);
+
+    const inviteParam = initParams.get('owner_invite');
     if (inviteParam) {
       try {
         await api.post('/platform/admin/invites/accept', { token: inviteParam });
@@ -1402,22 +1404,19 @@ export async function init(): Promise<void> {
         const msg = e instanceof Error ? e.message : 'Failed to accept invite';
         toast.show(msg, 'error');
       }
-      // Clean the URL
-      const url = new URL(window.location.href);
-      url.searchParams.delete('owner_invite');
-      history.replaceState(null, '', url.pathname + url.search);
-
-      // Reload user data to get fresh platform_role
+      initParams.delete('owner_invite');
       await Promise.all([loadTenants(), loadCurrentUser()]);
     }
 
-    // Check for verified toast
-    const verifiedParam = new URLSearchParams(window.location.search).get('verified');
-    if (verifiedParam === 'true') {
+    if (initParams.get('verified') === 'true') {
       toast.show('Email verified successfully', 'success');
-      const cleanUrl = new URL(window.location.href);
-      cleanUrl.searchParams.delete('verified');
-      history.replaceState(null, '', cleanUrl.pathname + cleanUrl.search);
+      initParams.delete('verified');
+    }
+
+    // Clean query params if any were consumed
+    if (inviteParam || initParams.get('verified') === null) {
+      const cleanPath = window.location.pathname + (initParams.toString() ? '?' + initParams.toString() : '');
+      history.replaceState(null, '', cleanPath);
     }
 
     // URL determines mode — no localStorage override

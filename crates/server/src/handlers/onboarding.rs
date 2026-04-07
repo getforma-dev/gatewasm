@@ -2374,12 +2374,12 @@ pub async fn list_tenant_invites_selfserve(
     Path(tenant_id): Path<String>,
     req: axum::extract::Request,
 ) -> Result<impl IntoResponse, AppError> {
-    let platform_user = req.extensions().get::<PlatformUser>().cloned()
+    let _platform_user = req.extensions().get::<PlatformUser>().cloned()
         .ok_or(AppError::Unauthorized { error: "unauthorized", message: "Not authenticated".into() })?;
 
     sqlx::query_scalar::<_, String>(
         "SELECT id FROM tenants WHERE id = $1 AND status != 'deleted'",
-    ).bind(&tenant_id).bind(&platform_user.user_id)
+    ).bind(&tenant_id)
     .fetch_optional(&state.db).await?
     .ok_or(AppError::NotFound { error: "tenant_not_found", message: "Tenant not found".into() })?;
 
@@ -2424,7 +2424,7 @@ pub async fn create_tenant_invite_selfserve(
 
     sqlx::query_scalar::<_, String>(
         "SELECT id FROM tenants WHERE id = $1 AND status != 'deleted'",
-    ).bind(&tenant_id).bind(&platform_user.user_id)
+    ).bind(&tenant_id)
     .fetch_optional(&state.db).await?
     .ok_or(AppError::NotFound { error: "tenant_not_found", message: "Tenant not found".into() })?;
 
@@ -2474,12 +2474,12 @@ pub async fn revoke_tenant_invite_selfserve(
     Path((tenant_id, invite_id)): Path<(String, String)>,
     req: axum::extract::Request,
 ) -> Result<impl IntoResponse, AppError> {
-    let platform_user = req.extensions().get::<PlatformUser>().cloned()
+    let _platform_user = req.extensions().get::<PlatformUser>().cloned()
         .ok_or(AppError::Unauthorized { error: "unauthorized", message: "Not authenticated".into() })?;
 
     sqlx::query_scalar::<_, String>(
         "SELECT id FROM tenants WHERE id = $1 AND status != 'deleted'",
-    ).bind(&tenant_id).bind(&platform_user.user_id)
+    ).bind(&tenant_id)
     .fetch_optional(&state.db).await?
     .ok_or(AppError::NotFound { error: "tenant_not_found", message: "Tenant not found".into() })?;
 
@@ -3071,12 +3071,12 @@ pub async fn get_tenant_user_detail(
     Path((tenant_id, user_id)): Path<(String, String)>,
     req: axum::extract::Request,
 ) -> Result<impl IntoResponse, AppError> {
-    let platform_user = req.extensions().get::<PlatformUser>().cloned()
+    let _platform_user = req.extensions().get::<PlatformUser>().cloned()
         .ok_or(AppError::Unauthorized { error: "unauthorized", message: "Not authenticated".into() })?;
 
     sqlx::query_scalar::<_, String>(
         "SELECT id FROM tenants WHERE id = $1 AND status != 'deleted'",
-    ).bind(&tenant_id).bind(&platform_user.user_id)
+    ).bind(&tenant_id)
     .fetch_optional(&state.db).await?
     .ok_or(AppError::NotFound { error: "tenant_not_found", message: "Tenant not found".into() })?;
 

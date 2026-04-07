@@ -19,7 +19,21 @@ use crate::error::AppError;
 use crate::jwt::signing;
 use crate::AppState;
 
+use crate::middleware::platform_team::PlatformMember;
+
 // ── Shared helpers used across multiple submodules ───────────────────────
+
+/// Extract the `PlatformMember` from request extensions (set by
+/// `require_platform_member` middleware on team routes).
+pub(crate) fn caller(req: &axum::extract::Request) -> Result<PlatformMember, AppError> {
+    req.extensions()
+        .get::<PlatformMember>()
+        .cloned()
+        .ok_or(AppError::Unauthorized {
+            error: "unauthorized",
+            message: "Platform membership context missing".into(),
+        })
+}
 
 #[derive(Debug, Deserialize)]
 pub(super) struct OwnerAnalyticsQuery {

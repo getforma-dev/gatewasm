@@ -1913,14 +1913,14 @@ pub async fn resend_verification(
     .execute(&state.db)
     .await?;
 
-    let tenant_slug = claims.tenant_id.as_deref().unwrap_or("platform");
-    let slug = if tenant_slug == "ten_platform" {
-        "platform"
-    } else {
-        tenant_slug
-    };
+    let tenant = req.extensions().get::<crate::middleware::tenant::TenantContext>().cloned();
+    let slug = tenant.as_ref().map(|t| t.slug.as_str()).unwrap_or("platform");
+    let app_name = tenant
+        .as_ref()
+        .and_then(|t| t.branding_app_name.as_deref())
+        .unwrap_or_else(|| tenant.as_ref().map(|t| t.name.as_str()).unwrap_or("fAuth"));
     let (subject, text_body, html_body) =
-        crate::email::verification_email_content(&state.config.server_url, slug, "fAuth", &token);
+        crate::email::verification_email_content(&state.config.server_url, slug, app_name, &token);
 
     if let Err(err) =
         crate::email::send_email(&state.config, &email, &subject, &text_body, &html_body).await

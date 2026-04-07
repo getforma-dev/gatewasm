@@ -9,23 +9,10 @@ use serde::Deserialize;
 use crate::error::AppError;
 use crate::handlers::auth::normalize_email;
 use crate::jwt::signing;
-use crate::middleware::platform_team::PlatformMember;
 use crate::middleware::platform_user::PlatformUser;
 use crate::AppState;
 
-// ── Helpers ────────────────────────────────────────────────────────────
-
-/// Extract the `PlatformMember` from request extensions (set by
-/// `require_platform_member` middleware on team routes).
-fn caller(req: &axum::extract::Request) -> Result<PlatformMember, AppError> {
-    req.extensions()
-        .get::<PlatformMember>()
-        .cloned()
-        .ok_or(AppError::Unauthorized {
-            error: "unauthorized",
-            message: "Platform membership context missing".into(),
-        })
-}
+use super::caller;
 
 // ── Request / query types ─────────────────────────────────────────────
 

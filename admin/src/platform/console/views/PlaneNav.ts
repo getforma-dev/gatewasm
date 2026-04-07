@@ -125,8 +125,8 @@ export function PlaneNav(props: PlaneNavProps) {
       h('span', { class: 'plane-tenant-name' }, () => props.tenant()?.name || ''),
       () => {
         const t = props.tenant();
-        if (t && (t as any).access === 'team' && (t as any).team_role) {
-          const role = (t as any).team_role as string;
+        if (t && t.access === 'team' && t.team_role) {
+          const role = t.team_role;
           return h('span', { class: 'badge badge-subtle', style: 'margin-left:6px;font-size:0.7rem;' },
             role.charAt(0).toUpperCase() + role.slice(1));
         }
