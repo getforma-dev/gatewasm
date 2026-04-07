@@ -431,10 +431,7 @@ export function ConsoleApp() {
           () => platformRole() === 'owner' || platformRole() === 'admin',
           () => AccountTabBtn('team', 'Team'),
         ),
-        createShow(
-          () => platformRole() !== 'editor' && platformRole() !== 'viewer',
-          () => AccountTabBtn('api-keys', 'API Keys'),
-        ),
+        AccountTabBtn('api-keys', 'API Keys'),
         AccountTabBtn('account-settings', 'Settings'),
       ),
       h('div', { class: 'account-stage' },
