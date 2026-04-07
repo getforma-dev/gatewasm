@@ -27,29 +27,12 @@ async fn run_migrations(pool: &PgPool) -> Result<(), sqlx::Error> {
         "CREATE TABLE IF NOT EXISTS schema_migrations (version INT PRIMARY KEY, applied_at TIMESTAMPTZ DEFAULT NOW())"
     ).execute(pool).await?;
 
-    // Squashed migration: all 26 original migrations combined into one.
-    // Old migrations archived in pg_migrations_archived/ for reference.
-    // After production launch, new migrations start at version 2.
+    // Single squashed migration — no public. qualifiers, works in any search_path.
     let migrations: &[(i32, &str, &str)] = &[
         (
             1,
-            "initial schema (squashed)",
-            include_str!("pg_migrations/001_initial.sql"),
-        ),
-        (
-            2,
-            "onboarding fields",
-            include_str!("pg_migrations/002_onboarding_fields.sql"),
-        ),
-        (
-            3,
-            "hosted pages",
-            include_str!("pg_migrations/003_hosted_pages.sql"),
-        ),
-        (
-            4,
-            "platform members",
-            include_str!("pg_migrations/004_platform_members.sql"),
+            "full schema (squashed)",
+            include_str!("pg_migrations/001_schema.sql"),
         ),
     ];
 
