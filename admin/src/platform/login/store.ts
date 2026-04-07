@@ -94,6 +94,11 @@ if (ownerInviteToken) {
     .then((data: any) => {
       if (data) {
         setInviteInfo(data);
+        // If user doesn't have an account, redirect straight to onboarding
+        if (!data.user_exists) {
+          window.location.href = '/platform/onboarding?owner_invite=' + encodeURIComponent(ownerInviteToken);
+          return;
+        }
         // Auto-fill email after DOM is ready
         requestAnimationFrame(() => {
           if (emailInput) emailInput.value = data.invite_email;

@@ -34,6 +34,8 @@ import {
   canEdit,
   serverUrl,
   resendVerification,
+  pendingInvites,
+  acceptInviteFromDashboard,
 } from './store';
 
 function TenantsList() {
@@ -463,6 +465,21 @@ export function ConsoleApp() {
             class: 'btn btn-sm btn-ghost',
             onClick: () => void resendVerification(),
           }, 'Resend'),
+        ),
+      ),
+      // Pending invite banners
+      () => pendingInvites().map((inv) =>
+        h('div', { class: 'invite-accept-banner', key: inv.id },
+          h('span', null,
+            (inv.inviter_email || 'A team member') + ' invited you as ' +
+            inv.role.charAt(0).toUpperCase() + inv.role.slice(1) +
+            ' on ' + inv.tenant_count + ' workspace' + (inv.tenant_count !== 1 ? 's' : ''),
+          ),
+          h('button', {
+            type: 'button',
+            class: 'btn btn-sm btn-primary',
+            onClick: () => void acceptInviteFromDashboard(inv.id),
+          }, 'Accept'),
         ),
       ),
       h('div', { class: 'account-tabs' },

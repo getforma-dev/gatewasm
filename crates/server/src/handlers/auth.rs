@@ -1725,6 +1725,32 @@ pub async fn me(
         .flatten()
     };
 
+    // Check for pending invites addressed to this user's email
+    let pending_invites = sqlx::query_as::<_, (String, String, String, Vec<String>, Option<String>)>(
+        "SELECT oi.id, oi.role, oi.token_hash, oi.tenant_ids, \
+                (SELECT u2.email FROM users u2 WHERE u2.id = oi.account_owner_user_id LIMIT 1) \
+         FROM owner_invites oi \
+         WHERE lower(oi.email) = lower($1) \
+           AND oi.status = 'pending' \
+           AND oi.expires_at > NOW()"
+    )
+    .bind(&claims.email)
+    .fetch_all(&state.db)
+    .await
+    .unwrap_or_default();
+
+    let pending_invites_json: Vec<serde_json::Value> = pending_invites
+        .into_iter()
+        .map(|(id, role, _token_hash, tenant_ids, inviter_email)| {
+            serde_json::json!({
+                "id": id,
+                "role": role,
+                "inviter_email": inviter_email,
+                "tenant_count": tenant_ids.len(),
+            })
+        })
+        .collect();
+
     Ok(Json(serde_json::json!({
         "id": claims.sub,
         "email": claims.email,
@@ -1738,6 +1764,7 @@ pub async fn me(
         "mfa_enabled": mfa_enabled,
         "is_account_owner": is_account_owner,
         "platform_role": platform_role,
+        "pending_invites": pending_invites_json,
     })))
 }
 

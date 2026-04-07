@@ -26,7 +26,8 @@ pub struct CreateOwnerInviteRequest {
 
 #[derive(Debug, Deserialize)]
 pub struct AcceptOwnerInviteRequest {
-    pub token: String,
+    pub token: Option<String>,
+    pub invite_id: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -457,45 +458,48 @@ pub async fn accept_owner_invite(
             .await
             .map_err(|_| AppError::BadRequest {
                 error: "invalid_request",
-                message: "Invalid request body. Required: token".into(),
+                message: "Invalid request body. Required: token or invite_id".into(),
             })?
             .0;
 
-    let token = body.token.trim();
-    if token.is_empty() {
-        return Err(AppError::BadRequest {
-            error: "invalid_invite_token",
-            message: "Invite token is required".into(),
-        });
-    }
-
-    let token_hash = signing::hash_token(token);
     let user_email = normalize_email(&platform_user.email);
     let mut tx = state.db.begin().await?;
 
-    let invite = sqlx::query_as::<
-        _,
-        (
-            String,                    // id
-            String,                    // email
-            String,                    // status
-            chrono::DateTime<Utc>,     // expires_at
-            Option<String>,            // accepted_by_user_id
-            String,                    // role
-            Vec<String>,               // tenant_ids
-            Option<String>,            // account_owner_user_id
-        ),
-    >(
-        "SELECT id, email, status, expires_at, accepted_by_user_id, role, tenant_ids, account_owner_user_id
-         FROM owner_invites
-         WHERE token_hash = $1
-         LIMIT 1
-         FOR UPDATE",
-    )
-    .bind(&token_hash)
-    .fetch_optional(&mut *tx)
-    .await?
-    .ok_or(AppError::NotFound {
+    // Look up invite by token (email link) or by invite_id (dashboard acceptance)
+    let invite = if let Some(ref token) = body.token {
+        let token = token.trim();
+        if token.is_empty() {
+            return Err(AppError::BadRequest {
+                error: "invalid_invite_token",
+                message: "Invite token is required".into(),
+            });
+        }
+        let token_hash = signing::hash_token(token);
+        sqlx::query_as::<_, (String, String, String, chrono::DateTime<Utc>, Option<String>, String, Vec<String>, Option<String>)>(
+            "SELECT id, email, status, expires_at, accepted_by_user_id, role, tenant_ids, account_owner_user_id
+             FROM owner_invites WHERE token_hash = $1 LIMIT 1 FOR UPDATE",
+        )
+        .bind(&token_hash)
+        .fetch_optional(&mut *tx)
+        .await?
+    } else if let Some(ref invite_id) = body.invite_id {
+        // Dashboard acceptance: look up by ID, but verify email matches the caller
+        sqlx::query_as::<_, (String, String, String, chrono::DateTime<Utc>, Option<String>, String, Vec<String>, Option<String>)>(
+            "SELECT id, email, status, expires_at, accepted_by_user_id, role, tenant_ids, account_owner_user_id
+             FROM owner_invites WHERE id = $1 AND lower(email) = lower($2) LIMIT 1 FOR UPDATE",
+        )
+        .bind(invite_id)
+        .bind(&user_email)
+        .fetch_optional(&mut *tx)
+        .await?
+    } else {
+        return Err(AppError::BadRequest {
+            error: "invalid_request",
+            message: "Either token or invite_id is required".into(),
+        });
+    };
+
+    let invite = invite.ok_or(AppError::NotFound {
         error: "invite_not_found",
         message: "Invite not found".into(),
     })?;

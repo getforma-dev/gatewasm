@@ -518,16 +518,52 @@ export async function rotateTenantKey(tenantId: string): Promise<string | null> 
   }
 }
 
+export interface PendingInvite {
+  id: string;
+  role: string;
+  inviter_email: string | null;
+  tenant_count: number;
+}
+const [pendingInvites, setPendingInvites] = createSignal<PendingInvite[]>([]);
+export { pendingInvites };
+
 async function loadCurrentUser(): Promise<void> {
   try {
-    const data = await api.get<PlatformUser & { is_account_owner?: boolean; platform_role?: PlatformRole }>('/auth/me');
+    const data = await api.get<PlatformUser & { is_account_owner?: boolean; platform_role?: PlatformRole; pending_invites?: PendingInvite[] }>('/auth/me');
     setCurrentUser(data);
     setAccountOwner(data.is_account_owner ?? false);
     if (data.platform_role) {
       setPlatformRole(data.platform_role);
     }
+    setPendingInvites(data.pending_invites || []);
   } catch {
     setCurrentUser(null);
+  }
+}
+
+export async function acceptInviteFromDashboard(inviteId: string): Promise<boolean> {
+  try {
+    const token = auth.accessToken();
+    const res = await fetch(serverUrl + '/platform/admin/invites/accept', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: 'Bearer ' + token } : {}),
+      },
+      credentials: 'include',
+      body: JSON.stringify({ invite_id: inviteId }),
+    });
+    if (res.ok) {
+      toast.show('Invite accepted!', 'success');
+      await Promise.all([loadTenants(), loadCurrentUser()]);
+      return true;
+    }
+    const data = await res.json().catch(() => ({}));
+    toast.show(data.message || 'Failed to accept invite', 'error');
+    return false;
+  } catch (e) {
+    toast.show(e instanceof Error ? e.message : 'Failed to accept invite', 'error');
+    return false;
   }
 }
 
