@@ -1552,9 +1552,10 @@ export async function loadTeamInvites(): Promise<any[]> {
 export function canEdit(): boolean {
   if (accountOwner()) return true;
   const role = platformRole();
-  // If no role is set and not an owner, default to read-only
-  if (!role) return false;
-  return role === 'admin' || role === 'editor';
+  // Only viewers are explicitly read-only. New users (no role yet) and
+  // admin/editor can edit — new users need to create their first workspace.
+  if (role === 'viewer') return false;
+  return true;
 }
 
 export function isOwner(): boolean {

@@ -1834,12 +1834,9 @@ pub async fn verify_email(
         .await;
     }
 
-    // Redirect to console with a branded HTML page instead of raw JSON.
-    let redirect_url = if tenant_id.as_deref() == Some("ten_platform") {
-        "/platform/console?verified=true"
-    } else {
-        "/platform/login?verified=true"
-    };
+    // Always redirect to login — avoids wrong-session issues when verification
+    // link is opened in a different browser profile than the one that registered.
+    let redirect_url = "/platform/login?verified=true";
 
     let html = format!(
         r#"<!DOCTYPE html>

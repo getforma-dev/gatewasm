@@ -69,6 +69,14 @@ if (code) {
   } catch { /* noop */ }
 }
 
+// ── Verified toast ────────────────────────────────────────────────────
+if (params.get('verified') === 'true') {
+  setInfo('Email verified successfully. Sign in to continue.');
+  const cleanUrl = new URL(window.location.href);
+  cleanUrl.searchParams.delete('verified');
+  history.replaceState(null, '', cleanUrl.pathname + cleanUrl.search);
+}
+
 // ── Invite resolution ─────────────────────────────────────────────────
 export const [inviteInfo, setInviteInfo] = createSignal<{
   invite_email: string;

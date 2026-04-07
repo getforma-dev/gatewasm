@@ -847,7 +847,7 @@ ON CONFLICT DO NOTHING;
 INSERT INTO tenants (id, name, slug, owner_email, status, max_users, plan, login_redirect_url)
 VALUES (
   'ten_platform',
-  'GateWASM Platform',
+  'fAuth',
   'platform',
   'admin@getforma.dev',
   'active',
