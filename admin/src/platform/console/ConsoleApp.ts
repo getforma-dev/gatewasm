@@ -432,7 +432,7 @@ export function ConsoleApp() {
           () => AccountTabBtn('team', 'Team'),
         ),
         createShow(
-          () => platformRole() === 'owner' || platformRole() === 'admin',
+          () => platformRole() !== 'editor' && platformRole() !== 'viewer',
           () => AccountTabBtn('api-keys', 'API Keys'),
         ),
         AccountTabBtn('account-settings', 'Settings'),
