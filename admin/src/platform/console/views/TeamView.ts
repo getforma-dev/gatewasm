@@ -248,92 +248,136 @@ function InviteModal(onClose: () => void, onInvitesUpdate: (inv: any[]) => void)
     }
   }
 
+  const ownTenants = () => tenants().filter((t: any) => t.access === 'own' || !t.access);
+  const allSelected = () => ownTenants().length > 0 && selectedTenantIds().length === ownTenants().length;
+
+  function selectAll() {
+    if (allSelected()) {
+      setSelectedTenantIds([]);
+    } else {
+      setSelectedTenantIds(ownTenants().map((t) => t.id));
+    }
+  }
+
   return h('div', {
     class: 'modal-overlay',
     onClick: (e: Event) => { if (e.target === e.currentTarget) onClose(); },
   },
-    h('div', { class: 'modal-card' },
-      h('h3', { class: 'modal-title' }, 'Invite Member'),
-
-      // ── Success state ───────────────────────────────────────────
-      createShow(
-        () => inviteUrl() !== null,
-        () => h('div', { class: 'modal-field' },
-          h('label', null, 'Invite sent! Share this link:'),
-          h('div', { class: 'invite-url-row' },
-            h('code', { class: 'invite-url-display' }, () => inviteUrl()!),
-            CopyButton({ text: () => inviteUrl() || '', label: 'Copy invite URL' }),
-          ),
-          h('div', { class: 'modal-actions' },
-            h('button', {
-              type: 'button',
-              class: 'btn btn-primary',
-              onClick: onClose,
-            }, 'Done'),
-          ),
-        ),
+    h('div', { class: 'modal-content' },
+      // ── Header ──────────────────────────────────────────────────
+      h('div', { class: 'modal-header' },
+        h('span', { class: 'section-title' }, 'Invite Member'),
+        h('button', { class: 'modal-close', type: 'button', onClick: onClose }, '\u00D7'),
       ),
 
-      // ── Form state ─────────────────────────────────────────────
-      createShow(
-        () => inviteUrl() === null,
-        () => h('div', null,
-          h('div', { class: 'modal-field' },
-            h('label', null, 'Email'),
-            h('input', {
-              type: 'email',
-              class: 'search-input',
-              placeholder: 'colleague@example.com',
-              value: email,
-              onInput: (e: Event) => setEmail((e.target as HTMLInputElement).value),
-            }),
-          ),
-          h('div', { class: 'modal-field' },
-            h('label', null, 'Role'),
-            h('select', {
-              class: 'filter-select',
-              value: role,
-              onChange: (e: Event) => setRole((e.target as HTMLSelectElement).value),
-            },
-              h('option', { value: 'admin' }, 'Admin'),
-              h('option', { value: 'editor' }, 'Editor'),
-              h('option', { value: 'viewer' }, 'Viewer'),
+      // ── Body ────────────────────────────────────────────────────
+      h('div', { class: 'modal-body' },
+
+        // ── Success state ─────────────────────────────────────────
+        createShow(
+          () => inviteUrl() !== null,
+          () => h('div', null,
+            h('p', { style: 'margin:0 0 12px;color:var(--success);font-weight:500;' }, 'Invite sent!'),
+            h('p', { class: 'text-muted', style: 'margin:0 0 8px;font-size:0.82rem;' }, 'Share this link with the invitee:'),
+            h('div', { class: 'invite-url-row' },
+              h('code', { class: 'invite-url-code' }, () => inviteUrl()!),
+              CopyButton({ text: () => inviteUrl() || '', label: 'Copy' }),
+            ),
+            h('div', { class: 'modal-actions' },
+              h('button', { type: 'button', class: 'btn btn-primary', onClick: onClose }, 'Done'),
             ),
           ),
+        ),
 
-          // Tenant multi-select — always required (all roles are per-tenant)
-          h('div', { class: 'modal-field' },
-            h('label', null, 'Tenant Access'),
-            h('div', { class: 'tenant-checkbox-list' },
-              () => tenants().map((t) =>
-                h('label', { class: 'tenant-checkbox-item', key: t.id },
-                  h('input', {
-                    type: 'checkbox',
-                    checked: () => selectedTenantIds().includes(t.id),
-                    onChange: () => toggleTenant(t.id),
-                  }),
-                  h('span', null, t.name + ' (/t/' + t.slug + ')'),
+        // ── Form state ────────────────────────────────────────────
+        createShow(
+          () => inviteUrl() === null,
+          () => h('div', null,
+            // Email + Role side by side
+            h('div', { class: 'invite-form-row' },
+              h('div', { class: 'invite-form-field invite-form-email' },
+                h('label', { class: 'field-label' }, 'Email'),
+                h('input', {
+                  type: 'email',
+                  class: 'input',
+                  placeholder: 'colleague@example.com',
+                  value: email,
+                  onInput: (e: Event) => setEmail((e.target as HTMLInputElement).value),
+                }),
+              ),
+              h('div', { class: 'invite-form-field invite-form-role' },
+                h('label', { class: 'field-label' }, 'Role'),
+                h('select', {
+                  class: 'input',
+                  value: role,
+                  onChange: (e: Event) => setRole((e.target as HTMLSelectElement).value),
+                },
+                  h('option', { value: 'admin' }, 'Admin'),
+                  h('option', { value: 'editor' }, 'Editor'),
+                  h('option', { value: 'viewer' }, 'Viewer'),
                 ),
               ),
             ),
-            createShow(
-              () => tenants().length === 0,
-              () => h('p', { class: 'text-muted' }, 'No tenants available.'),
-            ),
-          ),
 
-          h('div', { class: 'modal-actions' },
-            h('button', {
-              type: 'button',
-              class: 'btn btn-sm btn-ghost',
-              onClick: onClose,
-            }, 'Cancel'),
-            h('button', {
-              type: 'button',
-              class: 'btn btn-primary',
-              disabled: () => sending() || !canSend(),
-              onClick: () => void handleSend(),
-            }, () => sending() ? 'Sending...' : 'Send Invite'),
+            // Role description
+            h('p', { class: 'text-muted', style: 'font-size:0.78rem;margin:4px 0 16px;' },
+              () => {
+                const r = role();
+                if (r === 'admin') return 'Can manage settings, users, and roles on assigned workspaces.';
+                if (r === 'editor') return 'Can edit settings on assigned workspaces. Cannot manage users.';
+                return 'Read-only access to assigned workspaces.';
+              },
+            ),
+
+            // Tenant access
+            h('div', { style: 'margin-bottom:16px;' },
+              h('div', { style: 'display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;' },
+                h('label', { class: 'field-label', style: 'margin:0;' }, 'Workspace Access'),
+                createShow(
+                  () => ownTenants().length > 1,
+                  () => h('button', {
+                    type: 'button',
+                    class: 'btn-link',
+                    style: 'font-size:0.78rem;',
+                    onClick: selectAll,
+                  }, () => allSelected() ? 'Deselect all' : 'Select all'),
+                ),
+              ),
+              createShow(
+                () => ownTenants().length === 0,
+                () => h('p', { class: 'text-muted', style: 'font-size:0.82rem;' }, 'Create a workspace first to invite members.'),
+              ),
+              h('div', { class: 'invite-tenant-list' },
+                () => ownTenants().map((t) =>
+                  h('label', { class: 'invite-tenant-item', key: t.id },
+                    h('input', {
+                      type: 'checkbox',
+                      checked: () => selectedTenantIds().includes(t.id),
+                      onChange: () => toggleTenant(t.id),
+                    }),
+                    h('div', { class: 'invite-tenant-info' },
+                      h('span', { class: 'invite-tenant-name' }, t.name),
+                      h('span', { class: 'invite-tenant-slug' }, '/t/' + t.slug),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+
+            // Actions
+            h('div', { class: 'modal-actions' },
+              h('button', {
+                type: 'button',
+                class: 'btn btn-sm btn-ghost',
+                onClick: onClose,
+              }, 'Cancel'),
+              h('button', {
+                type: 'button',
+                class: 'btn btn-primary',
+                disabled: () => sending() || !canSend(),
+                onClick: () => void handleSend(),
+              }, () => sending() ? 'Sending...' : 'Send Invite'),
+            ),
           ),
         ),
       ),
