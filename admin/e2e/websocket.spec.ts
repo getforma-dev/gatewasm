@@ -240,3 +240,369 @@ test.describe('WS Ticket Auth & Connection Lifecycle', () => {
     await ws.close();
   });
 });
+
+// ---------------------------------------------------------------------------
+// Block 2 — WS Event Delivery
+// ---------------------------------------------------------------------------
+
+test.describe('WS Event Delivery', () => {
+  let evtContext: BrowserContext;
+  let evtPage: Page;
+  let accessToken: string;
+  let tenantId: string;
+  let tenantSlug: string;
+
+  test.beforeAll(async ({ browser }) => {
+    const { context, page } = await loginAsTestUser(browser);
+    evtContext = context;
+    evtPage = page;
+
+    accessToken = await getAccessToken(evtContext);
+
+    tenantSlug = 'e2e-ws-' + Date.now().toString(36);
+
+    const res = await evtContext.request.post(BASE + '/platform/self-serve/tenants', {
+      headers: { Authorization: 'Bearer ' + accessToken },
+      data: { name: 'WS Test Tenant', slug: tenantSlug },
+    });
+    expect(res.ok()).toBeTruthy();
+    const tenant = await res.json();
+    tenantId = tenant.id as string;
+  });
+
+  test.afterAll(async () => {
+    if (tenantId) {
+      const token = await getAccessToken(evtContext);
+      await evtContext.request.delete(BASE + '/platform/admin/tenants/' + tenantId, {
+        headers: { Authorization: 'Bearer ' + token },
+      });
+    }
+    await evtContext.close();
+  });
+
+  // -------------------------------------------------------------------------
+  // Test 1 — receives team:changed when invite is created
+  // -------------------------------------------------------------------------
+  test('receives team:changed when invite is created', async () => {
+    await evtPage.goto(BASE + '/platform/console');
+    await evtPage.waitForTimeout(1000);
+
+    const token = await getAccessToken(evtContext);
+    const ticket = await getWsTicket(evtContext, token);
+    const ws = await connectWebSocket(evtPage, ticket);
+    await ws.waitForOpen();
+
+    await ws.send(JSON.stringify({ type: 'subscribe', topics: ['team:changed'] }));
+    await evtPage.waitForTimeout(300);
+
+    const inviteEmail = 'invite-' + Date.now() + '@test.local';
+    const inviteRes = await evtContext.request.post(BASE + '/platform/admin/team/invites', {
+      headers: { Authorization: 'Bearer ' + token },
+      data: { email: inviteEmail, role: 'viewer', tenant_ids: [tenantId] },
+    });
+    expect(inviteRes.ok()).toBeTruthy();
+
+    await ws.waitForMessage(
+      '(msg) => { try { const p = JSON.parse(msg); return p.type === "event" && p.topic === "team:changed" && p.hint === "invite_created"; } catch(e) { return false; } }',
+      8000,
+    );
+
+    const messages = await ws.getMessages();
+    const found = messages.some((m) => {
+      try {
+        const p = JSON.parse(m);
+        return p.type === 'event' && p.topic === 'team:changed' && p.hint === 'invite_created';
+      } catch { return false; }
+    });
+    expect(found).toBe(true);
+
+    await ws.close();
+  });
+
+  // -------------------------------------------------------------------------
+  // Test 2 — receives tenant:activity on end user signup
+  // -------------------------------------------------------------------------
+  test('receives tenant:activity on end user signup', async () => {
+    await evtPage.goto(BASE + '/platform/console');
+    await evtPage.waitForTimeout(1000);
+
+    const token = await getAccessToken(evtContext);
+    const ticket = await getWsTicket(evtContext, token);
+    const ws = await connectWebSocket(evtPage, ticket);
+    await ws.waitForOpen();
+
+    await ws.send(JSON.stringify({ type: 'subscribe', topics: ['tenant:activity'] }));
+    await evtPage.waitForTimeout(300);
+
+    const endUserEmail = 'end-user-' + Date.now() + '@test.local';
+    const signupRes = await evtContext.request.post(BASE + '/auth/register', {
+      headers: { 'X-Tenant-Slug': tenantSlug },
+      data: { email: endUserEmail, password: 'E2eTestPassword123!', name: 'WS End User' },
+    });
+    expect(signupRes.ok()).toBeTruthy();
+
+    await ws.waitForMessage(
+      '(msg) => { try { const p = JSON.parse(msg); return p.type === "event" && p.topic === "tenant:activity" && p.hint === "signup"; } catch(e) { return false; } }',
+      8000,
+    );
+
+    const messages = await ws.getMessages();
+    const found = messages.some((m) => {
+      try {
+        const p = JSON.parse(m);
+        return p.type === 'event' && p.topic === 'tenant:activity' && p.hint === 'signup';
+      } catch { return false; }
+    });
+    expect(found).toBe(true);
+
+    await ws.close();
+  });
+
+  // -------------------------------------------------------------------------
+  // Test 3 — receives metrics:updated alongside tenant:activity
+  // -------------------------------------------------------------------------
+  test('receives metrics:updated alongside tenant:activity', async () => {
+    await evtPage.goto(BASE + '/platform/console');
+    await evtPage.waitForTimeout(1000);
+
+    const token = await getAccessToken(evtContext);
+    const ticket = await getWsTicket(evtContext, token);
+    const ws = await connectWebSocket(evtPage, ticket);
+    await ws.waitForOpen();
+
+    await ws.send(JSON.stringify({ type: 'subscribe', topics: ['tenant:activity', 'metrics:updated'] }));
+    await evtPage.waitForTimeout(300);
+
+    const endUserEmail = 'end-user-metrics-' + Date.now() + '@test.local';
+    const signupRes = await evtContext.request.post(BASE + '/auth/register', {
+      headers: { 'X-Tenant-Slug': tenantSlug },
+      data: { email: endUserEmail, password: 'E2eTestPassword123!', name: 'WS Metrics User' },
+    });
+    expect(signupRes.ok()).toBeTruthy();
+
+    await ws.waitForMessage(
+      '(msg) => { try { const p = JSON.parse(msg); return p.type === "event" && p.topic === "tenant:activity"; } catch(e) { return false; } }',
+      8000,
+    );
+    await ws.waitForMessage(
+      '(msg) => { try { const p = JSON.parse(msg); return p.type === "event" && p.topic === "metrics:updated"; } catch(e) { return false; } }',
+      8000,
+    );
+
+    const messages = await ws.getMessages();
+    const hasActivity = messages.some((m) => {
+      try { const p = JSON.parse(m); return p.type === 'event' && p.topic === 'tenant:activity'; } catch { return false; }
+    });
+    const hasMetrics = messages.some((m) => {
+      try { const p = JSON.parse(m); return p.type === 'event' && p.topic === 'metrics:updated'; } catch { return false; }
+    });
+    expect(hasActivity).toBe(true);
+    expect(hasMetrics).toBe(true);
+
+    await ws.close();
+  });
+
+  // -------------------------------------------------------------------------
+  // Test 4 — does not receive events for unsubscribed topics
+  // -------------------------------------------------------------------------
+  test('does not receive events for unsubscribed topics', async () => {
+    await evtPage.goto(BASE + '/platform/console');
+    await evtPage.waitForTimeout(1000);
+
+    const token = await getAccessToken(evtContext);
+    const ticket = await getWsTicket(evtContext, token);
+    const ws = await connectWebSocket(evtPage, ticket);
+    await ws.waitForOpen();
+
+    // Subscribe only to team:changed — NOT tenant:activity
+    await ws.send(JSON.stringify({ type: 'subscribe', topics: ['team:changed'] }));
+    await evtPage.waitForTimeout(300);
+
+    const endUserEmail = 'end-user-unsub-' + Date.now() + '@test.local';
+    await evtContext.request.post(BASE + '/auth/register', {
+      headers: { 'X-Tenant-Slug': tenantSlug },
+      data: { email: endUserEmail, password: 'E2eTestPassword123!', name: 'WS Unsub User' },
+    });
+
+    await evtPage.waitForTimeout(2000);
+
+    const messages = await ws.getMessages();
+    const hasActivity = messages.some((m) => {
+      try { const p = JSON.parse(m); return p.type === 'event' && p.topic === 'tenant:activity'; } catch { return false; }
+    });
+    expect(hasActivity).toBe(false);
+
+    await ws.close();
+  });
+
+  // -------------------------------------------------------------------------
+  // Test 5 — does not receive events for other tenants
+  // -------------------------------------------------------------------------
+  test('does not receive events for other tenants', async () => {
+    // Create a second tenant
+    const token = await getAccessToken(evtContext);
+    const otherSlug = 'e2e-ws-other-' + Date.now().toString(36);
+    const createRes = await evtContext.request.post(BASE + '/platform/self-serve/tenants', {
+      headers: { Authorization: 'Bearer ' + token },
+      data: { name: 'WS Other Tenant', slug: otherSlug },
+    });
+    expect(createRes.ok()).toBeTruthy();
+    const otherTenant = await createRes.json();
+    const otherTenantId = otherTenant.id as string;
+
+    try {
+      await evtPage.goto(BASE + '/platform/console');
+      await evtPage.waitForTimeout(1000);
+
+      const ticket = await getWsTicket(evtContext, token);
+      const ws = await connectWebSocket(evtPage, ticket);
+      await ws.waitForOpen();
+
+      await ws.send(JSON.stringify({ type: 'subscribe', topics: ['tenant:activity'] }));
+      await evtPage.waitForTimeout(300);
+
+      // Register end user on the OTHER tenant — should not appear in this WS session
+      const endUserEmail = 'end-user-other-' + Date.now() + '@test.local';
+      await evtContext.request.post(BASE + '/auth/register', {
+        headers: { 'X-Tenant-Slug': otherSlug },
+        data: { email: endUserEmail, password: 'E2eTestPassword123!', name: 'WS Other User' },
+      });
+
+      await evtPage.waitForTimeout(2000);
+
+      const messages = await ws.getMessages();
+      const hasActivity = messages.some((m) => {
+        try { const p = JSON.parse(m); return p.type === 'event' && p.topic === 'tenant:activity'; } catch { return false; }
+      });
+      expect(hasActivity).toBe(false);
+
+      await ws.close();
+    } finally {
+      // Clean up second tenant
+      const cleanToken = await getAccessToken(evtContext);
+      await evtContext.request.delete(BASE + '/platform/admin/tenants/' + otherTenantId, {
+        headers: { Authorization: 'Bearer ' + cleanToken },
+      });
+    }
+  });
+
+  // -------------------------------------------------------------------------
+  // Test 6 — subscribe/unsubscribe dynamically updates filtering
+  // -------------------------------------------------------------------------
+  test('subscribe/unsubscribe dynamically updates filtering', async () => {
+    await evtPage.goto(BASE + '/platform/console');
+    await evtPage.waitForTimeout(1000);
+
+    const token = await getAccessToken(evtContext);
+    const ticket = await getWsTicket(evtContext, token);
+    const ws = await connectWebSocket(evtPage, ticket);
+    await ws.waitForOpen();
+
+    // Subscribe to team:changed
+    await ws.send(JSON.stringify({ type: 'subscribe', topics: ['team:changed'] }));
+    await evtPage.waitForTimeout(300);
+
+    // Create first invite — should receive event
+    const email1 = 'dyn-invite-1-' + Date.now() + '@test.local';
+    const invite1Res = await evtContext.request.post(BASE + '/platform/admin/team/invites', {
+      headers: { Authorization: 'Bearer ' + token },
+      data: { email: email1, role: 'viewer', tenant_ids: [tenantId] },
+    });
+    expect(invite1Res.ok()).toBeTruthy();
+
+    await ws.waitForMessage(
+      '(msg) => { try { const p = JSON.parse(msg); return p.type === "event" && p.topic === "team:changed" && p.hint === "invite_created"; } catch(e) { return false; } }',
+      8000,
+    );
+
+    // Unsubscribe from team:changed
+    await ws.send(JSON.stringify({ type: 'unsubscribe', topics: ['team:changed'] }));
+    await evtPage.waitForTimeout(300);
+
+    // Clear message buffer
+    await evtPage.evaluate(() => { (window as any).__ws_messages = []; });
+
+    // Create second invite — should NOT receive event after unsubscribe
+    const email2 = 'dyn-invite-2-' + Date.now() + '@test.local';
+    const invite2Res = await evtContext.request.post(BASE + '/platform/admin/team/invites', {
+      headers: { Authorization: 'Bearer ' + token },
+      data: { email: email2, role: 'viewer', tenant_ids: [tenantId] },
+    });
+    expect(invite2Res.ok()).toBeTruthy();
+
+    await evtPage.waitForTimeout(2000);
+
+    const messages = await ws.getMessages();
+    const hasEvent = messages.some((m) => {
+      try { const p = JSON.parse(m); return p.type === 'event' && p.topic === 'team:changed'; } catch { return false; }
+    });
+    expect(hasEvent).toBe(false);
+
+    await ws.close();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Block 3 — WS Health & Connection Count
+// ---------------------------------------------------------------------------
+
+test.describe('WS Health & Connection Count', () => {
+  // -------------------------------------------------------------------------
+  // Test 1 — health endpoint reports ws_connections count
+  // -------------------------------------------------------------------------
+  test('health endpoint reports ws_connections count', async ({ browser }) => {
+    const { context, page } = await loginAsTestUser(browser);
+
+    try {
+      // Get baseline ws_connections from /health
+      const healthRes = await context.request.get(BASE + '/health');
+      expect(healthRes.ok()).toBeTruthy();
+      const healthData = await healthRes.json();
+      const baseline: number = healthData.ws_connections ?? 0;
+
+      // Open first WS connection
+      await page.goto(BASE + '/platform/console');
+      await page.waitForTimeout(1000);
+
+      const token1 = await getAccessToken(context);
+      const ticket1 = await getWsTicket(context, token1);
+      const ws1 = await connectWebSocket(page, ticket1);
+      await ws1.waitForOpen();
+
+      // Verify count = baseline + 1
+      const health1 = await context.request.get(BASE + '/health');
+      const data1 = await health1.json();
+      expect(data1.ws_connections).toBe(baseline + 1);
+
+      // Open a second connection on a new page in the same context
+      const page2 = await context.newPage();
+      await page2.goto(BASE + '/platform/console');
+      await page2.waitForTimeout(1000);
+
+      const token2 = await getAccessToken(context);
+      const ticket2 = await getWsTicket(context, token2);
+      const ws2 = await connectWebSocket(page2, ticket2);
+      await ws2.waitForOpen();
+
+      // Verify count = baseline + 2
+      const health2 = await context.request.get(BASE + '/health');
+      const data2 = await health2.json();
+      expect(data2.ws_connections).toBe(baseline + 2);
+
+      // Close first connection and wait for server to register the close
+      await ws1.close();
+      await page.waitForTimeout(1000);
+
+      // Verify count = baseline + 1
+      const health3 = await context.request.get(BASE + '/health');
+      const data3 = await health3.json();
+      expect(data3.ws_connections).toBe(baseline + 1);
+
+      // Clean up
+      await ws2.close();
+      await page2.close();
+    } finally {
+      await context.close();
+    }
+  });
+});
