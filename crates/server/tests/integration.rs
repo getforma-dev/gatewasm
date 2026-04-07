@@ -109,6 +109,7 @@ async fn test_app_with_compliance(compliance: ComplianceConfig) -> (axum::Router
 
     let keys = KeyPair::from_pem_or_generate(None);
 
+    let (shutdown_tx, _) = tokio::sync::watch::channel(false);
     let state = AppState {
         db: pool.clone(),
         config,
@@ -117,6 +118,10 @@ async fn test_app_with_compliance(compliance: ComplianceConfig) -> (axum::Router
         asset_manifest: gw_assets::load_manifest(),
         render_modes: std::collections::HashMap::new(),
         ir_modules: std::collections::HashMap::new(),
+        event_bus: gatewasm_server::ws::EventBus::new(),
+        ticket_store: gatewasm_server::ws::ticket::TicketStore::new(),
+        connection_limits: gatewasm_server::ws::handler::ConnectionLimits::new(),
+        shutdown_tx,
     };
 
     (handlers::create_router_without_rate_limit(state), pool)
@@ -206,6 +211,7 @@ async fn test_app_with_pool() -> (axum::Router, PgPool) {
 
     let keys = KeyPair::from_pem_or_generate(None);
 
+    let (shutdown_tx, _) = tokio::sync::watch::channel(false);
     let state = AppState {
         db: pool.clone(),
         config,
@@ -214,6 +220,10 @@ async fn test_app_with_pool() -> (axum::Router, PgPool) {
         asset_manifest: gw_assets::load_manifest(),
         render_modes: std::collections::HashMap::new(),
         ir_modules: std::collections::HashMap::new(),
+        event_bus: gatewasm_server::ws::EventBus::new(),
+        ticket_store: gatewasm_server::ws::ticket::TicketStore::new(),
+        connection_limits: gatewasm_server::ws::handler::ConnectionLimits::new(),
+        shutdown_tx,
     };
 
     (handlers::create_router_without_rate_limit(state), pool)
