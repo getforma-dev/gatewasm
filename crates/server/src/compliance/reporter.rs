@@ -144,7 +144,7 @@ pub async fn generate_report(
     let now = Utc::now().to_rfc3339();
 
     let mut report = format!(
-        r#"# GateWASM {} Compliance Report
+        r#"# fAuth {} Compliance Report
 
 ## Document Information
 - **Generated:** {}

@@ -72,7 +72,7 @@ test('tenant login shows powered-by footer', async ({ page }) => {
 
   const footer = page.locator('.tl-powered');
   await expect(footer).toBeVisible();
-  await expect(footer).toContainText('GateWASM');
+  await expect(footer).toContainText('fAuth');
 });
 
 // --- Form Interaction ---

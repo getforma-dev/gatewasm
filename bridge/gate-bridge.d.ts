@@ -1,10 +1,10 @@
 /**
- * GateWASM Bridge — TypeScript Definitions
- * Type-safe interface for the GateAuth WASM bridge module.
+ * fAuth Bridge — TypeScript Definitions
+ * Type-safe interface for the fAuth bridge module.
  */
 
 export interface GateAuthConfig {
-  /** URL of the GateWASM auth server (e.g. "http://localhost:3001") */
+  /** URL of the fAuth server (e.g. "http://localhost:3001") */
   serverUrl: string;
   /** OAuth client ID registered on the server */
   clientId: string;

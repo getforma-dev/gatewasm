@@ -5745,7 +5745,7 @@ async fn docs_page_returns_swagger_ui() {
     assert_eq!(res.status(), StatusCode::OK);
     let body = body_string(res).await;
     assert!(body.contains("swagger-ui"));
-    assert!(body.contains("GateWASM"));
+    assert!(body.contains("fAuth"));
     assert!(body.contains("url: \"/openapi.json\"") || body.contains("url: '/openapi.json'"));
     assert!(!body.contains("/platform/tenants"));
     assert!(!body.contains("/api/v1/compliance/status"));

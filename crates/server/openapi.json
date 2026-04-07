@@ -1,7 +1,7 @@
 {
   "openapi": "3.0.3",
   "info": {
-    "title": "GateWASM Auth API",
+    "title": "fAuth API",
     "version": "1.0.0",
     "description": "Multi-tenant SaaS authentication platform. EdDSA JWT signing, Argon2id password hashing, OAuth PKCE, refresh token rotation with replay detection.\n\n**Customer-facing:** Health, Auth, OAuth, User, Management, Roles, Webhooks, Admin, Self-Serve.\n**Internal (Forma-only):** Platform, Compliance.",
     "contact": {

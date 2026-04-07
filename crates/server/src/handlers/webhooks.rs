@@ -456,7 +456,7 @@ pub async fn test_webhook(
         "tenant_id": tenant.tenant_id,
         "timestamp": chrono::Utc::now().to_rfc3339(),
         "data": {
-            "message": "This is a test webhook delivery from GateWASM"
+            "message": "This is a test webhook delivery from fAuth"
         }
     });
 

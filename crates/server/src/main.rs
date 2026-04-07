@@ -23,7 +23,7 @@ async fn main() {
     let _ = dotenvy::dotenv();
 
     let config = AppConfig::from_env();
-    tracing::info!(host = %config.host, port = %config.port, "Starting GateWASM server");
+    tracing::info!(host = %config.host, port = %config.port, "Starting fAuth server");
     tracing::info!(compliance_mode = %config.compliance.mode, "Compliance mode");
 
     // ── Compliance Startup Validation ────────────────────────────────
@@ -207,7 +207,7 @@ async fn main() {
         .parse()
         .expect("Invalid address");
 
-    tracing::info!(%addr, "GateWASM server listening");
+    tracing::info!(%addr, "fAuth server listening");
 
     let listener = tokio::net::TcpListener::bind(addr)
         .await

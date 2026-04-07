@@ -724,7 +724,7 @@ fn create_router_inner(state: AppState, rate_limit_enabled: bool) -> Router {
     main_router.nest("/t", slug_handler)
 }
 
-/// Serves the GateWASM bridge.js client library (~3.4KB minified).
+/// Serves the fAuth bridge.js client library (~3.4KB minified).
 async fn serve_bridge_js() -> impl IntoResponse {
     (
         [

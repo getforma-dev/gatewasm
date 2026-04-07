@@ -80,7 +80,7 @@ pub fn load_ir_modules(
 /// Returns a map of route -> render mode decisions.
 /// Routes with valid IR get `true` (SSR capable), invalid get `false` (fall back to Phase 1).
 ///
-/// NOTE: This is a GateWASM-specific helper not present in forma-server.
+/// NOTE: This is an fAuth-specific helper not present in forma-server.
 /// It provides a simpler bool-based API used by some test code.
 pub fn validate_ir_modules(ir_modules: &HashMap<String, IrModule>) -> HashMap<String, bool> {
     let mut results = HashMap::new();

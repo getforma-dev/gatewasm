@@ -26,7 +26,7 @@ export class Monitoring extends Construct {
     );
 
     this.alertsTopic = new sns.Topic(this, 'AuthAlertsTopic', {
-      displayName: `GateWASM ${props.environmentName} auth alerts`,
+      displayName: `fAuth ${props.environmentName} auth alerts`,
       topicName: `gatewasm-${props.environmentName}-auth-alerts`,
     });
 
@@ -39,7 +39,7 @@ export class Monitoring extends Construct {
     const missingCookieFilter = new logs.MetricFilter(this, 'MissingCookieFilter', {
       logGroup: applicationLogGroup,
       filterPattern: logs.FilterPattern.literal('"missing_cookie"'),
-      metricNamespace: `GateWASM/${props.environmentName}/Auth`,
+      metricNamespace: `fAuth/${props.environmentName}/Auth`,
       metricName: 'OwnerMissingCookieCount',
       metricValue: '1',
       defaultValue: 0,
@@ -48,7 +48,7 @@ export class Monitoring extends Construct {
     const mfaFailureFilter = new logs.MetricFilter(this, 'MfaFailureFilter', {
       logGroup: applicationLogGroup,
       filterPattern: logs.FilterPattern.anyTerm('invalid_mfa_code', 'mfa_locked'),
-      metricNamespace: `GateWASM/${props.environmentName}/Auth`,
+      metricNamespace: `fAuth/${props.environmentName}/Auth`,
       metricName: 'MfaFailureCount',
       metricValue: '1',
       defaultValue: 0,
@@ -61,7 +61,7 @@ export class Monitoring extends Construct {
         'token_reuse_detected',
         'Refresh token rejected',
       ),
-      metricNamespace: `GateWASM/${props.environmentName}/Auth`,
+      metricNamespace: `fAuth/${props.environmentName}/Auth`,
       metricName: 'TokenErrorCount',
       metricValue: '1',
       defaultValue: 0,

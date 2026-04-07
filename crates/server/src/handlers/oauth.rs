@@ -885,7 +885,7 @@ async fn fetch_github_user(
     let user_info: GitHubUserInfo = http
         .get("https://api.github.com/user")
         .bearer_auth(&github_tokens.access_token)
-        .header("User-Agent", "GateWASM-Server")
+        .header("User-Agent", "fAuth-Server")
         .send()
         .await
         .map_err(|_| AppError::BadGateway {
@@ -905,7 +905,7 @@ async fn fetch_github_user(
         let emails_res = http
             .get("https://api.github.com/user/emails")
             .bearer_auth(&github_tokens.access_token)
-            .header("User-Agent", "GateWASM-Server")
+            .header("User-Agent", "fAuth-Server")
             .send()
             .await;
 

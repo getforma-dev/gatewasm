@@ -461,7 +461,7 @@ async fn deliver_push(
         .post(url)
         .header("Content-Type", "application/secevent+jwt")
         .header("X-SSF-Signature", format!("sha256={}", signature))
-        .header("User-Agent", "GateWASM-SSF/1.0")
+        .header("User-Agent", "fAuth-SSF/1.0")
         .body(set_token.to_string())
         .send()
         .await

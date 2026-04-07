@@ -129,8 +129,8 @@ pub async fn deliver_single(
     let res = client
         .post(url)
         .header("Content-Type", "application/json")
-        .header("X-GateWASM-Signature", format!("sha256={}", signature))
-        .header("User-Agent", "GateWASM-Webhook/1.0")
+        .header("X-Forma-Signature", format!("sha256={}", signature))
+        .header("User-Agent", "fAuth-Webhook/1.0")
         .body(body)
         .send()
         .await?;

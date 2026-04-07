@@ -121,7 +121,7 @@ fn build_public_spec() -> Result<String, serde_json::Error> {
 
 /// GET /docs — Public API reference (customer-facing).
 pub async fn docs_page() -> impl IntoResponse {
-    swagger_ui_html("GateWASM Public API Reference", "/openapi.json")
+    swagger_ui_html("fAuth Public API Reference", "/openapi.json")
 }
 
 /// GET /openapi.json — Public OpenAPI spec (internal paths removed).
@@ -147,7 +147,7 @@ pub async fn openapi_json() -> impl IntoResponse {
 
 /// GET /internal/docs — Internal API reference (Forma-only).
 pub async fn internal_docs_page() -> impl IntoResponse {
-    swagger_ui_html("GateWASM Internal API Reference", "/internal/openapi.json")
+    swagger_ui_html("fAuth Internal API Reference", "/internal/openapi.json")
 }
 
 /// GET /internal/openapi.json — Full OpenAPI spec (platform-admin protected).

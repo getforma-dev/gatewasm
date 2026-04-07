@@ -1,4 +1,4 @@
-// GateWASM build script — config-driven via @getforma/build
+// fAuth build script — config-driven via @getforma/build
 import { build } from '@getforma/build';
 import { cpSync, readdirSync } from 'node:fs';
 

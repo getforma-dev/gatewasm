@@ -83,7 +83,7 @@ body{{background:#0a0a0c;color:#e8e6e3;--grid-opacity:0.18;--glow-size:980px;--g
       </div>\n\
       <div class=\"not-found-footer\">\n\
         <span>If this should exist, check the route registration and current tenant slug.</span>\n\
-        <span>GateWASM · Forma Auth</span>\n\
+        <span>fAuth · Forma Auth</span>\n\
       </div>\n\
     </div>\n\
   </section>\n\

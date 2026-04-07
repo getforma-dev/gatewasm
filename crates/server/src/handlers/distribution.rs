@@ -7,7 +7,7 @@ pub async fn get_started_page() -> impl IntoResponse {
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>GateWASM — Get Started</title>
+<title>fAuth — Get Started</title>
 <style>
 :root {
   --primary: #6366f1;
@@ -126,7 +126,7 @@ body {
 <body>
 <div class="container">
   <div class="header">
-    <h1>Get Started with GateWASM</h1>
+    <h1>Get Started with fAuth</h1>
     <p>Add authentication to your app in under 5 minutes</p>
   </div>
 

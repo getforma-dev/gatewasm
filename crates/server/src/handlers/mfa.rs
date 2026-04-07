@@ -264,7 +264,7 @@ fn verify_totp(secret_b32: &str, input_code: &str, now: chrono::DateTime<Utc>) -
 }
 
 fn mfa_issuer() -> &'static str {
-    "GateWASM"
+    "fAuth"
 }
 
 fn otp_auth_uri(secret: &str, email: &str) -> String {

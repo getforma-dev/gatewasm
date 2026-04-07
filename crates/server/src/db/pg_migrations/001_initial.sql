@@ -1,4 +1,4 @@
--- GateWASM schema (squashed from 26 migrations)
+-- fAuth schema (squashed from 26 migrations)
 -- Generated: 2026-03-19
 -- After production launch, new migrations start at version 2.
 
