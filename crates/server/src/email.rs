@@ -386,15 +386,15 @@ pub fn platform_team_invite_email_content(
     let escaped_invited_by = escape_html(invited_by_email);
     let escaped_tenant_line = escape_html(&tenant_line);
 
-    let subject = "You've been invited to join the fAuth platform team".to_string();
+    let subject = "You've been invited to fAuth".to_string();
 
     let text = format!(
-        "You have been invited to join the fAuth platform team as {role_display}.\n\nInvited by: {invited_by_email}\n\n{tenant_line}\n\nAccept invite:\n{invite_url}\n\nThis invite expires soon."
+        "You have been invited to join fAuth as {role_display}.\n\nInvited by: {invited_by_email}\n\n{tenant_line}\n\nAccept invite:\n{invite_url}\n\nThis invite expires soon."
     );
 
     let inner = format!(
-        r#"<h1 style="margin:0 0 16px;font-size:22px;font-weight:700;color:#111827;">You're invited to the platform team</h1>
-<p style="margin:0 0 8px;">You have been invited to join the <strong>fAuth platform team</strong> with the role <strong>{escaped_role_display}</strong>.</p>
+        r#"<h1 style="margin:0 0 16px;font-size:22px;font-weight:700;color:#111827;">You're invited to fAuth</h1>
+<p style="margin:0 0 8px;">You have been invited to join as <strong>{escaped_role_display}</strong>.</p>
 <p style="margin:0 0 8px;">Invited by <strong>{escaped_invited_by}</strong>.</p>
 <p style="margin:0 0 16px;">{escaped_tenant_line}</p>
 {button}
@@ -429,7 +429,7 @@ mod tests {
             &["Acme".to_string(), "Beta Corp".to_string()],
         );
 
-        assert_eq!(subject, "You've been invited to join the fAuth platform team");
+        assert_eq!(subject, "You've been invited to fAuth");
         assert!(text.contains("Admin"));
         assert!(text.contains("alice@example.com"));
         assert!(text.contains("Acme, Beta Corp"));

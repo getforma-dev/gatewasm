@@ -52,7 +52,7 @@ export function TeamView() {
   }
 
   async function handleRemove(member: PlatformMember) {
-    if (!confirm('Remove ' + member.email + ' from the team?')) return;
+    if (!confirm('Remove ' + member.email + '?')) return;
     await removeTeamMember(member.id);
     if (expandedId() === member.id) {
       setExpandedId(null);
@@ -64,9 +64,9 @@ export function TeamView() {
     // ── Header ──────────────────────────────────────────────────────
     h('div', { class: 'view-header view-header-split' },
       h('div', { class: 'view-header-body' },
-        h('div', { class: 'view-eyebrow' }, 'Platform'),
-        h('h2', { class: 'view-title' }, 'Team'),
-        h('p', { class: 'view-subtitle text-muted' }, () => teamMembers().length + ' team ' + (teamMembers().length === 1 ? 'member' : 'members')),
+        h('div', { class: 'view-eyebrow' }, 'Account'),
+        h('h2', { class: 'view-title' }, 'Members'),
+        h('p', { class: 'view-subtitle text-muted' }, () => teamMembers().length + ' ' + (teamMembers().length === 1 ? 'member' : 'members')),
       ),
       h('div', { class: 'view-header-actions' },
         createShow(
@@ -132,13 +132,13 @@ export function TeamView() {
       ),
       createShow(
         () => teamLoading(),
-        () => h('div', { class: 'list-empty-state' }, 'Loading team members...'),
+        () => h('div', { class: 'list-empty-state' }, 'Loading members...'),
       ),
       createShow(
         () => !teamLoading() && filtered().length === 0,
         () => h('div', { class: 'list-empty-state' },
           h('div', { class: 'card-label' }, 'No Members'),
-          h('p', { class: 'card-copy' }, 'No team members match the current filter.'),
+          h('p', { class: 'card-copy' }, 'No members match the current filter.'),
         ),
       ),
       createShow(
@@ -270,7 +270,7 @@ function InviteModal(onClose: () => void, onInvitesUpdate: (inv: any[]) => void)
     onClick: (e: Event) => { if (e.target === e.currentTarget) onClose(); },
   },
     h('div', { class: 'modal-card' },
-      h('h3', { class: 'modal-title' }, 'Invite Team Member'),
+      h('h3', { class: 'modal-title' }, 'Invite Member'),
 
       // ── Success state ───────────────────────────────────────────
       createShow(
