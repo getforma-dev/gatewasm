@@ -824,6 +824,10 @@ pub async fn register(
         tenant_slug.as_deref(),
     );
 
+    if let Some(ref tid) = tenant_id {
+        crate::ws::events::emit_activity(&state.event_bus, tid, "signup");
+    }
+
     Ok((
         StatusCode::CREATED,
         headers,
@@ -1439,6 +1443,10 @@ pub async fn login(
         &state.config.server_url,
         tenant_slug.as_deref(),
     );
+
+    if let Some(ref tid) = tenant_id {
+        crate::ws::events::emit_activity(&state.event_bus, tid, "login");
+    }
 
     Ok((
         StatusCode::OK,

@@ -318,6 +318,8 @@ pub async fn update_team_member(
 
     tx.commit().await?;
 
+    crate::ws::events::emit_team_changed(&state.event_bus, "ten_platform", "member_updated");
+
     Ok(Json(serde_json::json!({ "success": true })))
 }
 
@@ -367,6 +369,8 @@ pub async fn remove_team_member(
         .bind(&member_id)
         .execute(&state.db)
         .await?;
+
+    crate::ws::events::emit_team_changed(&state.event_bus, "ten_platform", "member_removed");
 
     Ok(Json(serde_json::json!({ "success": true })))
 }

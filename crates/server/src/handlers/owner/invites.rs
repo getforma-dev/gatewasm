@@ -388,6 +388,8 @@ pub async fn create_owner_invite(
         );
     }
 
+    crate::ws::events::emit_team_changed(&state.event_bus, "ten_platform", "invite_created");
+
     Ok((
         axum::http::StatusCode::CREATED,
         Json(serde_json::json!({
@@ -431,6 +433,8 @@ pub async fn revoke_owner_invite(
             message: "Pending invite not found".into(),
         });
     }
+
+    crate::ws::events::emit_team_changed(&state.event_bus, "ten_platform", "invite_revoked");
 
     Ok(Json(serde_json::json!({
         "success": true,
@@ -620,6 +624,8 @@ pub async fn accept_owner_invite(
     .await?;
 
     tx.commit().await?;
+
+    crate::ws::events::emit_team_changed(&state.event_bus, "ten_platform", "invite_accepted");
 
     Ok(Json(serde_json::json!({
         "accepted": true,

@@ -713,6 +713,10 @@ pub async fn verify(
     .execute(&state.db)
     .await?;
 
+    if let Some(ref tid) = tenant_id {
+        crate::ws::events::emit_activity(&state.event_bus, tid, "mfa_verified");
+    }
+
     Ok(Json(serde_json::json!({
         "verified": true,
         "access_token": access_token,

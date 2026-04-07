@@ -777,6 +777,8 @@ pub async fn delete_user(
     )
     .await;
 
+    crate::ws::events::emit_activity(&state.event_bus, &tenant.tenant_id, "end_user_deleted");
+
     tracing::info!(user_id = %user_id, tenant_id = %tenant.tenant_id, "User deleted via management API");
     Ok(StatusCode::NO_CONTENT)
 }
@@ -813,6 +815,8 @@ pub async fn block_user(
         .await
         .ok();
 
+    crate::ws::events::emit_activity(&state.event_bus, &tenant.tenant_id, "end_user_blocked");
+
     tracing::info!(user_id = %user_id, tenant_id = %tenant.tenant_id, "User blocked via management API");
 
     Ok(Json(serde_json::json!({
@@ -842,6 +846,8 @@ pub async fn unblock_user(
             message: format!("No user with id '{}' in this tenant", user_id),
         });
     }
+
+    crate::ws::events::emit_activity(&state.event_bus, &tenant.tenant_id, "end_user_unblocked");
 
     tracing::info!(user_id = %user_id, tenant_id = %tenant.tenant_id, "User unblocked via management API");
 

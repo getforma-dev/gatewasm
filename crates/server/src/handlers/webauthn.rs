@@ -1048,6 +1048,8 @@ pub async fn register_complete(
         .execute(&state.db)
         .await?;
 
+    crate::ws::events::emit_activity(&state.event_bus, &tenant_id, "passkey_registered");
+
     tracing::info!(
         user_id = %user_id,
         tenant_id = %tenant_id,
