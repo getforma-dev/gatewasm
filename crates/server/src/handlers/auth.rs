@@ -1726,8 +1726,8 @@ pub async fn me(
     };
 
     // Check for pending invites addressed to this user's email
-    let pending_invites = sqlx::query_as::<_, (String, String, String, Vec<String>, Option<String>)>(
-        "SELECT oi.id, oi.role, oi.token_hash, oi.tenant_ids, \
+    let pending_invites = sqlx::query_as::<_, (String, String, Vec<String>, Option<String>)>(
+        "SELECT oi.id, oi.role, oi.tenant_ids, \
                 (SELECT u2.email FROM users u2 WHERE u2.id = oi.account_owner_user_id LIMIT 1) \
          FROM owner_invites oi \
          WHERE lower(oi.email) = lower($1) \
@@ -1741,7 +1741,7 @@ pub async fn me(
 
     let pending_invites_json: Vec<serde_json::Value> = pending_invites
         .into_iter()
-        .map(|(id, role, _token_hash, tenant_ids, inviter_email)| {
+        .map(|(id, role, tenant_ids, inviter_email)| {
             serde_json::json!({
                 "id": id,
                 "role": role,
