@@ -215,7 +215,7 @@ export function TeamView() {
 
 function InviteModal(onClose: () => void, onInvitesUpdate: (inv: any[]) => void) {
   const [email, setEmail] = createSignal('');
-  const [role, setRole] = createSignal<string>('editor');
+  const [role, setRole] = createSignal<string>('admin');
   const [selectedTenantIds, setSelectedTenantIds] = createSignal<string[]>([]);
   const [sending, setSending] = createSignal(false);
   const [inviteUrl, setInviteUrl] = createSignal<string | null>(null);
