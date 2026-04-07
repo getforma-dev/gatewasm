@@ -406,6 +406,75 @@ curl -X POST $BASE/platform/tenants \
   -d '{"name":"New Tenant","slug":"new","owner_email":"owner@test.com","allowed_providers":["email"]}'
 ```
 
+### WebSocket API (real-time invalidation)
+
+The WS endpoint pushes invalidation signals to the dashboard. It does NOT carry data — clients refetch via HTTP after receiving an event.
+
+**Authentication flow:**
+
+```bash
+# Step 1: Get a single-use ticket (30s TTL, burned on use)
+TICKET=$(curl -s -X POST $BASE/ws/ticket \
+  -H "Authorization: Bearer $TOKEN" | jq -r '.ticket')
+
+# Step 2: Connect WebSocket with ticket
+# (in browser: new WebSocket("ws://localhost:3001/ws?ticket=$TICKET"))
+# Use websocat for CLI testing:
+websocat "ws://localhost:3001/ws?ticket=$TICKET"
+```
+
+**Client → Server messages:**
+
+```json
+{ "type": "subscribe", "topics": ["team:changed", "metrics:updated"] }
+{ "type": "unsubscribe", "topics": ["metrics:updated"] }
+{ "type": "ping" }
+```
+
+**Server → Client messages:**
+
+```json
+{ "type": "event", "topic": "team:changed", "tenant_id": "ten_platform", "hint": "invite_accepted" }
+{ "type": "event", "topic": "tenant:activity", "tenant_id": "ten_platform", "hint": "login" }
+{ "type": "event", "topic": "metrics:updated", "tenant_id": "ten_platform" }
+{ "type": "pong" }
+{ "type": "auth_expired" }
+{ "type": "server_shutdown" }
+```
+
+**Valid topics:** `team:changed`, `tenant:activity`, `metrics:updated`
+
+**Connection limits:** 50 per tenant, 500 global. Rejected with `429` before upgrade.
+
+**Health check:**
+
+```bash
+curl $BASE/health | jq
+# Returns: { "status": "ok", "db_status": "ok", "ws_connections": 3 }
+```
+
+**Server-side architecture:**
+
+```
+crates/server/src/ws/
+├── mod.rs          — EventBus (Tokio broadcast), WsEvent struct
+├── ticket.rs       — TicketStore (DashMap), POST /ws/ticket handler
+├── handler.rs      — GET /ws upgrade, connection loop, ConnectionLimits
+└── events.rs       — emit_activity(), emit_team_changed() helpers
+```
+
+**Emitting events from handlers:**
+
+```rust
+// After a mutation succeeds (e.g., in auth.rs after login):
+crate::ws::events::emit_activity(&state.event_bus, &tenant_id, "login");
+
+// After team mutations (e.g., in invites.rs after accept):
+crate::ws::events::emit_team_changed(&state.event_bus, "ten_platform", "invite_accepted");
+```
+
+`emit_activity()` emits BOTH `tenant:activity` and `metrics:updated` in one call.
+
 ---
 
 ## 8. Project Structure

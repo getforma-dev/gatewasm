@@ -10,7 +10,7 @@ For project setup and running the server, see the root [README.md](../README.md)
 admin/src/
 ├── core/                    # Shared across all pages
 │   ├── components/          #   Badge, Card, DataTable, Field, Sidebar, etc.
-│   ├── hooks/               #   createAuth, createApi, createToast, createPager
+│   ├── hooks/               #   createAuth, createApi, createSocket, createToast, createPager
 │   ├── theme/               #   tokens.css, base.css, components.css, pages.css
 │   │   └── fonts/           #   .woff2 font files
 │   ├── types.ts             #   Shared TypeScript types
@@ -247,6 +247,123 @@ cd admin && npx tsx build.ts --ssr        # rebuild JS + IR
 cd .. && cargo build -p gatewasm-server   # rebuild Rust (picks up new dist/)
 # restart server, visit http://127.0.0.1:3101/platform/my-page
 ```
+
+---
+
+## WebSocket — Real-Time Invalidation
+
+The dashboard receives live updates via WebSocket. The WS connection is an **invalidation layer** — it tells the client "something changed, refetch." HTTP remains the sole data transport.
+
+### Architecture
+
+```
+Handler mutation (login, invite, etc.)
+  → emit_activity() or emit_team_changed()
+    → Tokio broadcast channel (EventBus)
+      → WS handler filters by tenant_id + subscribed topics
+        → Client receives JSON: { type: "event", topic, hint }
+          → Store callback fires → refetches via HTTP API
+```
+
+### `createSocket()` Hook
+
+**File:** `src/core/hooks/createSocket.ts`
+
+```typescript
+import { createSocket } from '../../core/hooks/createSocket';
+
+const socket = createSocket(auth);  // takes Auth dependency
+
+// Connect after auth succeeds (in app.ts or store init)
+socket.connect(serverUrl + '/ws/ticket');
+
+// Subscribe to invalidation topics (in store.ts)
+socket.subscribe('team:changed', (hint) => {
+  loadTeamMembers();
+});
+
+socket.subscribe('metrics:updated', () => {
+  if (view() === 'overview') loadTenantDetail(tenantId);
+});
+
+socket.subscribe('tenant:activity', () => {
+  if (view() === 'audit-log') loadAuditLog(tenantId);
+});
+
+// Disconnect on signout
+socket.disconnect();
+```
+
+**API:**
+
+| Method | Description |
+|--------|-------------|
+| `connect(ticketUrl)` | POST ticketUrl for ticket, open WS connection |
+| `disconnect()` | Close WS, stop reconnection |
+| `subscribe(topic, callback)` | Register callback for topic. Returns `unsubscribe()` fn. |
+| `state()` | Signal: `'connecting'` / `'connected'` / `'disconnected'` / `'reconnecting'` |
+
+**Behavior:**
+- Subscribes are stored before connect — safe to call `subscribe()` during module init
+- Each callback is debounced at 500ms per-topic (burst of 50 logins = 1 refetch)
+- Auto-reconnects with exponential backoff (1s → 2s → 4s → ... → 30s cap, ±25% jitter)
+- On `auth_expired` from server: does `silentRefresh()` → new ticket → reconnect
+- On `server_shutdown`: enters backoff reconnect (server deploy)
+
+### Available Topics
+
+| Topic | Emitted when | Hint values |
+|-------|-------------|-------------|
+| `team:changed` | Invite created/accepted/revoked, member updated/removed | `invite_created`, `invite_accepted`, `invite_revoked`, `member_updated`, `member_removed` |
+| `tenant:activity` | Login, signup, block/unblock, MFA, passkey | `login`, `signup`, `end_user_blocked`, `end_user_unblocked`, `end_user_deleted`, `mfa_verified`, `passkey_registered` |
+| `metrics:updated` | Same events as `tenant:activity` (dual-emitted) | none |
+
+**Scoping:** Each WS connection is scoped by the JWT's `tenant_id`. A platform console connection (tenant_id = `"ten_platform"`) receives `team:changed` and platform-level `tenant:activity`. It does NOT receive `tenant:activity` from child tenants (different tenant_id).
+
+### Lifecycle in `app.ts`
+
+```typescript
+// Standard boot sequence for auth-gated CSR pages:
+auth.silentRefresh()
+  .then(() => {
+    auth.startAutoRefresh();
+    socket.connect(serverUrl + '/ws/ticket');  // after auth, before mount
+    mount(() => App(), '#app');
+  });
+
+// On signout:
+socket.disconnect();
+auth.stopAutoRefresh();
+await auth.logout();
+```
+
+### Adding a New Topic
+
+1. **Server:** Add topic string to `VALID_TOPICS` in `crates/server/src/ws/handler.rs`
+2. **Server:** Add emit call in the handler that mutates data:
+   ```rust
+   crate::ws::events::emit_activity(&state.event_bus, &tenant_id, "your_hint");
+   // or for non-activity topics:
+   state.event_bus.send(WsEvent {
+       tenant_id: tenant_id.to_string(),
+       topic: "your_topic".into(),
+       hint: Some("your_hint".into()),
+       timestamp: chrono::Utc::now().timestamp_millis(),
+   });
+   ```
+3. **Client:** Subscribe in the store:
+   ```typescript
+   socket.subscribe('your_topic', (hint) => {
+     // refetch relevant data
+   });
+   ```
+
+### Debugging
+
+- Open browser devtools → Network → WS tab to see messages
+- Messages are flat JSON, human-readable: `{ type: "event", topic: "team:changed", hint: "invite_accepted" }`
+- `GET /health` returns `ws_connections` count
+- Server logs connection open/close with `tenant_id` and `account_id`
 
 ---
 
