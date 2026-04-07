@@ -78,6 +78,11 @@ fn create_router_inner(state: AppState, rate_limit_enabled: bool) -> Router {
         ))
         .layer(middleware::from_fn_with_state(state.clone(), require_auth));
 
+    // ── WebSocket ticket (auth-protected) ──────────────────────────
+    let ws_ticket_route = Router::new()
+        .route("/ws/ticket", post(crate::ws::ticket::create_ticket))
+        .layer(middleware::from_fn_with_state(state.clone(), require_auth));
+
     // Resend-verification: auth-protected + rate-limited (reuse register_limiter: 3/10min)
     let resend_verification_route = Router::new()
         .route("/auth/resend-verification", post(auth::resend_verification))
@@ -654,6 +659,8 @@ fn create_router_inner(state: AppState, rate_limit_enabled: bool) -> Router {
         .route("/fedcm/token", post(fedcm::token_assertion))
         .route("/auth/jwks", get(jwks::jwks))
         .route("/auth/callback/{provider}", get(oauth::callback))
+        .merge(ws_ticket_route)
+        .route("/ws", get(crate::ws::handler::ws_upgrade))
         .route("/health", get(health))
         .route("/dev/clear-cache", get(dev_clear_cache))
         .route("/bridge.js", get(serve_bridge_js))
@@ -835,5 +842,6 @@ async fn health(State(state): State<AppState>) -> Json<serde_json::Value> {
     Json(serde_json::json!({
         "status": if db_ok { "ok" } else { "degraded" },
         "db_status": if db_ok { "ok" } else { "error" },
+        "ws_connections": state.connection_limits.active_count(),
     }))
 }

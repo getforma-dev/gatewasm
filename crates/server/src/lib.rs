@@ -15,6 +15,7 @@ pub mod redirects;
 pub mod responses;
 pub mod security_config;
 pub mod types;
+pub mod ws;
 
 use std::collections::HashMap;
 
@@ -24,6 +25,9 @@ use assets::AssetManifest;
 use config::AppConfig;
 use jwt::keys::KeyPair;
 use middleware::tenant::TenantCache;
+use ws::EventBus;
+use ws::handler::ConnectionLimits;
+use ws::ticket::TicketStore;
 
 // Re-export RenderMode from the forma-server framework crate.
 // All handler code continues to use `crate::RenderMode` unchanged.
@@ -40,4 +44,8 @@ pub struct AppState {
     pub render_modes: HashMap<String, RenderMode>,
     /// Pre-parsed IR modules keyed by route pattern.
     pub ir_modules: HashMap<String, ir::parser::IrModule>,
+    pub event_bus: EventBus,
+    pub ticket_store: TicketStore,
+    pub connection_limits: ConnectionLimits,
+    pub shutdown_tx: tokio::sync::watch::Sender<bool>,
 }

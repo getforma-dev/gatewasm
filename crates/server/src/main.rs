@@ -13,6 +13,8 @@ use gatewasm_server::config::AppConfig;
 use gatewasm_server::ir;
 use gatewasm_server::jwt::keys::KeyPair;
 use gatewasm_server::middleware::tenant::TenantCache;
+use gatewasm_server::ws::{handler::ConnectionLimits, EventBus};
+use gatewasm_server::ws::ticket::TicketStore;
 use gatewasm_server::{assets, db, handlers, middleware, AppState};
 use sqlx::postgres::PgPool;
 
@@ -60,6 +62,8 @@ async fn main() {
     // the IR walker, and hydrated bundles stay aligned in development.
     let (render_modes, ir_modules) = ir::load_ir_modules(&asset_manifest);
 
+    let (shutdown_tx, _) = tokio::sync::watch::channel(false);
+
     let state = AppState {
         db: pool,
         config: config.clone(),
@@ -68,6 +72,10 @@ async fn main() {
         asset_manifest,
         render_modes,
         ir_modules,
+        event_bus: EventBus::new(),
+        ticket_store: TicketStore::new(),
+        connection_limits: ConnectionLimits::new(),
+        shutdown_tx,
     };
 
     // Clone pool/keys/cache for background workers before state is moved
@@ -75,6 +83,7 @@ async fn main() {
     let bg_tenant_cache = state.tenant_cache.clone();
     let ssf_pool = state.db.clone();
     let ssf_keys = state.keys.clone();
+    let shutdown_tx_for_signal = state.shutdown_tx.clone();
 
     // Router
     let trace_layer = tower_http::trace::TraceLayer::new_for_http()
@@ -220,7 +229,10 @@ async fn main() {
         listener,
         app.into_make_service_with_connect_info::<SocketAddr>(),
     )
-    .with_graceful_shutdown(shutdown_signal())
+    .with_graceful_shutdown(async move {
+        shutdown_signal().await;
+        let _ = shutdown_tx_for_signal.send(true);
+    })
     .await
     .expect("Server exited with error");
 }
