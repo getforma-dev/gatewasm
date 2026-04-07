@@ -345,6 +345,9 @@ interface Socket {
     subscribe(topic: string, callback: (hint?: string) => void): () => void;
     state: () => 'connecting' | 'connected' | 'disconnected' | 'reconnecting';
 }
+
+// Factory takes auth dependency for ticket requests and token refresh on auth_expired
+function createSocket(opts: { auth: Auth }): Socket
 ```
 
 ### Connection Lifecycle
