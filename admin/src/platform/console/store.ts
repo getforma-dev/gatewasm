@@ -1532,6 +1532,9 @@ export async function loadTeamInvites(): Promise<any[]> {
 
 export function canEdit(): boolean {
   const role = platformRole();
+  // If platform_role is not set (backend doesn't return it), default to allowing edits
+  // since the self-serve flow only lets tenant owners access the console
+  if (!role) return true;
   return role === 'owner' || role === 'admin' || role === 'editor';
 }
 
