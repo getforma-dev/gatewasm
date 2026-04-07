@@ -12,6 +12,32 @@ import {
 
 type RoleFilter = 'all' | 'owner' | PlatformRole;
 
+// ── Helpers ───────────────────────────────────────────────────────────
+
+function timeAgo(iso: string): string {
+  const diff = Date.now() - new Date(iso).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return mins + 'm ago';
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return hrs + 'h ago';
+  const days = Math.floor(hrs / 24);
+  if (days < 30) return days + 'd ago';
+  const months = Math.floor(days / 30);
+  if (months < 12) return months + 'mo ago';
+  return Math.floor(months / 12) + 'y ago';
+}
+
+function expiresIn(iso: string): string {
+  const diff = new Date(iso).getTime() - Date.now();
+  if (diff <= 0) return 'Expired';
+  const hrs = Math.floor(diff / 3600000);
+  if (hrs < 1) return 'Expires in <1h';
+  if (hrs < 24) return 'Expires in ' + hrs + 'h';
+  const days = Math.floor(hrs / 24);
+  return 'Expires in ' + days + 'd';
+}
+
 // ── TeamView (main) ────────────────────────────────────────────────────
 
 export function TeamView() {
@@ -93,26 +119,43 @@ export function TeamView() {
       () => pendingInvites().length > 0,
       () => h('section', { class: 'console-card' },
         h('div', { class: 'card-label' }, () => 'Pending Invites (' + pendingInvites().length + ')'),
-        h('div', { class: 'invite-list' },
-          () => pendingInvites().map((invite) =>
-            h('div', { class: 'invite-row', key: invite.id },
-              h('div', { class: 'invite-row-main' },
-                h('span', { class: 'invite-email' }, invite.email),
-                h('span', { class: 'badge badge-subtle' }, invite.role),
-                h('span', { class: 'badge badge-success' }, 'pending'),
+        h('div', { class: 'user-list user-list-shell' },
+          () => pendingInvites().map((invite: any) =>
+            h('div', { class: 'user-row', key: invite.id },
+              h('div', { class: 'user-row-summary', style: 'cursor:default;' },
+                h('div', { class: 'user-row-main' },
+                  h('div', { class: 'user-email' },
+                    invite.email,
+                    h('span', { class: 'badge badge-subtle' }, invite.role),
+                    h('span', { class: 'badge badge-warning' }, 'Pending'),
+                  ),
+                  h('div', { class: 'user-meta text-muted' },
+                    'Sent ' + timeAgo(invite.created_at),
+                    ' \u00b7 ',
+                    expiresIn(invite.expires_at),
+                  ),
+                ),
+                h('div', { class: 'user-row-actions' },
+                  h('button', {
+                    type: 'button',
+                    class: 'btn btn-sm btn-ghost',
+                    onClick: () => {
+                      void sendTeamInvite(invite.email, invite.role, invite.tenant_ids || []).then(() => {
+                        void loadTeamInvites().then(setInvites);
+                      });
+                    },
+                  }, 'Resend'),
+                  h('button', {
+                    type: 'button',
+                    class: 'btn btn-sm btn-ghost btn-danger',
+                    onClick: () => {
+                      void revokeTeamInvite(invite.id).then((ok) => {
+                        if (ok) void loadTeamInvites().then(setInvites);
+                      });
+                    },
+                  }, 'Revoke'),
+                ),
               ),
-              h('div', { class: 'invite-row-meta text-muted' },
-                'Sent ' + new Date(invite.created_at).toLocaleDateString(),
-              ),
-              h('button', {
-                type: 'button',
-                class: 'btn btn-sm btn-ghost btn-danger',
-                onClick: () => {
-                  void revokeTeamInvite(invite.id).then((ok) => {
-                    if (ok) void loadTeamInvites().then(setInvites);
-                  });
-                },
-              }, 'Revoke'),
             ),
           ),
         ),
@@ -134,8 +177,23 @@ export function TeamView() {
       createShow(
         () => !teamLoading() && filtered().length === 0,
         () => h('div', { class: 'list-empty-state' },
-          h('div', { class: 'card-label' }, 'No Members'),
-          h('p', { class: 'card-copy' }, 'No members match the current filter.'),
+          filter() !== 'all'
+            ? h('div', null,
+                h('div', { class: 'card-label' }, 'No Matches'),
+                h('p', { class: 'card-copy' }, 'No members match the current filter.'),
+              )
+            : h('div', null,
+                h('div', { class: 'card-label' }, 'No Team Members Yet'),
+                h('p', { class: 'card-copy' }, 'Invite colleagues to help manage your workspaces. They\'ll get per-tenant roles (Admin, Editor, or Viewer).'),
+                accountOwner()
+                  ? h('button', {
+                      type: 'button',
+                      class: 'btn btn-primary',
+                      style: 'margin-top:12px;',
+                      onClick: () => setShowInviteModal(true),
+                    }, 'Invite Your First Member')
+                  : null,
+              ),
         ),
       ),
       createShow(
@@ -166,7 +224,7 @@ export function TeamView() {
                       : null,
                   ),
                   h('div', { class: 'user-meta text-muted' },
-                    'Joined ' + new Date(member.created_at).toLocaleDateString(),
+                    'Joined ' + timeAgo(member.created_at),
                     !member.is_account_owner && member.tenant_assignments?.length > 0
                       ? ' \u00b7 ' + [...new Set(member.tenant_assignments.map((a) => a.role))].join(', ')
                       : '',
@@ -219,6 +277,12 @@ function InviteModal(onClose: () => void, onInvitesUpdate: (inv: any[]) => void)
   const [selectedTenantIds, setSelectedTenantIds] = createSignal<string[]>([]);
   const [sending, setSending] = createSignal(false);
   const [results, setResults] = createSignal<{ email: string; ok: boolean; url?: string; error?: string }[]>([]);
+
+  // Escape key closes modal
+  const handleKeydown = (e: KeyboardEvent) => {
+    if (e.key === 'Escape') { window.removeEventListener('keydown', handleKeydown); onClose(); }
+  };
+  window.addEventListener('keydown', handleKeydown);
 
   const parsedEmails = () =>
     emailsRaw().split(/[,;\n]+/).map((e) => e.trim().toLowerCase()).filter((e) => e && e.includes('@'));
@@ -451,8 +515,8 @@ function MemberDetail(member: PlatformMember) {
           DetailRow('Email', member.email),
           DetailRow('Role', member.is_account_owner ? 'Owner' : (member.tenant_assignments?.length > 0 ? [...new Set(member.tenant_assignments.map((a) => a.role))].join(', ') : 'No assignments')),
           DetailRow('Status', member.status),
-          DetailRow('Joined', new Date(member.created_at).toLocaleDateString()),
-          DetailRow('Last Login', member.last_login_at ? new Date(member.last_login_at).toLocaleDateString() : 'Never'),
+          DetailRow('Joined', timeAgo(member.created_at)),
+          DetailRow('Last Login', member.last_login_at ? timeAgo(member.last_login_at) : 'Never'),
         ),
         h('div', { class: 'user-detail-footer' },
           CopyButton({ text: member.id, label: 'Copy member ID' }),
