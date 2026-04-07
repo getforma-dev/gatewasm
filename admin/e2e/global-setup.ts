@@ -20,6 +20,7 @@ export default async function globalSetup() {
       MASTER_MGMT_KEY: 'mgmt_test_key',
       MASTER_PLATFORM_KEY: 'plat_local_dev_key',
       COOKIE_DOMAIN: 'localhost',
+      JWT_ACCESS_TOKEN_EXPIRY: '15',
     },
     stdio: ['ignore', 'pipe', 'pipe'],
     detached: true,

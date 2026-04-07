@@ -286,7 +286,7 @@ test.describe('WS Event Delivery', () => {
   // -------------------------------------------------------------------------
   test('receives team:changed when invite is created', async () => {
     await evtPage.goto(BASE + '/platform/console');
-    await evtPage.waitForTimeout(1000);
+    await evtPage.waitForLoadState('networkidle');
 
     const token = await getAccessToken(evtContext);
     const ticket = await getWsTicket(evtContext, token);
@@ -294,8 +294,6 @@ test.describe('WS Event Delivery', () => {
     await ws.waitForOpen();
 
     await ws.send(JSON.stringify({ type: 'subscribe', topics: ['team:changed'] }));
-    await evtPage.waitForTimeout(300);
-
     const inviteEmail = 'invite-' + Date.now() + '@test.local';
     const inviteRes = await evtContext.request.post(BASE + '/platform/admin/team/invites', {
       headers: { Authorization: 'Bearer ' + token },
@@ -329,7 +327,7 @@ test.describe('WS Event Delivery', () => {
   // which emits with tenant_id "ten_platform".
   test('receives tenant:activity on platform login', async () => {
     await evtPage.goto(BASE + '/platform/console');
-    await evtPage.waitForTimeout(1000);
+    await evtPage.waitForLoadState('networkidle');
 
     const token = await getAccessToken(evtContext);
     const ticket = await getWsTicket(evtContext, token);
@@ -337,8 +335,6 @@ test.describe('WS Event Delivery', () => {
     await ws.waitForOpen();
 
     await ws.send(JSON.stringify({ type: 'subscribe', topics: ['tenant:activity'] }));
-    await evtPage.waitForTimeout(300);
-
     // Trigger a platform login (emits tenant:activity with tenant_id "ten_platform")
     const loginEmail = 'ws-login-' + Date.now() + '@test.local';
     // Register first, then login
@@ -369,7 +365,7 @@ test.describe('WS Event Delivery', () => {
   // -------------------------------------------------------------------------
   test('receives metrics:updated alongside tenant:activity', async () => {
     await evtPage.goto(BASE + '/platform/console');
-    await evtPage.waitForTimeout(1000);
+    await evtPage.waitForLoadState('networkidle');
 
     const token = await getAccessToken(evtContext);
     const ticket = await getWsTicket(evtContext, token);
@@ -377,8 +373,6 @@ test.describe('WS Event Delivery', () => {
     await ws.waitForOpen();
 
     await ws.send(JSON.stringify({ type: 'subscribe', topics: ['tenant:activity', 'metrics:updated'] }));
-    await evtPage.waitForTimeout(300);
-
     // Platform signup emits both tenant:activity and metrics:updated with "ten_platform"
     const email = 'ws-dual-' + Date.now() + '@test.local';
     await evtContext.request.post(BASE + '/auth/register', {
@@ -413,7 +407,7 @@ test.describe('WS Event Delivery', () => {
   // -------------------------------------------------------------------------
   test('does not receive events for unsubscribed topics', async () => {
     await evtPage.goto(BASE + '/platform/console');
-    await evtPage.waitForTimeout(1000);
+    await evtPage.waitForLoadState('networkidle');
 
     const token = await getAccessToken(evtContext);
     const ticket = await getWsTicket(evtContext, token);
@@ -422,8 +416,6 @@ test.describe('WS Event Delivery', () => {
 
     // Subscribe only to metrics:updated — NOT team:changed
     await ws.send(JSON.stringify({ type: 'subscribe', topics: ['metrics:updated'] }));
-    await evtPage.waitForTimeout(300);
-
     // Trigger team:changed event (invite creation emits with ten_platform)
     const inviteEmail = 'ws-unsub-test-' + Date.now() + '@test.local';
     await evtContext.request.post(BASE + '/platform/admin/team/invites', {
@@ -466,8 +458,6 @@ test.describe('WS Event Delivery', () => {
       await ws.waitForOpen();
 
       await ws.send(JSON.stringify({ type: 'subscribe', topics: ['tenant:activity'] }));
-      await evtPage.waitForTimeout(300);
-
       // Register end user on the OTHER tenant — should not appear in this WS session
       const endUserEmail = 'end-user-other-' + Date.now() + '@test.local';
       await evtContext.request.post(BASE + '/auth/register', {
@@ -499,7 +489,7 @@ test.describe('WS Event Delivery', () => {
   // -------------------------------------------------------------------------
   test('subscribe/unsubscribe dynamically updates filtering', async () => {
     await evtPage.goto(BASE + '/platform/console');
-    await evtPage.waitForTimeout(1000);
+    await evtPage.waitForLoadState('networkidle');
 
     const token = await getAccessToken(evtContext);
     const ticket = await getWsTicket(evtContext, token);
@@ -508,8 +498,6 @@ test.describe('WS Event Delivery', () => {
 
     // Subscribe to team:changed
     await ws.send(JSON.stringify({ type: 'subscribe', topics: ['team:changed'] }));
-    await evtPage.waitForTimeout(300);
-
     // Create first invite — should receive event
     const email1 = 'dyn-invite-1-' + Date.now() + '@test.local';
     const invite1Res = await evtContext.request.post(BASE + '/platform/admin/team/invites', {
@@ -525,8 +513,6 @@ test.describe('WS Event Delivery', () => {
 
     // Unsubscribe from team:changed
     await ws.send(JSON.stringify({ type: 'unsubscribe', topics: ['team:changed'] }));
-    await evtPage.waitForTimeout(300);
-
     // Clear message buffer
     await evtPage.evaluate(() => { (window as any).__ws_messages = []; });
 
@@ -570,7 +556,7 @@ test.describe('WS Health & Connection Count', () => {
 
       // Open first WS connection
       await page.goto(BASE + '/platform/console');
-      await page.waitForTimeout(1000);
+      await page.waitForLoadState('networkidle');
 
       const token1 = await getAccessToken(context);
       const ticket1 = await getWsTicket(context, token1);
@@ -585,7 +571,7 @@ test.describe('WS Health & Connection Count', () => {
       // Open a second connection on a new page in the same context
       const page2 = await context.newPage();
       await page2.goto(BASE + '/platform/console');
-      await page2.waitForTimeout(1000);
+      await page2.waitForLoadState('networkidle');
 
       const token2 = await getAccessToken(context);
       const ticket2 = await getWsTicket(context, token2);
@@ -599,7 +585,7 @@ test.describe('WS Health & Connection Count', () => {
 
       // Close first connection and wait for server to register the close
       await ws1.close();
-      await page.waitForTimeout(1000);
+      await page.waitForTimeout(500);
 
       // Verify count = baseline + 1
       const health3 = await context.request.get(BASE + '/health');
@@ -609,6 +595,80 @@ test.describe('WS Health & Connection Count', () => {
       // Clean up
       await ws2.close();
       await page2.close();
+    } finally {
+      await context.close();
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Block 4 — Reconnection & Server-Initiated Close
+// ---------------------------------------------------------------------------
+
+test.describe('WS Reconnection & Server-Initiated Close', () => {
+  // -------------------------------------------------------------------------
+  // Test 1 — Server closes connection after 5 invalid messages
+  // -------------------------------------------------------------------------
+  test('server closes connection after 5 invalid messages', async ({ browser }) => {
+    const { context, page } = await loginAsTestUser(browser);
+
+    try {
+      const token = await getAccessToken(context);
+      const ticket = await getWsTicket(context, token);
+      await page.goto(BASE + '/platform/console');
+      await page.waitForLoadState('networkidle');
+
+      const ws = await connectWebSocket(page, ticket);
+      await ws.waitForOpen();
+
+      // Send 5 invalid messages (not valid JSON or wrong type)
+      for (let i = 0; i < 5; i++) {
+        await ws.send('this is not valid json ' + i);
+      }
+
+      // Server should close the connection after 5 invalid messages
+      await ws.waitForClose(5000);
+    } finally {
+      await context.close();
+    }
+  });
+
+  // -------------------------------------------------------------------------
+  // Test 2 — Server sends auth_expired when JWT expires
+  // -------------------------------------------------------------------------
+  // The test server is configured with JWT_ACCESS_TOKEN_EXPIRY=15 (15 seconds).
+  // The WS handler sets a timer based on the JWT's exp claim.
+  test('server sends auth_expired when JWT expires', async ({ browser }) => {
+    test.setTimeout(30000); // Extended timeout — waiting for 15s token expiry
+
+    const { context, page } = await loginAsTestUser(browser);
+
+    try {
+      const token = await getAccessToken(context);
+      const ticket = await getWsTicket(context, token);
+      await page.goto(BASE + '/platform/console');
+      await page.waitForLoadState('networkidle');
+
+      const ws = await connectWebSocket(page, ticket);
+      await ws.waitForOpen();
+
+      // Subscribe so we can distinguish auth_expired from other messages
+      await ws.send(JSON.stringify({ type: 'subscribe', topics: ['team:changed'] }));
+
+      // Wait for the JWT to expire (15s configured in test env + buffer)
+      await ws.waitForMessage(
+        (msg) => msg.type === 'auth_expired',
+        20000,
+      );
+
+      const messages = await ws.getMessages();
+      const hasAuthExpired = messages.some((m) => {
+        try { return JSON.parse(m).type === 'auth_expired'; } catch { return false; }
+      });
+      expect(hasAuthExpired).toBe(true);
+
+      // Connection should be closed after auth_expired
+      await ws.waitForClose(3000);
     } finally {
       await context.close();
     }
