@@ -45,13 +45,22 @@ pub async fn login_page(
     }
 
     // no-store prevents bfcache — back button makes a fresh server request
-    let page = login_page_render(&state, &tenant).await;
+    let page = login_page_render(&state, &tenant, preview_mode).await;
+
+    // In preview mode, relax CSP to allow framing from the platform console
+    let csp = if preview_mode {
+        page.csp
+            .replace("frame-ancestors 'none'", &format!("frame-ancestors {}", state.config.server_url))
+    } else {
+        page.csp
+    };
+
     (
         [
             (axum::http::header::CACHE_CONTROL, "no-store".to_string()),
             (
                 axum::http::header::HeaderName::from_static("content-security-policy"),
-                page.csp,
+                csp,
             ),
         ],
         Html(page.html),
@@ -62,6 +71,7 @@ pub async fn login_page(
 async fn login_page_render(
     state: &AppState,
     tenant: &TenantContext,
+    preview_mode: bool,
 ) -> crate::html_template::PageOutput {
     let frontend = FrontendSnapshot::capture(state);
     let app_name = tenant.branding_app_name.as_deref().unwrap_or(&tenant.name);
@@ -105,9 +115,48 @@ async fn login_page_render(
         "client_id": hosted_client_id,
     });
 
+    // Build preview script if ?preview=1 — adds PostMessage listener for live branding
+    let preview_js = if preview_mode {
+        let origin = &state.config.server_url;
+        format!(
+            r#";(function(){{
+var origin='{}';
+document.addEventListener('submit',function(e){{e.preventDefault();}},true);
+window.addEventListener('message',function(e){{
+if(e.origin!==origin)return;
+var d=e.data;if(!d||typeof d!=='object')return;
+if(d.type==='forma:branding'){{
+if(d.primaryColor)document.documentElement.style.setProperty('--accent',d.primaryColor);
+var el=document.querySelector('[data-branding="app-name"]');
+if(el&&d.appName)el.textContent=d.appName;
+var btn=document.querySelector('[data-branding="submit-btn"]');
+if(btn&&d.buttonText)btn.textContent=d.buttonText;
+var logo=document.querySelector('[data-branding="logo"]');
+if(logo&&d.logoUrl!==undefined)logo.src=d.logoUrl||'';
+if(d.darkMode!==undefined)document.body.setAttribute('data-theme',d.darkMode?'dark':'light');
+}}
+if(d.type==='forma:providers'){{
+var btns=document.querySelectorAll('[data-provider]');
+btns.forEach(function(b){{
+var p=b.getAttribute('data-provider');
+var on=d.providers&&d.providers.indexOf(p)!==-1;
+b.style.display=on?'':'none';
+if(d.noCredentials&&d.noCredentials.indexOf(p)!==-1){{b.style.opacity='0.4';b.style.pointerEvents='none';}}
+else{{b.style.opacity='';b.style.pointerEvents='';}}
+}});
+}}
+}});
+}})();"#,
+            origin
+        )
+    } else {
+        String::new()
+    };
+
     let config_script = format!(
-        "window.__TENANT__={};",
-        json_for_script(&config_json)
+        "window.__TENANT__={};{}",
+        json_for_script(&config_json),
+        preview_js
     );
 
     let page_title = format!("{} — Sign In", html_escape(app_name));

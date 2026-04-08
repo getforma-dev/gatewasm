@@ -12,7 +12,7 @@ use data_encoding::BASE32_NOPAD;
 use qrcode::render::svg;
 use qrcode::QrCode;
 use rand::RngCore;
-use ring::{aead, digest, hmac};
+use ring::{aead, digest, hkdf, hmac};
 use serde::Deserialize;
 
 use crate::crypto::password;
@@ -34,7 +34,8 @@ pub struct VerifyMfaRequest {
     pub code: String,
 }
 
-const MFA_SECRET_PREFIX_CURRENT: &str = "enc2";
+const MFA_SECRET_PREFIX_CURRENT: &str = "enc3";
+const MFA_SECRET_PREFIX_V2: &str = "enc2";
 const MFA_SECRET_PREFIX_LEGACY: &str = "enc1";
 
 fn claims_from_request(req: &axum::extract::Request) -> Result<signing::Claims, AppError> {
@@ -53,20 +54,33 @@ fn generate_totp_secret() -> String {
     BASE32_NOPAD.encode(&bytes)
 }
 
+/// Derive a 32-byte AES-256-GCM key via HKDF-SHA256 with domain separation.
+/// Used for enc3+ prefix secrets.
 fn derive_mfa_encryption_key(key_material: &str) -> [u8; 32] {
+    let salt = hkdf::Salt::new(hkdf::HKDF_SHA256, b"fauth-mfa-v3");
+    let prk = salt.extract(key_material.as_bytes());
+    let okm = prk
+        .expand(&[b"mfa-secret-encryption"], &aead::AES_256_GCM)
+        .expect("HKDF-SHA256 expand failed for AES-256-GCM key length");
+    let mut out = [0_u8; 32];
+    okm.fill(&mut out).expect("HKDF output length mismatch");
+    out
+}
+
+/// Legacy SHA-256 derivation for decrypting enc2-prefix secrets.
+fn derive_mfa_encryption_key_v2(key_material: &str) -> [u8; 32] {
     let digest = digest::digest(&digest::SHA256, key_material.as_bytes());
     let mut out = [0_u8; 32];
     out.copy_from_slice(digest.as_ref());
     out
 }
 
-fn encrypt_mfa_secret_with_material(
+fn encrypt_mfa_secret_with_key(
     secret: &str,
-    key_material: &str,
+    key_bytes: &[u8; 32],
     prefix: &str,
 ) -> Result<String, AppError> {
-    let key_bytes = derive_mfa_encryption_key(key_material);
-    let unbound = aead::UnboundKey::new(&aead::AES_256_GCM, &key_bytes).map_err(|_| {
+    let unbound = aead::UnboundKey::new(&aead::AES_256_GCM, key_bytes).map_err(|_| {
         AppError::InternalError {
             error: "server_error",
             message: "Failed to initialize MFA encryption key".into(),
@@ -93,9 +107,9 @@ fn encrypt_mfa_secret_with_material(
     ))
 }
 
-fn decrypt_mfa_secret_with_material(
+fn decrypt_mfa_secret_with_key(
     stored: &str,
-    key_material: &str,
+    key_bytes: &[u8; 32],
     prefix: &str,
 ) -> Result<String, AppError> {
     let expected_prefix = format!("{prefix}:");
@@ -140,8 +154,7 @@ fn decrypt_mfa_secret_with_material(
                 message: "MFA secret payload could not be decoded".into(),
             })?;
 
-    let key_bytes = derive_mfa_encryption_key(key_material);
-    let unbound = aead::UnboundKey::new(&aead::AES_256_GCM, &key_bytes).map_err(|_| {
+    let unbound = aead::UnboundKey::new(&aead::AES_256_GCM, key_bytes).map_err(|_| {
         AppError::InternalError {
             error: "server_error",
             message: "Failed to initialize MFA encryption key".into(),
@@ -170,11 +183,8 @@ fn legacy_mfa_key_material(state: &AppState) -> String {
 }
 
 fn encrypt_mfa_secret(secret: &str, state: &AppState) -> Result<String, AppError> {
-    encrypt_mfa_secret_with_material(
-        secret,
-        &state.config.mfa_encryption_key,
-        MFA_SECRET_PREFIX_CURRENT,
-    )
+    let key_bytes = derive_mfa_encryption_key(&state.config.mfa_encryption_key);
+    encrypt_mfa_secret_with_key(secret, &key_bytes, MFA_SECRET_PREFIX_CURRENT)
 }
 
 fn decrypt_mfa_secret(stored: &str, state: &AppState) -> Result<String, AppError> {
@@ -182,6 +192,7 @@ fn decrypt_mfa_secret(stored: &str, state: &AppState) -> Result<String, AppError
         return Ok(stored.to_string());
     }
 
+    // enc3: current — HKDF-SHA256 derived key
     if stored.starts_with(&format!("{MFA_SECRET_PREFIX_CURRENT}:")) {
         let mut key_materials =
             Vec::with_capacity(1 + state.config.mfa_encryption_key_previous.len());
@@ -195,8 +206,9 @@ fn decrypt_mfa_secret(stored: &str, state: &AppState) -> Result<String, AppError
         );
 
         for key_material in key_materials {
+            let key_bytes = derive_mfa_encryption_key(key_material);
             if let Ok(secret) =
-                decrypt_mfa_secret_with_material(stored, key_material, MFA_SECRET_PREFIX_CURRENT)
+                decrypt_mfa_secret_with_key(stored, &key_bytes, MFA_SECRET_PREFIX_CURRENT)
             {
                 return Ok(secret);
             }
@@ -208,12 +220,39 @@ fn decrypt_mfa_secret(stored: &str, state: &AppState) -> Result<String, AppError
         });
     }
 
-    if stored.starts_with(&format!("{MFA_SECRET_PREFIX_LEGACY}:")) {
-        return decrypt_mfa_secret_with_material(
-            stored,
-            &legacy_mfa_key_material(state),
-            MFA_SECRET_PREFIX_LEGACY,
+    // enc2: previous — bare SHA-256 derived key
+    if stored.starts_with(&format!("{MFA_SECRET_PREFIX_V2}:")) {
+        let mut key_materials =
+            Vec::with_capacity(1 + state.config.mfa_encryption_key_previous.len());
+        key_materials.push(state.config.mfa_encryption_key.as_str());
+        key_materials.extend(
+            state
+                .config
+                .mfa_encryption_key_previous
+                .iter()
+                .map(String::as_str),
         );
+
+        for key_material in key_materials {
+            let key_bytes = derive_mfa_encryption_key_v2(key_material);
+            if let Ok(secret) =
+                decrypt_mfa_secret_with_key(stored, &key_bytes, MFA_SECRET_PREFIX_V2)
+            {
+                return Ok(secret);
+            }
+        }
+
+        return Err(AppError::InternalError {
+            error: "server_error",
+            message: "MFA secret could not be decrypted with configured keys".into(),
+        });
+    }
+
+    // enc1: legacy — concatenated key material
+    if stored.starts_with(&format!("{MFA_SECRET_PREFIX_LEGACY}:")) {
+        let legacy_key = legacy_mfa_key_material(state);
+        let key_bytes = derive_mfa_encryption_key_v2(&legacy_key);
+        return decrypt_mfa_secret_with_key(stored, &key_bytes, MFA_SECRET_PREFIX_LEGACY);
     }
 
     Ok(stored.to_string())

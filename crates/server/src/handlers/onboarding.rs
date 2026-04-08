@@ -245,6 +245,10 @@ pub struct UpdateTenantRequest {
     pub preferred_tab: Option<String>,
     /// Alias: frontend sends `primary_color`, maps to `branding_primary_color`
     pub primary_color: Option<String>,
+    pub tenant_intent: Option<String>,
+    pub branding_dark_mode: Option<bool>,
+    pub branding_button_text: Option<String>,
+    pub signup_mode: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -406,7 +410,8 @@ pub async fn create_tenant(
     tx.commit().await?;
 
     let row = sqlx::query(
-        "SELECT created_at, onboarding_completed, onboarding_step, preferred_tab, branding_primary_color \
+        "SELECT created_at, onboarding_completed, onboarding_step, preferred_tab, branding_primary_color, \
+         tenant_intent, branding_dark_mode, branding_button_text \
          FROM tenants WHERE id = $1",
     )
     .bind(&tenant_id)
@@ -438,6 +443,9 @@ pub async fn create_tenant(
                 "onboarding_completed": row.get::<bool, _>("onboarding_completed"),
                 "onboarding_step": row.get::<i16, _>("onboarding_step"),
                 "preferred_tab": row.get::<Option<String>, _>("preferred_tab"),
+                "tenant_intent": row.get::<Option<String>, _>("tenant_intent"),
+                "branding_dark_mode": row.get::<bool, _>("branding_dark_mode"),
+                "branding_button_text": row.get::<String, _>("branding_button_text"),
                 "primary_color": row.get::<Option<String>, _>("branding_primary_color"),
                 "login_redirect_url": default_login_redirect,
                 "created_at": row.get::<chrono::DateTime<Utc>, _>("created_at").to_rfc3339(),
@@ -506,7 +514,8 @@ pub async fn list_my_tenants(
         "SELECT id, name, slug, status, allowed_providers, max_users, \
          COALESCE(plan, 'trial') AS plan, trial_ends_at, created_at, \
          onboarding_completed, onboarding_step, preferred_tab, \
-         branding_primary_color, login_redirect_url \
+         branding_primary_color, login_redirect_url, \
+         tenant_intent, branding_dark_mode, branding_button_text \
          FROM tenants WHERE owner_user_id = $1 AND status != 'deleted' \
          ORDER BY created_at DESC",
     )
@@ -521,7 +530,8 @@ pub async fn list_my_tenants(
         "SELECT t.id, t.name, t.slug, t.status, t.allowed_providers, t.max_users, \
          COALESCE(t.plan, 'trial') AS plan, t.trial_ends_at, t.created_at, \
          t.onboarding_completed, t.onboarding_step, t.preferred_tab, \
-         t.branding_primary_color, t.login_redirect_url, pmt.role AS team_role \
+         t.branding_primary_color, t.login_redirect_url, \
+         t.tenant_intent, t.branding_dark_mode, t.branding_button_text, pmt.role AS team_role \
          FROM platform_members pm \
          JOIN platform_member_tenants pmt ON pmt.member_id = pm.id \
          JOIN tenants t ON t.id = pmt.tenant_id \
@@ -556,6 +566,9 @@ pub async fn list_my_tenants(
             "preferred_tab": row.get::<Option<String>, _>("preferred_tab"),
             "primary_color": row.get::<Option<String>, _>("branding_primary_color"),
             "login_redirect_url": resolved_redirect,
+            "tenant_intent": row.get::<Option<String>, _>("tenant_intent"),
+            "branding_dark_mode": row.get::<bool, _>("branding_dark_mode"),
+            "branding_button_text": row.get::<String, _>("branding_button_text"),
             "access": access,
         });
         if let Some(role) = team_role {
@@ -604,6 +617,7 @@ pub async fn get_my_tenant(
          branding_logo_url, branding_primary_color, branding_app_name, \
          login_redirect_url, \
          onboarding_completed, onboarding_step, preferred_tab, \
+         tenant_intent, branding_dark_mode, branding_button_text, \
          created_at, updated_at \
          FROM tenants WHERE id = $1 AND status != 'deleted'",
     )
@@ -627,6 +641,14 @@ pub async fn get_my_tenant(
         .await
         .unwrap_or(0);
 
+    let active_sessions: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM refresh_tokens WHERE tenant_id = $1 AND revoked = FALSE AND expires_at > NOW()"
+    )
+        .bind(&id)
+        .fetch_one(&state.db)
+        .await
+        .unwrap_or(0);
+
     Ok(Json(serde_json::json!({
         "id": id,
         "name": row.get::<String, _>("name"),
@@ -637,6 +659,7 @@ pub async fn get_my_tenant(
         "allowed_origins": row.get::<serde_json::Value, _>("allowed_origins"),
         "max_users": row.get::<i32, _>("max_users"),
         "user_count": user_count,
+        "active_sessions": active_sessions,
         "plan": row.get::<String, _>("plan"),
         "trial_ends_at": row.get::<Option<chrono::DateTime<Utc>>, _>("trial_ends_at").map(|t| t.to_rfc3339()),
         "primary_color": row.get::<Option<String>, _>("branding_primary_color"),
@@ -649,6 +672,9 @@ pub async fn get_my_tenant(
         "onboarding_completed": row.get::<bool, _>("onboarding_completed"),
         "onboarding_step": row.get::<i16, _>("onboarding_step"),
         "preferred_tab": row.get::<Option<String>, _>("preferred_tab"),
+        "tenant_intent": row.get::<Option<String>, _>("tenant_intent"),
+        "branding_dark_mode": row.get::<bool, _>("branding_dark_mode"),
+        "branding_button_text": row.get::<String, _>("branding_button_text"),
         "created_at": row.get::<chrono::DateTime<Utc>, _>("created_at").to_rfc3339(),
         "updated_at": row.get::<chrono::DateTime<Utc>, _>("updated_at").to_rfc3339(),
     })))
@@ -846,6 +872,46 @@ pub async fn update_my_tenant(
         .execute(&mut *tx)
         .await?;
     }
+    if let Some(ref v) = body.tenant_intent {
+        sqlx::query(
+            "UPDATE tenants SET tenant_intent = $1, updated_at = NOW() WHERE id = $2",
+        )
+        .bind(v)
+        .bind(&tenant_id)
+        .execute(&mut *tx)
+        .await?;
+    }
+    if let Some(v) = body.branding_dark_mode {
+        sqlx::query(
+            "UPDATE tenants SET branding_dark_mode = $1, updated_at = NOW() WHERE id = $2",
+        )
+        .bind(v)
+        .bind(&tenant_id)
+        .execute(&mut *tx)
+        .await?;
+    }
+    if let Some(ref v) = body.branding_button_text {
+        sqlx::query(
+            "UPDATE tenants SET branding_button_text = $1, updated_at = NOW() WHERE id = $2",
+        )
+        .bind(v)
+        .bind(&tenant_id)
+        .execute(&mut *tx)
+        .await?;
+    }
+    if let Some(ref v) = body.signup_mode {
+        let normalized = match v.as_str() {
+            "invite_only" | "open" => v.clone(),
+            _ => "open".to_string(),
+        };
+        sqlx::query(
+            "UPDATE tenants SET signup_mode = $1, updated_at = NOW() WHERE id = $2",
+        )
+        .bind(&normalized)
+        .bind(&tenant_id)
+        .execute(&mut *tx)
+        .await?;
+    }
 
     tx.commit().await?;
 
@@ -859,6 +925,7 @@ pub async fn update_my_tenant(
          branding_logo_url, branding_primary_color, branding_app_name, \
          login_redirect_url, \
          onboarding_completed, onboarding_step, preferred_tab, \
+         tenant_intent, branding_dark_mode, branding_button_text, \
          created_at, updated_at \
          FROM tenants WHERE id = $1",
     )
@@ -891,6 +958,9 @@ pub async fn update_my_tenant(
         "onboarding_completed": row.get::<bool, _>("onboarding_completed"),
         "onboarding_step": row.get::<i16, _>("onboarding_step"),
         "preferred_tab": row.get::<Option<String>, _>("preferred_tab"),
+        "tenant_intent": row.get::<Option<String>, _>("tenant_intent"),
+        "branding_dark_mode": row.get::<bool, _>("branding_dark_mode"),
+        "branding_button_text": row.get::<String, _>("branding_button_text"),
         "created_at": row.get::<chrono::DateTime<Utc>, _>("created_at").to_rfc3339(),
         "updated_at": row.get::<chrono::DateTime<Utc>, _>("updated_at").to_rfc3339(),
     })))

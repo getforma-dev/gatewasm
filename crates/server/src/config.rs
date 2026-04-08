@@ -135,6 +135,17 @@ impl AppConfig {
             .filter(|s| !s.is_empty())
             .collect();
 
+        let ed25519_private_key_pem = env::var("ED25519_PRIVATE_KEY")
+            .ok()
+            .map(|v| v.replace("\\n", "\n").trim().to_string())
+            .filter(|v| !v.is_empty());
+        if is_production && ed25519_private_key_pem.is_none() {
+            panic!(
+                "ED25519_PRIVATE_KEY must be set in production (SERVER_URL={})",
+                server_url_val
+            );
+        }
+
         Self {
             port: env::var("PORT")
                 .unwrap_or_else(|_| "3001".to_string())
@@ -146,7 +157,7 @@ impl AppConfig {
                 format!("http://localhost:{}", port)
             }),
             database_url: Self::resolve_database_url(),
-            ed25519_private_key_pem: env::var("ED25519_PRIVATE_KEY").ok(),
+            ed25519_private_key_pem,
             jwt_issuer: env::var("JWT_ISSUER").unwrap_or_else(|_| "gatewasm".to_string()),
             jwt_audience: env::var("JWT_AUDIENCE").unwrap_or_else(|_| "gatewasm-app".to_string()),
             access_token_expiry: env::var("JWT_ACCESS_TOKEN_EXPIRY")

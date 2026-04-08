@@ -23,6 +23,7 @@ import { TokensView } from './views/TokensView';
 import { ApiKeysView } from './views/ApiKeysView';
 import { AccountSettingsView } from './views/AccountSettingsView';
 import { TeamView } from './views/TeamView';
+import { OnboardingWizard } from './OnboardingWizard';
 import {
   view, loading, toast, backToTenants, signout,
   selectedTenant, tenants, selectTenant, createTenant, checkSlugAvailability, currentUser,
@@ -720,10 +721,12 @@ export function ConsoleApp() {
         { match: 'account', render: () => AccountShell() },
         {
           match: 'workspace',
-          render: () => h('div', {
-            class: 'shell',
-            'data-plane': () => plane(),
-          },
+          render: () => createShow(
+            () => selectedTenant() !== null && selectedTenant()!.onboarding_completed,
+            () => h('div', {
+              class: 'shell',
+              'data-plane': () => plane(),
+            },
             PlaneNav({
               plane: () => plane(),
               view: () => view(),
@@ -768,6 +771,8 @@ export function ConsoleApp() {
               sections: paletteSections,
             }),
             ToastView(toast),
+          ),
+            () => OnboardingWizard(),
           ),
         },
       ],

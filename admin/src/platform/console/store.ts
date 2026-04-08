@@ -10,6 +10,7 @@ import type { IntrospectData } from '../../core/types';
 export const serverUrl: string = (window as any).__FORMA_SERVER_URL__ || window.location.origin;
 const auth = createAuth({ serverUrl, tenant: 'platform' });
 const api = createApi(auth);
+export { api };
 export const toast = createToast();
 const socket = createSocket(auth);
 export { socket };
@@ -25,8 +26,16 @@ export interface Tenant {
   onboarding_completed: boolean;
   onboarding_step: number;
   preferred_tab: string | null;
+  tenant_intent: string | null;
+  branding_dark_mode: boolean;
+  branding_button_text: string;
+  branding_app_name?: string | null;
+  branding_logo_url?: string | null;
+  branding_primary_color?: string | null;
   primary_color: string | null;
   login_redirect_url: string | null;
+  allowed_providers?: string[];
+  signup_mode?: string;
   management_api_key?: string;
   access?: 'own' | 'team';
   team_role?: string; // "admin" | "editor" | "viewer" — only for access === 'team'
@@ -158,6 +167,7 @@ export interface SecurityConfig {
   caep_enabled: boolean;
   impossible_travel_enabled: boolean;
   impossible_travel_speed_threshold_kmh: number;
+  mfa_policy: string;
 }
 
 export interface TenantInvite {
@@ -669,7 +679,7 @@ async function loadTenantDetail(id: string, statsWindow: OverviewWindow = overvi
 
 export async function updateTenant(
   id: string,
-  fields: Partial<Pick<Tenant, 'name' | 'slug' | 'primary_color' | 'login_redirect_url' | 'onboarding_completed' | 'onboarding_step' | 'preferred_tab'>>,
+  fields: Partial<Pick<Tenant, 'name' | 'slug' | 'primary_color' | 'login_redirect_url' | 'onboarding_completed' | 'onboarding_step' | 'preferred_tab' | 'tenant_intent' | 'branding_dark_mode' | 'branding_button_text' | 'branding_app_name' | 'branding_logo_url' | 'branding_primary_color' | 'allowed_providers' | 'signup_mode'>>,
 ): Promise<Tenant | null> {
   try {
     const updatedTenant = await api.patch<Tenant>(
