@@ -36,10 +36,10 @@ test('auth reference lives inside integrate', async ({ browser }) => {
     await page.locator('.tenant-card').filter({ hasText: 'Smoke Tenant' }).first().click();
 
     // Switch to Operator plane and navigate to Integrate tab
-    await page.getByRole('button', { name: 'Operator' }).click();
+    await page.locator('.plane-tier1').getByRole('button', { name: 'Operator' }).click();
     await page.waitForTimeout(500);
 
-    await page.getByRole('tab', { name: 'Integrate' }).click();
+    await page.locator('.plane-tier2').getByRole('button', { name: 'Integrate' }).click();
     await page.waitForTimeout(1000);
 
     await expect(page.getByRole('tab', { name: 'Getting Started' })).toBeVisible();
@@ -52,7 +52,7 @@ test('auth reference lives inside integrate', async ({ browser }) => {
     await expect(page.getByText('Understand the auth payload your app receives')).toBeVisible();
     await expect(page.getByText('Callback Payload')).toBeVisible();
     await expect(page.getByText('User Object Shape')).toBeVisible();
-    await expect(page.getByText('Token Format')).toBeVisible();
+    await expect(page.getByText('Token Format', { exact: true })).toBeVisible();
     await expect(page.getByText('Auth Endpoints')).toBeVisible();
   } finally {
     if (tenantId) {
@@ -100,14 +100,14 @@ test('users view shows active session count', async ({ browser }) => {
     await page.locator('.tenant-card').filter({ hasText: 'Session Test' }).first().click();
 
     // Switch to Organization plane and navigate to Members tab
-    await page.getByRole('button', { name: 'Organization' }).click();
+    await page.locator('.plane-tier1').getByRole('button', { name: 'Organization' }).click();
     await page.waitForTimeout(500);
 
-    await page.getByRole('tab', { name: 'Members' }).click();
+    await page.locator('.plane-tier2').getByRole('button', { name: 'Members' }).click();
     await page.waitForTimeout(1000);
 
     // Members view should render (may be empty for a new tenant)
-    await expect(page.getByText('Members')).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Members' })).toBeVisible();
   } finally {
     if (tenantId) {
       const refresh = await context.request.post(BASE + '/t/platform/auth/token', {

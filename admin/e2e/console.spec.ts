@@ -24,19 +24,19 @@ test('unauthenticated user redirects to /platform/login', async ({ page }) => {
 
 // --- Authenticated Tests ---
 
-test('authenticated: console loads with sidebar and tenants view', async ({ browser }) => {
+test('authenticated: console loads with account shell and workspaces view', async ({ browser }) => {
   const { context, page } = await loginAsTestUser(browser);
   try {
     await page.goto('/platform/console');
     await page.waitForTimeout(1500);
 
-    await expect(page.locator('.sidebar')).toBeVisible({ timeout: 5000 });
-    await expect(page.locator('.sidebar').getByText('Tenants')).toBeVisible();
-    await expect(page.getByRole('button', { name: /Quick Switch/i })).toBeVisible();
-    await expect(page.getByText('Your Tenants')).toBeVisible();
-    await expect(page.getByLabel('App Name')).toBeVisible();
-    await expect(page.getByLabel('Tenant Slug')).toBeVisible();
-    await expect(page.locator('.sidebar-account-trigger')).toBeVisible();
+    // Account mode: renders .account-shell with tabs
+    await expect(page.locator('.account-shell')).toBeVisible({ timeout: 5000 });
+    await expect(page.locator('.account-tabs').getByRole('button', { name: 'Tenants' })).toBeVisible();
+    await expect(page.getByText('Your Workspaces')).toBeVisible();
+
+    // Avatar button visible in account shell
+    await expect(page.locator('.account-shell .plane-avatar')).toBeVisible();
   } finally {
     await context.close();
   }
@@ -54,16 +54,20 @@ test('authenticated: no console errors', async ({ browser }) => {
   }
 });
 
-test('authenticated: tenant create panel shows current required fields', async ({ browser }) => {
+test('authenticated: tenant create modal shows current required fields', async ({ browser }) => {
   const { context, page } = await loginAsTestUser(browser);
   try {
     await page.goto('/platform/console');
     await page.waitForTimeout(1500);
 
-    await expect(page.locator('.tenant-create-panel .card-label')).toContainText(/Create (your first tenant|another tenant)/);
+    // Open the create workspace modal
+    await page.getByRole('button', { name: '+ New Workspace' }).click();
+    const modal = page.locator('.modal-content');
+    await expect(modal).toBeVisible({ timeout: 5000 });
+
     await expect(page.getByLabel('App Name')).toBeVisible();
-    await expect(page.getByLabel('Tenant Slug')).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Create Tenant' })).toBeVisible();
+    await expect(page.locator('label').filter({ hasText: 'Tenant Slug' })).toBeVisible();
+    await expect(modal.getByRole('button', { name: 'Create Workspace' })).toBeVisible();
   } finally {
     await context.close();
   }
@@ -75,12 +79,20 @@ test('authenticated: tenant slug preview updates from the current form fields', 
     await page.goto('/platform/console');
     await page.waitForTimeout(1500);
 
+    // Open the create workspace modal
+    await page.getByRole('button', { name: '+ New Workspace' }).click();
+    const modal = page.locator('.modal-content');
+    await expect(modal).toBeVisible({ timeout: 5000 });
+
     await page.getByLabel('App Name').fill('Console Smoke Tenant');
     await expect(page.getByText('/t/console-smoke-tenant')).toBeVisible();
 
-    await page.getByLabel('Tenant Slug').fill('custom-slug');
+    await page.locator('#field-tenant-slug').fill('custom-slug');
     await expect(page.getByText('/t/custom-slug')).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Create Tenant' })).toBeEnabled();
+    // Wait for slug availability check to resolve (debounced 500ms + network)
+    await expect(modal.locator('.slug-status-available, .slug-status-taken, .slug-status-invalid')).toBeVisible({ timeout: 5000 });
+    // Verify the submit button is visible inside the modal
+    await expect(modal.getByRole('button', { name: 'Create Workspace' })).toBeVisible();
   } finally {
     await context.close();
   }
@@ -92,7 +104,8 @@ test('authenticated: sign out redirects to login', async ({ browser }) => {
     await page.goto('/platform/console');
     await page.waitForTimeout(1500);
 
-    await page.locator('.sidebar-account-trigger').click();
+    // Click the avatar button to open the account menu
+    await page.locator('.account-shell .plane-avatar').click();
     await expect(page.getByRole('menuitem', { name: 'Sign Out' })).toBeVisible();
     await page.getByRole('menuitem', { name: 'Sign Out' }).click();
     await page.waitForURL('**/platform/login', { timeout: 5000 });

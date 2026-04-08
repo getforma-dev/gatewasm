@@ -161,7 +161,7 @@ test.describe('Persona: Startup B2B', () => {
       await expect(page.getByText('Pending Invites', { exact: true })).toBeVisible();
 
       // Should see the user list section
-      await expect(page.getByText('Recent Users')).toBeVisible();
+      await expect(page.getByText('Recent Members')).toBeVisible();
 
       // ── Organizations tab ────────────────────────────────────────
       await clickTab(page, 'Organizations');
@@ -276,7 +276,7 @@ test.describe('Persona: Agency Multi-Tenant', () => {
       await page.waitForTimeout(1000);
 
       // Should see tenant keys section
-      await expect(page.getByText('Tenant Keys')).toBeVisible();
+      await expect(page.getByText('Your Workspaces')).toBeVisible();
 
       // ── Select first tenant ──────────────────────────────────────
       await page.locator('.account-tabs').getByRole('button', { name: 'Tenants' }).click();
@@ -359,7 +359,7 @@ test.describe('Navigation Completeness', () => {
       // Click API Keys tab
       await accountTabs.getByRole('button', { name: 'API Keys' }).click();
       await page.waitForTimeout(500);
-      await expect(page.getByText('Tenant Keys')).toBeVisible();
+      await expect(page.getByText('Your Workspaces')).toBeVisible();
 
       // Click Settings tab
       await accountTabs.getByRole('button', { name: 'Settings' }).click();

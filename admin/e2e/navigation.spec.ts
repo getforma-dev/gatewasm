@@ -30,7 +30,7 @@ test('authenticated: can navigate from console to login and back', async ({ brow
   // Start at console
   await page.goto('/platform/console');
   await page.waitForTimeout(3000);
-  await expect(page.locator('.sidebar')).toBeVisible({ timeout: 5000 });
+  await expect(page.locator('.account-shell')).toBeVisible({ timeout: 5000 });
 
   // Navigate to login page (should still work even when authenticated)
   await page.goto('/platform/login');
@@ -39,7 +39,7 @@ test('authenticated: can navigate from console to login and back', async ({ brow
   // Navigate back to console (auth cookie should still be valid)
   await page.goto('/platform/console');
   await page.waitForTimeout(3000);
-  await expect(page.locator('.sidebar')).toBeVisible({ timeout: 5000 });
+  await expect(page.locator('.account-shell')).toBeVisible({ timeout: 5000 });
 
   await context.close();
 });

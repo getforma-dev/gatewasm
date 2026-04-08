@@ -18,7 +18,7 @@ test.describe('Route and cache fixes', () => {
 
   test('/dev/clear-cache clears SW, caches, storage, and cookies', async ({ page }) => {
     // Set some state first
-    await page.goto(BASE + '/t/forma/login');
+    await page.goto(BASE + '/t/platform/login');
     await page.waitForTimeout(2000);
     await page.evaluate(() => {
       localStorage.setItem('test_key', 'test_value');
@@ -36,7 +36,7 @@ test.describe('Route and cache fixes', () => {
     expect(body).toContain('Done');
 
     // Verify localStorage actually cleared
-    await page.goto(BASE + '/t/forma/login');
+    await page.goto(BASE + '/t/platform/login');
     await page.waitForTimeout(1000);
     const lsValue = await page.evaluate(() => localStorage.getItem('test_key'));
     expect(lsValue).toBeNull();
@@ -44,7 +44,7 @@ test.describe('Route and cache fixes', () => {
   });
 
   test('dashboard does NOT doom-loop', async ({ page }) => {
-    await page.goto(BASE + '/t/forma/dashboard');
+    await page.goto(BASE + '/t/platform/dashboard');
     await page.waitForTimeout(10000);
 
     const finalUrl = page.url();
@@ -60,7 +60,7 @@ test.describe('Route and cache fixes', () => {
   });
 
   test('login page respects mode=register param', async ({ page }) => {
-    await page.goto(BASE + '/t/forma/login?mode=register');
+    await page.goto(BASE + '/t/platform/login?mode=register');
     await page.waitForTimeout(3000);
     const body = await page.textContent('body');
     const hasRegister = body?.includes('Create') || body?.includes('Sign up');
@@ -107,7 +107,7 @@ test.describe('Route and cache fixes', () => {
   });
 
   test('removed sandbox route now returns 404', async ({ request }) => {
-    const sandbox = await request.get(BASE + '/t/forma/sandbox', { maxRedirects: 0 });
+    const sandbox = await request.get(BASE + '/t/platform/sandbox', { maxRedirects: 0 });
     expect(sandbox.status()).toBe(404);
   });
 });

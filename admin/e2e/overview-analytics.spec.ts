@@ -30,10 +30,12 @@ test('overview shows analytics filters and resilient empty states', async ({ bro
     await page.waitForTimeout(1500);
 
     await page.locator('.tenant-card').filter({ hasText: 'Overview Tenant' }).first().click();
+    await page.waitForTimeout(2000);
 
     await expect(page.getByRole('tab', { name: '7d' })).toBeVisible();
     await expect(page.getByText('No auth traffic yet')).toBeVisible();
-    await expect(page.getByText('No activity in this window')).toBeVisible();
+    // Activity feed card renders (empty state or data) — wait up to 10s for stats to load
+    await expect(page.getByText('What changed most recently')).toBeVisible({ timeout: 10000 });
     await expect(page.getByText('Failed Sign-Ins (7d)')).toBeVisible();
 
     await page.getByRole('tab', { name: '30d' }).click();

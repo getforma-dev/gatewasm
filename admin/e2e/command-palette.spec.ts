@@ -41,10 +41,10 @@ test('quick switcher opens from keyboard and switches tenants', async ({ browser
 
     await page.keyboard.press('Control+K');
     await expect(page.locator('.command-palette-input')).toBeVisible();
-    await page.locator('.command-palette-input').fill('users');
+    await page.locator('.command-palette-input').fill('members');
     await page.keyboard.press('Enter');
 
-    await expect(page.getByRole('heading', { name: 'Users' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Members' })).toBeVisible();
 
     await page.keyboard.press('Control+K');
     await expect(page.locator('.command-palette-input')).toBeVisible();
@@ -52,7 +52,7 @@ test('quick switcher opens from keyboard and switches tenants', async ({ browser
     await page.locator('.command-palette-item').filter({ hasText: 'Palette Beta' }).first().click();
 
     await expect(page.getByRole('heading', { name: 'Palette Beta' })).toBeVisible();
-    await expect(page.locator('.sidebar-context-card')).toContainText('/t/' + slugB);
+    await expect(page.locator('.plane-tenant-name')).toContainText('Palette Beta');
   } finally {
     const cleanupToken = await createAccessToken(context);
     for (const tenant of createdTenants) {

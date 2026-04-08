@@ -70,7 +70,7 @@ test('tenant login shows powered-by footer', async ({ page }) => {
   await page.goto(TENANT_LOGIN);
   await page.waitForSelector('.tl-card', { timeout: 5000 });
 
-  const footer = page.locator('.tl-powered');
+  const footer = page.locator('.secured-badge');
   await expect(footer).toBeVisible();
   await expect(footer).toContainText('fAuth');
 });

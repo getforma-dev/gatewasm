@@ -75,7 +75,7 @@ test.describe('Tenant workspace lifecycle', () => {
     await page.waitForTimeout(2000);
 
     await expect(page.getByText('Make it yours')).toHaveCount(0);
-    await expect(page.getByText('Your Tenants')).toBeVisible();
+    await expect(page.getByText('Your Workspaces')).toBeVisible();
     await expect(page.locator('.tenant-card').filter({ hasText: 'E2E Workspace App' })).toBeVisible();
 
     await context.close();
