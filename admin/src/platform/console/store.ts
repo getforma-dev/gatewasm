@@ -32,6 +32,9 @@ export interface Tenant {
   branding_app_name?: string | null;
   branding_logo_url?: string | null;
   branding_primary_color?: string | null;
+  branding_bg_color?: string | null;
+  branding_card_color?: string | null;
+  branding_custom_css?: string | null;
   primary_color: string | null;
   login_redirect_url: string | null;
   allowed_providers?: string[];
@@ -408,6 +411,19 @@ const [plane, setPlaneSignal] = createSignal<Plane>('operator');
 export { plane };
 const [mode, setMode] = createSignal<AppMode>('account');
 export { mode };
+
+/**
+ * Navigate to the onboarding wizard in "create" mode (no tenant selected).
+ * The wizard's Step 0 handles tenant creation.
+ */
+export function startNewWorkspaceWizard(): void {
+  batch(() => {
+    setSelectedTenant(null);
+    resetTenantScopedState();
+    setMode('workspace');
+  });
+  history.pushState(null, '', '/platform/console');
+}
 const [accountTab, _setAccountTab] = createSignal<AccountTab>('tenants');
 export { accountTab };
 export function setAccountTab(tab: AccountTab): void {
@@ -679,7 +695,7 @@ async function loadTenantDetail(id: string, statsWindow: OverviewWindow = overvi
 
 export async function updateTenant(
   id: string,
-  fields: Partial<Pick<Tenant, 'name' | 'slug' | 'primary_color' | 'login_redirect_url' | 'onboarding_completed' | 'onboarding_step' | 'preferred_tab' | 'tenant_intent' | 'branding_dark_mode' | 'branding_button_text' | 'branding_app_name' | 'branding_logo_url' | 'branding_primary_color' | 'allowed_providers' | 'signup_mode'>>,
+  fields: Partial<Pick<Tenant, 'name' | 'slug' | 'primary_color' | 'login_redirect_url' | 'onboarding_completed' | 'onboarding_step' | 'preferred_tab' | 'tenant_intent' | 'branding_dark_mode' | 'branding_button_text' | 'branding_app_name' | 'branding_logo_url' | 'branding_primary_color' | 'branding_bg_color' | 'branding_card_color' | 'branding_custom_css' | 'allowed_providers' | 'signup_mode'>>,
 ): Promise<Tenant | null> {
   try {
     const updatedTenant = await api.patch<Tenant>(
@@ -1436,6 +1452,22 @@ export function selectTenant(tenant: Tenant): void {
   switchToWorkspaceInternal(tenant);
   const v = view();
   history.pushState({ slug: tenant.slug }, '', '/platform/console/' + tenant.slug + '#' + v);
+}
+
+/**
+ * Transition from the onboarding wizard to the dashboard for the current tenant.
+ * Unlike selectTenant, this does NOT reset tenant-scoped state — it simply
+ * sets the view, plane, and URL, then hydrates the target view.
+ */
+export function completeOnboarding(tenant: Tenant): void {
+  const nextView = preferredTenantView(tenant);
+  batch(() => {
+    setSelectedTenant(tenant);
+    setView(nextView);
+    setPlaneSignal(planeForView(nextView));
+  });
+  history.pushState({ slug: tenant.slug }, '', '/platform/console/' + tenant.slug + '#' + nextView);
+  void hydrateTenantView(nextView, tenant);
 }
 
 export function backToTenants(tab?: AccountTab): void {
