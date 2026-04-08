@@ -6,6 +6,7 @@
  */
 import { test, expect } from './fixtures';
 import AxeBuilder from '@axe-core/playwright';
+import { Account } from './selectors';
 
 const A11Y_PAGES = [
   { path: '/platform/login', name: 'platform-login' },
@@ -27,7 +28,7 @@ for (const route of A11Y_PAGES) {
 
 test('console: no accessibility violations @a11y @regression', async ({ authedPage }) => {
   await authedPage.goto('/platform/console');
-  await authedPage.locator('.account-shell').waitFor({ timeout: 10000 });
+  await authedPage.locator(Account.shell).waitFor({ timeout: 10000 });
   const results = await new AxeBuilder({ page: authedPage })
     .withTags(['wcag2a', 'wcag2aa'])
     .disableRules(['color-contrast', 'link-in-text-block'])

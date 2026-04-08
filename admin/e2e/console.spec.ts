@@ -71,7 +71,7 @@ test('authenticated: tenant slug preview updates from the current form fields @s
   await authedPage.locator('#field-tenant-slug').fill('custom-slug');
   await expect(authedPage.getByText('/t/custom-slug')).toBeVisible();
   // Wait for slug availability check to resolve (debounced 500ms + network)
-  await expect(modal.locator('.slug-status-available, .slug-status-taken, .slug-status-invalid')).toBeVisible({ timeout: 5000 });
+  await expect(modal.locator(`${Modal.slugAvailable}, ${Modal.slugTaken}, ${Modal.slugInvalid}`)).toBeVisible({ timeout: 5000 });
   // Verify the submit button is visible inside the modal
   await expect(modal.getByRole('button', { name: 'Create Workspace' })).toBeVisible();
 });

@@ -14,8 +14,8 @@
  */
 import type { Browser, Page, BrowserContext } from '@playwright/test';
 import { BASE, postWithRetry } from './helpers';
+import { TEST_PASSWORD } from './factories';
 const TENANT_HEADER = { 'X-Tenant-Slug': 'platform' };
-const TEST_PASSWORD = 'E2eTestPassword123!';
 
 /**
  * Create a browser context with a logged-in test user.

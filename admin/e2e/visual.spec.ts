@@ -5,6 +5,7 @@
  * in visual.spec.ts-snapshots/. Update baselines with --update-snapshots.
  */
 import { test, expect } from './fixtures';
+import { Account } from './selectors';
 
 const VISUAL_PAGES = [
   { path: '/platform/login', name: 'platform-login' },
@@ -24,7 +25,7 @@ for (const route of VISUAL_PAGES) {
 
 test('console: visual snapshot @visual @regression', async ({ authedPage }) => {
   await authedPage.goto('/platform/console');
-  await authedPage.locator('.account-shell').waitFor({ timeout: 10000 });
+  await authedPage.locator(Account.shell).waitFor({ timeout: 10000 });
   await expect(authedPage).toHaveScreenshot('console.png', {
     maxDiffPixelRatio: 0.01,
     animations: 'disabled',

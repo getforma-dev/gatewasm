@@ -167,7 +167,7 @@ test('onboarding: no layout overflow @regression', async ({ page }) => {
   await expectNoLayoutOverflow(page);
 });
 
-test('onboarding: no DOM doubling after hydration @regression', async ({ browser, page }) => {
+test('onboarding: no DOM doubling after hydration @regression', async ({ page }) => {
   await page.goto('/platform/onboarding', { waitUntil: 'networkidle' });
   await expect(page.locator('#reg-email')).toHaveCount(1);
   await expect(page.locator('#reg-password')).toHaveCount(1);

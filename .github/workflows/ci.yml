@@ -133,6 +133,13 @@ jobs:
           npm ci
           npx playwright install --with-deps chromium
           npx tsx build.ts --ssr
+      - name: Wait for postgres
+        run: |
+          for i in {1..30}; do
+            (echo > /dev/tcp/127.0.0.1/5433) >/dev/null 2>&1 && exit 0
+            sleep 2
+          done
+          exit 1
       - name: Run e2e smoke tests
         working-directory: admin
         run: npx playwright test --grep @smoke

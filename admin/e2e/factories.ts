@@ -2,7 +2,7 @@
 import { expect, APIRequestContext, BrowserContext } from '@playwright/test';
 import { BASE, postWithRetry, getAccessToken } from './helpers';
 
-const TEST_PASSWORD = 'E2eTestPassword123!';
+export const TEST_PASSWORD = 'E2eTestPassword123!';
 
 export async function createTestAccount(
   request: APIRequestContext,

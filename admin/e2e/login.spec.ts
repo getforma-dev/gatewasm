@@ -126,7 +126,7 @@ test('login: no layout overflow @smoke @regression', async ({ page }) => {
   await expectNoLayoutOverflow(page);
 });
 
-test('login: no DOM doubling after hydration @smoke @regression', async ({ browser, page }) => {
+test('login: no DOM doubling after hydration @smoke @regression', async ({ page }) => {
   await page.goto('/platform/login', { waitUntil: 'networkidle' });
   await expect(page.locator('#email')).toHaveCount(1);
   await expect(page.locator('#password')).toHaveCount(1);

@@ -4,6 +4,7 @@
 export const Account = {
   shell: '.account-shell',
   tabs: '.account-tabs',
+  tenantCard: '.tenant-card',
 } as const;
 
 export const Workspace = {
@@ -22,6 +23,9 @@ export const Workspace = {
 
 export const Modal = {
   content: '.modal-content',
+  slugAvailable: '.slug-status-available',
+  slugTaken: '.slug-status-taken',
+  slugInvalid: '.slug-status-invalid',
 } as const;
 
 export const TenantLogin = {
