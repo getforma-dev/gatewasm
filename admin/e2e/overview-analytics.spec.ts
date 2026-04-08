@@ -1,23 +1,15 @@
 import { test, expect } from '@playwright/test';
 import { loginAsTestUser } from './auth-helper';
-import { BASE } from './helpers';
-
-async function createAccessToken(context: Awaited<ReturnType<typeof loginAsTestUser>>['context']) {
-  const refresh = await context.request.post(BASE + '/t/platform/auth/token', {
-    data: { grant_type: 'refresh_token' },
-  });
-  expect(refresh.ok()).toBeTruthy();
-  const refreshJson = await refresh.json();
-  return refreshJson.access_token as string;
-}
+import { BASE, getAccessToken } from './helpers';
 
 test('overview shows analytics filters and resilient empty states', async ({ browser }) => {
+  test.setTimeout(45000);
   const { context, page } = await loginAsTestUser(browser);
   const slug = 'overview-' + Date.now().toString(36);
   let tenantId = '';
 
   try {
-    const accessToken = await createAccessToken(context);
+    const accessToken = await getAccessToken(context);
     const createTenant = await context.request.post(BASE + '/platform/self-serve/tenants', {
       headers: { Authorization: 'Bearer ' + accessToken },
       data: { name: 'Overview Tenant', slug },
@@ -26,11 +18,19 @@ test('overview shows analytics filters and resilient empty states', async ({ bro
     const createJson = await createTenant.json();
     tenantId = String(createJson.tenant.id);
 
+    // Navigate to console — silentRefresh may be rate-limited during full suite runs
     await page.goto('/platform/console');
-    await page.waitForTimeout(1500);
+    // If the client-side silentRefresh was rate-limited, retry with a pause
+    for (let attempt = 0; attempt < 3; attempt++) {
+      await page.waitForLoadState('networkidle');
+      if (!page.url().includes('/login')) break;
+      await page.waitForTimeout(1500);
+      await page.goto('/platform/console');
+    }
+    await expect(page.locator('.account-shell')).toBeVisible({ timeout: 10000 });
 
     await page.locator('.tenant-card').filter({ hasText: 'Overview Tenant' }).first().click();
-    await page.waitForTimeout(2000);
+    await expect(page.locator('.plane-nav')).toBeVisible({ timeout: 8000 });
 
     await expect(page.getByRole('tab', { name: '7d' })).toBeVisible();
     await expect(page.getByText('No auth traffic yet')).toBeVisible();
@@ -45,11 +45,13 @@ test('overview shows analytics filters and resilient empty states', async ({ bro
     await expect(page.getByText('Failed Sign-Ins (24h)')).toBeVisible();
   } finally {
     if (tenantId) {
-      const cleanupToken = await createAccessToken(context);
-      await context.request.delete(BASE + '/platform/self-serve/tenants/' + tenantId, {
-        headers: { Authorization: 'Bearer ' + cleanupToken },
-        data: { confirm_slug: slug },
-      });
+      try {
+        const cleanupToken = await getAccessToken(context);
+        await context.request.delete(BASE + '/platform/self-serve/tenants/' + tenantId, {
+          headers: { Authorization: 'Bearer ' + cleanupToken },
+          data: { confirm_slug: slug },
+        });
+      } catch { /* cleanup best-effort — context may be destroyed on timeout */ }
     }
 
     await context.close();

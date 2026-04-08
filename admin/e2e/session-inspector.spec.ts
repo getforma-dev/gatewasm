@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { loginAsTestUser } from './auth-helper';
-import { BASE } from './helpers';
+import { BASE, getAccessToken } from './helpers';
 
 test('platform login hides owner MFA until required', async ({ page }) => {
   await page.goto('/platform/login');
@@ -15,12 +15,7 @@ test('auth reference lives inside integrate', async ({ browser }) => {
   let tenantId = '';
 
   try {
-    const refresh = await context.request.post(BASE + '/t/platform/auth/token', {
-      data: { grant_type: 'refresh_token' },
-    });
-    expect(refresh.ok()).toBeTruthy();
-    const refreshJson = await refresh.json();
-    const accessToken = refreshJson.access_token as string;
+    const accessToken = await getAccessToken(context);
 
     const createTenant = await context.request.post(BASE + '/platform/self-serve/tenants', {
       headers: { Authorization: 'Bearer ' + accessToken },
@@ -56,17 +51,13 @@ test('auth reference lives inside integrate', async ({ browser }) => {
     await expect(page.getByText('Auth Endpoints')).toBeVisible();
   } finally {
     if (tenantId) {
-      const refresh = await context.request.post(BASE + '/t/platform/auth/token', {
-        data: { grant_type: 'refresh_token' },
-      });
-      if (refresh.ok()) {
-        const refreshJson = await refresh.json();
-        const accessToken = refreshJson.access_token as string;
+      try {
+        const cleanupToken = await getAccessToken(context);
         await context.request.delete(BASE + '/platform/self-serve/tenants/' + tenantId, {
-          headers: { Authorization: 'Bearer ' + accessToken },
+          headers: { Authorization: 'Bearer ' + cleanupToken },
           data: { confirm_slug: slug },
         });
-      }
+      } catch { /* cleanup best-effort */ }
     }
 
     await context.close();
@@ -79,12 +70,7 @@ test('users view shows active session count', async ({ browser }) => {
   let tenantId = '';
 
   try {
-    const refresh = await context.request.post(BASE + '/t/platform/auth/token', {
-      data: { grant_type: 'refresh_token' },
-    });
-    expect(refresh.ok()).toBeTruthy();
-    const refreshJson = await refresh.json();
-    const accessToken = refreshJson.access_token as string;
+    const accessToken = await getAccessToken(context);
 
     const createTenant = await context.request.post(BASE + '/platform/self-serve/tenants', {
       headers: { Authorization: 'Bearer ' + accessToken },
@@ -110,17 +96,13 @@ test('users view shows active session count', async ({ browser }) => {
     await expect(page.getByRole('heading', { name: 'Members' })).toBeVisible();
   } finally {
     if (tenantId) {
-      const refresh = await context.request.post(BASE + '/t/platform/auth/token', {
-        data: { grant_type: 'refresh_token' },
-      });
-      if (refresh.ok()) {
-        const refreshJson = await refresh.json();
-        const accessToken = refreshJson.access_token as string;
+      try {
+        const cleanupToken = await getAccessToken(context);
         await context.request.delete(BASE + '/platform/self-serve/tenants/' + tenantId, {
-          headers: { Authorization: 'Bearer ' + accessToken },
+          headers: { Authorization: 'Bearer ' + cleanupToken },
           data: { confirm_slug: slug },
         });
-      }
+      } catch { /* cleanup best-effort */ }
     }
 
     await context.close();

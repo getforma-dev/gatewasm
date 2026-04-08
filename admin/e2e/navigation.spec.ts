@@ -29,17 +29,14 @@ test('authenticated: can navigate from console to login and back', async ({ brow
 
   // Start at console
   await page.goto('/platform/console');
-  await page.waitForTimeout(3000);
-  await expect(page.locator('.account-shell')).toBeVisible({ timeout: 5000 });
+  await expect(page.locator('.account-shell')).toBeVisible({ timeout: 8000 });
 
   // Navigate to login page (should still work even when authenticated)
-  await page.goto('/platform/login');
-  await page.waitForTimeout(2000);
+  await page.goto('/platform/login', { waitUntil: 'networkidle' });
 
   // Navigate back to console (auth cookie should still be valid)
   await page.goto('/platform/console');
-  await page.waitForTimeout(3000);
-  await expect(page.locator('.account-shell')).toBeVisible({ timeout: 5000 });
+  await expect(page.locator('.account-shell')).toBeVisible({ timeout: 8000 });
 
   await context.close();
 });
@@ -49,18 +46,15 @@ test('authenticated: no console errors across platform pages', async ({ browser 
   const errors = collectErrors(page);
 
   // Visit console
-  await page.goto('/platform/console');
-  await page.waitForTimeout(3000);
+  await page.goto('/platform/console', { waitUntil: 'networkidle' });
 
   // Visit onboarding
-  await page.goto('/platform/onboarding');
-  await page.waitForTimeout(2000);
+  await page.goto('/platform/onboarding', { waitUntil: 'networkidle' });
 
   // Visit benchmark
-  await page.goto('/platform/benchmark');
-  await page.waitForTimeout(2000);
+  await page.goto('/platform/benchmark', { waitUntil: 'networkidle' });
 
-  await expectNoConsoleErrors(errors);
+  expectNoConsoleErrors(errors);
   await context.close();
 });
 
@@ -103,22 +97,17 @@ test('tenant login receives correct tenant config', async ({ page }) => {
   expect(config.providers).toBeTruthy();
 });
 
-// ── All pages load without console errors (cross-page sweep) ────────────
+// ── Tenant pages load without console errors (not covered by smoke.spec.ts) ──
 
-const ALL_PUBLIC_PAGES = [
-  '/platform/login',
-  '/platform/onboarding',
-  '/platform/benchmark',
-  '/t/platform/login',
+const TENANT_PAGES = [
   '/t/platform/dashboard',
   '/t/platform/admin',
 ];
 
-for (const path of ALL_PUBLIC_PAGES) {
+for (const path of TENANT_PAGES) {
   test(`cross-page: ${path} loads without errors`, async ({ page }) => {
     const errors = collectErrors(page);
-    await page.goto(path, { waitUntil: 'domcontentloaded' });
-    await page.waitForTimeout(2000);
-    await expectNoConsoleErrors(errors);
+    await page.goto(path, { waitUntil: 'networkidle' });
+    expectNoConsoleErrors(errors);
   });
 }

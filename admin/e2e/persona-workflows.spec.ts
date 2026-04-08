@@ -8,37 +8,12 @@
  * 4. Agency (Multi-Tenant) — Tenant switcher, API Keys at a glance
  */
 
-import { test, expect } from '@playwright/test';
+import { test, expect, BrowserContext, Page } from '@playwright/test';
 import { loginAsTestUser } from './auth-helper';
-import { BASE } from './helpers';
-
-// ── Helper: get access token from context ──────────────────────────────
-async function getAccessToken(context: any): Promise<string> {
-  // Try multiple paths — cookie may be scoped differently
-  for (const path of ['/t/platform/auth/token', '/auth/token']) {
-    const headers: Record<string, string> = {};
-    if (path === '/auth/token') headers['X-Tenant-Slug'] = 'platform';
-    for (let attempt = 0; attempt < 3; attempt++) {
-      const refresh = await context.request.post(BASE + path, {
-        headers,
-        data: { grant_type: 'refresh_token' },
-      });
-      if (refresh.ok()) {
-        const json = await refresh.json();
-        return json.access_token as string;
-      }
-      if (refresh.status() === 429) {
-        await new Promise((r) => setTimeout(r, 1000));
-        continue;
-      }
-      break; // non-retryable error, try next path
-    }
-  }
-  throw new Error('Failed to get access token from either path');
-}
+import { BASE, getAccessToken } from './helpers';
 
 // ── Helper: create tenant via API ──────────────────────────────────────
-async function createTenant(context: any, token: string, name: string, slug: string): Promise<string> {
+async function createTenant(context: BrowserContext, token: string, name: string, slug: string): Promise<string> {
   const res = await context.request.post(BASE + '/platform/self-serve/tenants', {
     headers: { Authorization: 'Bearer ' + token },
     data: { name, slug },
@@ -49,24 +24,24 @@ async function createTenant(context: any, token: string, name: string, slug: str
 }
 
 // ── Helper: delete tenant via API ──────────────────────────────────────
-async function deleteTenant(context: any, tenantId: string, slug: string): Promise<void> {
+async function deleteTenant(context: BrowserContext, tenantId: string, slug: string): Promise<void> {
   try {
     const token = await getAccessToken(context);
     await context.request.delete(BASE + '/platform/self-serve/tenants/' + tenantId, {
       headers: { Authorization: 'Bearer ' + token },
       data: { confirm_slug: slug },
     });
-  } catch { /* cleanup best-effort */ }
+  } catch (e) { console.warn('Tenant cleanup failed:', e); }
 }
 
 // ── Helper: click a plane tab button (scoped to .plane-tier2) ──────────
-async function clickTab(page: any, name: string) {
+async function clickTab(page: Page, name: string) {
   await page.locator('.plane-tier2').getByRole('button', { name }).click();
   await page.waitForTimeout(800);
 }
 
 // ── Helper: click a plane button (scoped to .plane-tier1) ──────────────
-async function clickPlane(page: any, name: string) {
+async function clickPlane(page: Page, name: string) {
   await page.locator('.plane-tier1').getByRole('button', { name }).click();
   await page.waitForTimeout(500);
 }
@@ -78,6 +53,7 @@ async function clickPlane(page: any, name: string) {
 
 test.describe('Persona: Indie Dev', () => {
   test('create tenant → Overview → Integrate → Auth Reference → Webhooks', async ({ browser }) => {
+    test.setTimeout(45000);
     const { context, page } = await loginAsTestUser(browser);
     const slug = 'indie-' + Date.now().toString(36);
     let tenantId = '';
@@ -136,6 +112,7 @@ test.describe('Persona: Indie Dev', () => {
 
 test.describe('Persona: Startup B2B', () => {
   test('Members → Invites → Organizations → Roles → Audit Log', async ({ browser }) => {
+    test.setTimeout(45000);
     const { context, page } = await loginAsTestUser(browser);
     const slug = 'startup-' + Date.now().toString(36);
     let tenantId = '';
@@ -189,6 +166,7 @@ test.describe('Persona: Startup B2B', () => {
 
 test.describe('Persona: Enterprise', () => {
   test('Security Config → Sessions → Passkeys → Tokens → Activity', async ({ browser }) => {
+    test.setTimeout(45000);
     const { context, page } = await loginAsTestUser(browser);
     const slug = 'enterprise-' + Date.now().toString(36);
     let tenantId = '';
@@ -242,6 +220,7 @@ test.describe('Persona: Enterprise', () => {
 
 test.describe('Persona: Agency Multi-Tenant', () => {
   test('create 2 tenants → switch between them → API Keys view', async ({ browser }) => {
+    test.setTimeout(45000);
     const { context, page } = await loginAsTestUser(browser);
     const slug1 = 'client-a-' + Date.now().toString(36);
     const slug2 = 'client-b-' + Date.now().toString(36);
@@ -328,6 +307,7 @@ test.describe('Persona: Agency Multi-Tenant', () => {
 
 test.describe('Navigation Completeness', () => {
   test('all 3 account tabs + 12 workspace tabs are reachable', async ({ browser }) => {
+    test.setTimeout(45000);
     const { context, page } = await loginAsTestUser(browser);
     const slug = 'nav-test-' + Date.now().toString(36);
     let tenantId = '';

@@ -49,39 +49,37 @@ test('password fields stay masked after the onboarding UI hydrates', async ({ pa
 
 // --- Hydration Integrity ---
 
-test('initial hydration: no console errors', async ({ page }) => {
+test('onboarding: no console errors after hydration', async ({ page }) => {
   const errors = collectErrors(page);
-  await page.goto('/platform/onboarding');
-  await page.waitForTimeout(2000);
-  await expectNoConsoleErrors(errors);
+  await page.goto('/platform/onboarding', { waitUntil: 'networkidle' });
+  expectNoConsoleErrors(errors);
 });
 
-test('initial hydration: no FormaJS warnings for registered islands', async ({ page }) => {
+test('onboarding: no FormaJS warnings for registered islands', async ({ page }) => {
   const warnings = collectWarnings(page);
-  await page.goto('/platform/onboarding');
-  await page.waitForTimeout(2000);
+  await page.goto('/platform/onboarding', { waitUntil: 'networkidle' });
   // Sub-islands (island_1, etc.) from inline createShow emit expected warnings.
   const registeredWarnings = warnings.filter(w =>
     !w.includes('island_1') && !w.includes('island_2') &&
     !w.includes('island_3') && !w.includes('island_4')
   );
-  await expectNoHydrationWarnings(registeredWarnings);
+  expectNoHydrationWarnings(registeredWarnings);
 });
 
 // --- Form Interaction ---
 
-test('email input accepts typing', async ({ page }) => {
+test('onboarding: email input accepts typing', async ({ page }) => {
   await page.goto('/platform/onboarding');
-  await page.waitForTimeout(1000);
+  await page.locator('#reg-email').waitFor();
 
   await page.fill('#reg-email', 'test@example.com');
   const value = await page.locator('#reg-email').inputValue();
   expect(value).toBe('test@example.com');
 });
 
-test('password toggle switches between password and text', async ({ page }) => {
+test('onboarding: password toggle switches between password and text', async ({ page }) => {
   await page.goto('/platform/onboarding');
-  await page.waitForTimeout(1000);
+  await page.locator('#reg-password').waitFor();
 
   // Initially type="password"
   const typeBefore = await page.locator('#reg-password').getAttribute('type');
@@ -96,12 +94,11 @@ test('password toggle switches between password and text', async ({ page }) => {
   expect(typeAfter).toBe('text');
 });
 
-test('submit empty form shows email required error', async ({ page }) => {
+test('onboarding: submit empty form shows email required error', async ({ page }) => {
   await page.goto('/platform/onboarding');
-  await page.waitForTimeout(1000);
+  await page.locator('button[type="submit"]').waitFor();
 
   await page.locator('button[type="submit"]').click();
-  await page.waitForTimeout(500);
 
   const errorAlert = page.locator('.alert.error.show');
   await expect(errorAlert).toBeVisible({ timeout: 3000 });
@@ -109,15 +106,14 @@ test('submit empty form shows email required error', async ({ page }) => {
   expect(text).toContain('Email is required');
 });
 
-test('submit with short password shows validation error', async ({ page }) => {
+test('onboarding: submit with short password shows validation error', async ({ page }) => {
   await page.goto('/platform/onboarding');
-  await page.waitForTimeout(1000);
+  await page.locator('#reg-email').waitFor();
 
   await page.fill('#reg-email', 'test@example.com');
   await page.fill('#reg-password', 'short');
   await page.fill('#reg-confirm', 'short');
   await page.locator('button[type="submit"]').click();
-  await page.waitForTimeout(500);
 
   const errorAlert = page.locator('.alert.error.show');
   await expect(errorAlert).toBeVisible({ timeout: 3000 });
@@ -125,15 +121,14 @@ test('submit with short password shows validation error', async ({ page }) => {
   expect(text).toContain('at least 8 characters');
 });
 
-test('submit with mismatched passwords shows validation error', async ({ page }) => {
+test('onboarding: submit with mismatched passwords shows validation error', async ({ page }) => {
   await page.goto('/platform/onboarding');
-  await page.waitForTimeout(1000);
+  await page.locator('#reg-email').waitFor();
 
   await page.fill('#reg-email', 'test@example.com');
   await page.fill('#reg-password', 'password123');
   await page.fill('#reg-confirm', 'different123');
   await page.locator('button[type="submit"]').click();
-  await page.waitForTimeout(500);
 
   const errorAlert = page.locator('.alert.error.show');
   await expect(errorAlert).toBeVisible({ timeout: 3000 });
@@ -145,7 +140,7 @@ test('submit with mismatched passwords shows validation error', async ({ page })
 
 test('sign-in link navigates to /platform/login', async ({ page }) => {
   await page.goto('/platform/onboarding');
-  await page.waitForTimeout(1000);
+  await page.locator('a[href="/platform/login"]').waitFor();
 
   const link = page.locator('a[href="/platform/login"]');
   await expect(link).toBeVisible();
@@ -156,7 +151,7 @@ test('sign-in link navigates to /platform/login', async ({ page }) => {
 
 test('CTA links to auth section', async ({ page }) => {
   await page.goto('/platform/onboarding');
-  await page.waitForTimeout(1000);
+  await page.locator('.cta-btn').waitFor();
 
   // CTA is an anchor to #auth-section
   const cta = page.locator('.cta-btn');
@@ -167,15 +162,13 @@ test('CTA links to auth section', async ({ page }) => {
 
 // --- Layout ---
 
-test('no layout overflow', async ({ page }) => {
-  await page.goto('/platform/onboarding');
-  await page.waitForTimeout(1000);
+test('onboarding: no layout overflow', async ({ page }) => {
+  await page.goto('/platform/onboarding', { waitUntil: 'networkidle' });
   await expectNoLayoutOverflow(page);
 });
 
-test('no DOM doubling after hydration', async ({ browser, page }) => {
-  await page.goto('/platform/onboarding');
-  await page.waitForTimeout(2000);
+test('onboarding: no DOM doubling after hydration', async ({ browser, page }) => {
+  await page.goto('/platform/onboarding', { waitUntil: 'networkidle' });
   await expect(page.locator('#reg-email')).toHaveCount(1);
   await expect(page.locator('#reg-password')).toHaveCount(1);
   await expect(page.locator('#reg-confirm')).toHaveCount(1);

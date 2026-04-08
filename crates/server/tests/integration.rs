@@ -105,6 +105,7 @@ async fn test_app_with_compliance(compliance: ComplianceConfig) -> (axum::Router
         compliance,
         ssf_signing_key_pem: None,
         maxmind_db_path: None,
+        ws_ticket_ttl_secs: 30,
     };
 
     let keys = KeyPair::from_pem_or_generate(None);
@@ -119,7 +120,7 @@ async fn test_app_with_compliance(compliance: ComplianceConfig) -> (axum::Router
         render_modes: std::collections::HashMap::new(),
         ir_modules: std::collections::HashMap::new(),
         event_bus: gatewasm_server::ws::EventBus::new(),
-        ticket_store: gatewasm_server::ws::ticket::TicketStore::new(),
+        ticket_store: gatewasm_server::ws::ticket::TicketStore::new(30),
         connection_limits: gatewasm_server::ws::handler::ConnectionLimits::new(),
         shutdown_tx,
     };
@@ -207,6 +208,7 @@ async fn test_app_with_pool() -> (axum::Router, PgPool) {
         compliance: ComplianceConfig::default(),
         ssf_signing_key_pem: None,
         maxmind_db_path: None,
+        ws_ticket_ttl_secs: 30,
     };
 
     let keys = KeyPair::from_pem_or_generate(None);
@@ -221,7 +223,7 @@ async fn test_app_with_pool() -> (axum::Router, PgPool) {
         render_modes: std::collections::HashMap::new(),
         ir_modules: std::collections::HashMap::new(),
         event_bus: gatewasm_server::ws::EventBus::new(),
-        ticket_store: gatewasm_server::ws::ticket::TicketStore::new(),
+        ticket_store: gatewasm_server::ws::ticket::TicketStore::new(30),
         connection_limits: gatewasm_server::ws::handler::ConnectionLimits::new(),
         shutdown_tx,
     };

@@ -45,17 +45,15 @@ test('password field is masked once the login UI hydrates', async ({ page }) => 
 
 // --- Hydration Integrity ---
 
-test('initial hydration: no console errors', async ({ page }) => {
+test('login: no console errors after hydration', async ({ page }) => {
   const errors = collectErrors(page);
-  await page.goto('/platform/login');
-  await page.waitForTimeout(2000);
-  await expectNoConsoleErrors(errors);
+  await page.goto('/platform/login', { waitUntil: 'networkidle' });
+  expectNoConsoleErrors(errors);
 });
 
-test('initial hydration: no FormaJS warnings for registered islands', async ({ page }) => {
+test('login: no FormaJS warnings for registered islands', async ({ page }) => {
   const warnings = collectWarnings(page);
-  await page.goto('/platform/login');
-  await page.waitForTimeout(2000);
+  await page.goto('/platform/login', { waitUntil: 'networkidle' });
   // Sub-islands (island_1, island_2, etc.) emit expected warnings since they are
   // inline helpers not registered in activateIslands. Filter to only check
   // warnings for the 2 registered islands.
@@ -63,23 +61,23 @@ test('initial hydration: no FormaJS warnings for registered islands', async ({ p
     !w.includes('island_1') && !w.includes('island_2') &&
     !w.includes('island_3') && !w.includes('island_4')
   );
-  await expectNoHydrationWarnings(registeredWarnings);
+  expectNoHydrationWarnings(registeredWarnings);
 });
 
 // --- Form Interaction ---
 
-test('email input accepts typing', async ({ page }) => {
+test('login: email input accepts typing', async ({ page }) => {
   await page.goto('/platform/login');
-  await page.waitForTimeout(1000);
+  await page.locator('#email').waitFor();
 
   await page.fill('#email', 'test@example.com');
   const value = await page.locator('#email').inputValue();
   expect(value).toBe('test@example.com');
 });
 
-test('password toggle switches between password and text', async ({ page }) => {
+test('login: password toggle switches between password and text', async ({ page }) => {
   await page.goto('/platform/login');
-  await page.waitForTimeout(1000);
+  await page.locator('#password').waitFor();
 
   // Initially type="password"
   const typeBefore = await page.locator('#password').getAttribute('type');
@@ -96,13 +94,12 @@ test('password toggle switches between password and text', async ({ page }) => {
   expect(typeReset).toBe('password');
 });
 
-test('submit empty form shows error message', async ({ page }) => {
+test('login: submit empty form shows error message', async ({ page }) => {
   await page.goto('/platform/login');
-  await page.waitForTimeout(1000);
+  await page.locator('button[type="submit"]').waitFor();
 
   // Submit with empty fields
   await page.locator('button[type="submit"]').click();
-  await page.waitForTimeout(1000);
 
   // Error alert should become visible
   const errorAlert = page.locator('.alert.error.show');
@@ -113,7 +110,7 @@ test('submit empty form shows error message', async ({ page }) => {
 
 test('"New here?" link navigates to /platform/onboarding', async ({ page }) => {
   await page.goto('/platform/login');
-  await page.waitForTimeout(1000);
+  await page.locator('a[href="/platform/onboarding"]').waitFor();
 
   const link = page.locator('a[href="/platform/onboarding"]');
   await expect(link).toBeVisible();
@@ -124,15 +121,13 @@ test('"New here?" link navigates to /platform/onboarding', async ({ page }) => {
 
 // --- Layout ---
 
-test('no layout overflow', async ({ page }) => {
-  await page.goto('/platform/login');
-  await page.waitForTimeout(1000);
+test('login: no layout overflow', async ({ page }) => {
+  await page.goto('/platform/login', { waitUntil: 'networkidle' });
   await expectNoLayoutOverflow(page);
 });
 
-test('no DOM doubling after hydration', async ({ browser, page }) => {
-  await page.goto('/platform/login');
-  await page.waitForTimeout(2000);
+test('login: no DOM doubling after hydration', async ({ browser, page }) => {
+  await page.goto('/platform/login', { waitUntil: 'networkidle' });
   await expect(page.locator('#email')).toHaveCount(1);
   await expect(page.locator('#password')).toHaveCount(1);
   await expect(page.locator('.card')).toHaveCount(1);

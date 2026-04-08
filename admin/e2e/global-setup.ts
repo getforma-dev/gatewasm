@@ -9,19 +9,23 @@ export default async function globalSetup() {
   try { execSync(`lsof -ti :${PORT} | xargs kill 2>/dev/null`); } catch {}
   await new Promise(r => setTimeout(r, 1000));
 
+  // Test-only defaults — override via environment for CI or shared envs.
   const server = spawn('cargo', ['run', '-p', 'gatewasm-server'], {
     cwd: process.cwd().replace('/admin', ''),
     env: {
       ...process.env,
       PORT: String(PORT),
       SERVER_URL: `http://127.0.0.1:${PORT}`,
-      DATABASE_URL: 'postgres://gatewasm:gatewasm@localhost:5433/gatewasm_test',
-      JWT_SECRET: 'test-secret-key-for-development',
-      MASTER_MGMT_KEY: 'mgmt_test_key',
-      MASTER_PLATFORM_KEY: 'plat_local_dev_key',
-      COOKIE_DOMAIN: 'localhost',
-      JWT_ACCESS_TOKEN_EXPIRY: '60',
-      REGISTER_RATE_LIMIT_BURST: '100',
+      DATABASE_URL: process.env.DATABASE_URL || 'postgres://gatewasm:gatewasm@localhost:5433/gatewasm_test',
+      JWT_SECRET: process.env.JWT_SECRET || 'test-secret-key-for-development',
+      MASTER_MGMT_KEY: process.env.MASTER_MGMT_KEY || 'mgmt_test_key',
+      MASTER_PLATFORM_KEY: process.env.MASTER_PLATFORM_KEY || 'plat_local_dev_key',
+      COOKIE_DOMAIN: process.env.COOKIE_DOMAIN || 'localhost',
+      JWT_ACCESS_TOKEN_EXPIRY: process.env.JWT_ACCESS_TOKEN_EXPIRY || '60',
+      REGISTER_RATE_LIMIT_BURST: process.env.REGISTER_RATE_LIMIT_BURST || '500',
+      LOGIN_RATE_LIMIT_BURST: process.env.LOGIN_RATE_LIMIT_BURST || '500',
+      TOKEN_RATE_LIMIT_BURST: process.env.TOKEN_RATE_LIMIT_BURST || '500',
+      WS_TICKET_TTL_SECS: process.env.WS_TICKET_TTL_SECS || '5',
     },
     stdio: ['ignore', 'pipe', 'pipe'],
     detached: true,

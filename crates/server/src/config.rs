@@ -55,6 +55,8 @@ pub struct AppConfig {
     pub ssf_signing_key_pem: Option<String>,
     /// Path to a MaxMind GeoIP database (`.mmdb`) for impossible-travel detection.
     pub maxmind_db_path: Option<String>,
+    /// WebSocket ticket time-to-live in seconds (default 30).
+    pub ws_ticket_ttl_secs: u64,
 }
 
 impl std::fmt::Debug for AppConfig {
@@ -211,6 +213,10 @@ impl AppConfig {
             compliance: ComplianceConfig::from_env(),
             ssf_signing_key_pem: env::var("SSF_SIGNING_KEY").ok(),
             maxmind_db_path: env::var("MAXMIND_DB_PATH").ok(),
+            ws_ticket_ttl_secs: env::var("WS_TICKET_TTL_SECS")
+                .unwrap_or_else(|_| "30".to_string())
+                .parse()
+                .unwrap_or(30),
         }
     }
 }

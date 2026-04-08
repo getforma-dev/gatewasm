@@ -1,25 +1,11 @@
 import { test, expect } from '@playwright/test';
-import { BASE } from './helpers';
-
-async function postJsonWithRetry(request: any, url: string, options: any, attempts = 4) {
-  let response: any;
-  for (let attempt = 0; attempt < attempts; attempt += 1) {
-    response = await request.post(url, options);
-    if (response.status() !== 429) {
-      return response;
-    }
-    const retryAfter = Number(response.headers()['retry-after'] || '1');
-    await new Promise((resolve) => setTimeout(resolve, Math.max(500, retryAfter * 1000)));
-  }
-  return response;
-}
+import { BASE, postWithRetry } from './helpers';
 
 test.describe('Route and cache fixes', () => {
 
   test('/dev/clear-cache clears SW, caches, storage, and cookies', async ({ page }) => {
     // Set some state first
-    await page.goto(BASE + '/t/platform/login');
-    await page.waitForTimeout(2000);
+    await page.goto(BASE + '/t/platform/login', { waitUntil: 'networkidle' });
     await page.evaluate(() => {
       localStorage.setItem('test_key', 'test_value');
       sessionStorage.setItem('test_session', 'test_value');
@@ -27,7 +13,7 @@ test.describe('Route and cache fixes', () => {
 
     // Hit the clear cache page
     await page.goto(BASE + '/dev/clear-cache');
-    await page.waitForTimeout(3000);
+    await page.waitForFunction(() => document.body?.textContent?.includes('Done'), { timeout: 10000 });
 
     const body = await page.textContent('body');
     expect(body).toContain('localStorage cleared');
@@ -36,43 +22,31 @@ test.describe('Route and cache fixes', () => {
     expect(body).toContain('Done');
 
     // Verify localStorage actually cleared
-    await page.goto(BASE + '/t/platform/login');
-    await page.waitForTimeout(1000);
+    await page.goto(BASE + '/t/platform/login', { waitUntil: 'networkidle' });
     const lsValue = await page.evaluate(() => localStorage.getItem('test_key'));
     expect(lsValue).toBeNull();
-    console.log('✓ /dev/clear-cache works');
   });
 
   test('dashboard does NOT doom-loop', async ({ page }) => {
     await page.goto(BASE + '/t/platform/dashboard');
-    await page.waitForTimeout(10000);
-
-    const finalUrl = page.url();
-    const body = await page.textContent('body');
-    console.log('Dashboard final URL:', finalUrl);
-
-    // Should have settled on login page (not looping)
-    const settled = finalUrl.includes('/login') ||
-      (body?.includes('Unable to load') ?? false) ||
-      (body?.includes('Sign in') ?? false);
-    expect(settled).toBeTruthy();
-    console.log('✓ Dashboard no doom loop');
+    // Wait for the page to settle — should redirect to login, not loop
+    await page.waitForURL('**/login', { timeout: 15000 });
+    expect(page.url()).toContain('/login');
   });
 
   test('login page respects mode=register param', async ({ page }) => {
     await page.goto(BASE + '/t/platform/login?mode=register');
-    await page.waitForTimeout(3000);
+    await page.waitForSelector('.tl-card', { timeout: 5000 });
     const body = await page.textContent('body');
     const hasRegister = body?.includes('Create') || body?.includes('Sign up');
     expect(hasRegister).toBeTruthy();
-    console.log('✓ mode=register works');
   });
 
   test('redirect param works for tenant-owner login preview', async ({ page, request }) => {
     const slug = 'redir-test-' + Date.now().toString(36);
     const email = `owner-${Date.now()}@test.com`;
 
-    const signup = await postJsonWithRetry(request, BASE + '/auth/register', {
+    const signup = await postWithRetry(request, BASE + '/auth/register', {
       headers: { 'X-Tenant-Slug': 'platform', 'Content-Type': 'application/json' },
       data: { email, password: 'Test1234!', name: 'Owner Test' },
     });
@@ -82,7 +56,7 @@ test.describe('Route and cache fixes', () => {
     const { access_token } = await signup.json();
     expect(access_token).toBeTruthy();
 
-    const create = await postJsonWithRetry(request, BASE + '/platform/self-serve/tenants', {
+    const create = await postWithRetry(request, BASE + '/platform/self-serve/tenants', {
       headers: { 'Authorization': 'Bearer ' + access_token, 'Content-Type': 'application/json' },
       data: { name: 'Redirect Test App', slug },
     });
@@ -94,7 +68,7 @@ test.describe('Route and cache fixes', () => {
     const tenantId = String(createJson.tenant?.id || createJson.id || '');
 
     await page.goto(BASE + '/t/' + slug + '/login?redirect=/t/' + slug + '/site&mode=register');
-    await page.waitForTimeout(2000);
+    await page.waitForSelector('.tl-card', { timeout: 5000 });
 
     const body = await page.textContent('body');
     const hasRegister = body?.includes('Create') || body?.includes('Sign up');

@@ -28,10 +28,9 @@ test('authenticated: console loads with account shell and workspaces view', asyn
   const { context, page } = await loginAsTestUser(browser);
   try {
     await page.goto('/platform/console');
-    await page.waitForTimeout(1500);
 
     // Account mode: renders .account-shell with tabs
-    await expect(page.locator('.account-shell')).toBeVisible({ timeout: 5000 });
+    await expect(page.locator('.account-shell')).toBeVisible({ timeout: 8000 });
     await expect(page.locator('.account-tabs').getByRole('button', { name: 'Tenants' })).toBeVisible();
     await expect(page.getByText('Your Workspaces')).toBeVisible();
 
@@ -46,9 +45,8 @@ test('authenticated: no console errors', async ({ browser }) => {
   const { context, page } = await loginAsTestUser(browser);
   const errors = collectErrors(page);
   try {
-    await page.goto('/platform/console');
-    await page.waitForTimeout(3000);
-    await expectNoConsoleErrors(errors);
+    await page.goto('/platform/console', { waitUntil: 'networkidle' });
+    expectNoConsoleErrors(errors);
   } finally {
     await context.close();
   }
@@ -58,7 +56,7 @@ test('authenticated: tenant create modal shows current required fields', async (
   const { context, page } = await loginAsTestUser(browser);
   try {
     await page.goto('/platform/console');
-    await page.waitForTimeout(1500);
+    await expect(page.locator('.account-shell')).toBeVisible({ timeout: 8000 });
 
     // Open the create workspace modal
     await page.getByRole('button', { name: '+ New Workspace' }).click();
@@ -77,7 +75,7 @@ test('authenticated: tenant slug preview updates from the current form fields', 
   const { context, page } = await loginAsTestUser(browser);
   try {
     await page.goto('/platform/console');
-    await page.waitForTimeout(1500);
+    await expect(page.locator('.account-shell')).toBeVisible({ timeout: 8000 });
 
     // Open the create workspace modal
     await page.getByRole('button', { name: '+ New Workspace' }).click();
@@ -102,7 +100,7 @@ test('authenticated: sign out redirects to login', async ({ browser }) => {
   const { context, page } = await loginAsTestUser(browser);
   try {
     await page.goto('/platform/console');
-    await page.waitForTimeout(1500);
+    await expect(page.locator('.account-shell')).toBeVisible({ timeout: 8000 });
 
     // Click the avatar button to open the account menu
     await page.locator('.account-shell .plane-avatar').click();
@@ -120,8 +118,7 @@ test('authenticated: sign out redirects to login', async ({ browser }) => {
 test('authenticated: no layout overflow', async ({ browser }) => {
   const { context, page } = await loginAsTestUser(browser);
   try {
-    await page.goto('/platform/console');
-    await page.waitForTimeout(3000);
+    await page.goto('/platform/console', { waitUntil: 'networkidle' });
     await expectNoLayoutOverflow(page);
   } finally {
     await context.close();

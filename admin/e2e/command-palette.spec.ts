@@ -1,15 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { loginAsTestUser } from './auth-helper';
-import { BASE } from './helpers';
-
-async function createAccessToken(context: Awaited<ReturnType<typeof loginAsTestUser>>['context']) {
-  const refresh = await context.request.post(BASE + '/t/platform/auth/token', {
-    data: { grant_type: 'refresh_token' },
-  });
-  expect(refresh.ok()).toBeTruthy();
-  const refreshJson = await refresh.json();
-  return refreshJson.access_token as string;
-}
+import { BASE, getAccessToken } from './helpers';
 
 test('quick switcher opens from keyboard and switches tenants', async ({ browser }) => {
   const { context, page } = await loginAsTestUser(browser);
@@ -18,7 +9,7 @@ test('quick switcher opens from keyboard and switches tenants', async ({ browser
   const createdTenants: { id: string; slug: string }[] = [];
 
   try {
-    const accessToken = await createAccessToken(context);
+    const accessToken = await getAccessToken(context);
 
     for (const tenant of [
       { name: 'Palette Alpha', slug: slugA },
@@ -54,7 +45,7 @@ test('quick switcher opens from keyboard and switches tenants', async ({ browser
     await expect(page.getByRole('heading', { name: 'Palette Beta' })).toBeVisible();
     await expect(page.locator('.plane-tenant-name')).toContainText('Palette Beta');
   } finally {
-    const cleanupToken = await createAccessToken(context);
+    const cleanupToken = await getAccessToken(context);
     for (const tenant of createdTenants) {
       await context.request.delete(BASE + '/platform/self-serve/tenants/' + tenant.id, {
         headers: { Authorization: 'Bearer ' + cleanupToken },

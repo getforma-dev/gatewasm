@@ -1,6 +1,55 @@
-import { Page, expect } from '@playwright/test';
+import { Page, expect, APIRequestContext, BrowserContext } from '@playwright/test';
 
 export const BASE = process.env.BASE_URL || 'http://127.0.0.1:3102';
+
+/**
+ * POST with automatic 429 retry and exponential backoff.
+ * Works with both APIRequestContext (from test fixtures) and
+ * BrowserContext.request (from browser-based tests).
+ */
+export async function postWithRetry(
+  request: APIRequestContext,
+  url: string,
+  options: { headers?: Record<string, string>; data?: unknown },
+  attempts = 6,
+): Promise<any> {
+  let response: any;
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    response = await request.post(url, options);
+    if (response.status() !== 429) return response;
+    const retryAfter = Number(response.headers()['retry-after'] || '2');
+    await new Promise(r => setTimeout(r, Math.max(1000, retryAfter * 1000 + 500)));
+  }
+  return response;
+}
+
+/**
+ * Exchange the refresh cookie for a short-lived access token.
+ * Retries on 429 and tries multiple token paths for compatibility.
+ */
+export async function getAccessToken(context: BrowserContext): Promise<string> {
+  for (const path of ['/t/platform/auth/token', '/auth/token']) {
+    const headers: Record<string, string> = {};
+    if (path === '/auth/token') headers['X-Tenant-Slug'] = 'platform';
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const res = await context.request.post(BASE + path, {
+        headers,
+        data: { grant_type: 'refresh_token' },
+      });
+      if (res.ok()) {
+        const json = await res.json();
+        return json.access_token as string;
+      }
+      if (res.status() === 429) {
+        const retryAfter = Number(res.headers()['retry-after'] || '2');
+        await new Promise(r => setTimeout(r, Math.max(1000, retryAfter * 1000 + 500)));
+        continue;
+      }
+      break; // non-retryable error, try next path
+    }
+  }
+  throw new Error('getAccessToken: failed to obtain token from any path');
+}
 
 /**
  * Collect console errors during page load. Filters known CSP violations.
@@ -46,12 +95,12 @@ export function collectWarnings(page: Page): string[] {
 }
 
 /** Assert no console errors after page load. */
-export async function expectNoConsoleErrors(errors: string[]) {
+export function expectNoConsoleErrors(errors: string[]) {
   expect(errors).toEqual([]);
 }
 
 /** Assert no FormaJS hydration warnings. */
-export async function expectNoHydrationWarnings(warnings: string[]) {
+export function expectNoHydrationWarnings(warnings: string[]) {
   expect(warnings).toEqual([]);
 }
 
@@ -73,14 +122,13 @@ export async function expectSSRContent(page: Page, route: string, browser: any) 
 
 /**
  * Assert all islands reached status="active" (no pending islands remain).
- * Waits up to 3s for hydration to complete.
+ * Polls until no pending islands exist, up to 5s timeout.
  */
 export async function expectIslandsActive(page: Page) {
-  await page.waitForTimeout(2000);
-  const pending = await page.evaluate(() =>
-    document.querySelectorAll('[data-forma-status="pending"]').length
+  await page.waitForFunction(
+    () => document.querySelectorAll('[data-forma-status="pending"]').length === 0,
+    { timeout: 5000 },
   );
-  expect(pending).toBe(0);
 }
 
 /**

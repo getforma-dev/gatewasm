@@ -1,29 +1,7 @@
 import { test, expect, APIRequestContext } from '@playwright/test';
-import { BASE } from './helpers';
+import { BASE, postWithRetry } from './helpers';
 
 const TEST_PASSWORD = 'E2eTestPassword123!';
-
-// ── Helpers ──────────────────────────────────────────────────────────────────
-
-async function postWithRetry(
-  request: APIRequestContext,
-  url: string,
-  options: any,
-  attempts = 8,
-) {
-  let response: any;
-  for (let attempt = 0; attempt < attempts; attempt += 1) {
-    response = await request.post(url, options);
-    if (response.status() !== 429) {
-      return response;
-    }
-    const retryAfter = Number(response.headers()['retry-after'] || '2');
-    await new Promise((resolve) =>
-      setTimeout(resolve, Math.max(1000, retryAfter * 1000 + 500)),
-    );
-  }
-  return response;
-}
 
 async function createTestAccount(
   request: APIRequestContext,
@@ -159,10 +137,25 @@ async function listTenants(
   return data.tenants || [];
 }
 
+/** Re-login to get a fresh access token (avoids stale token in afterAll). */
+async function refreshAccountToken(
+  request: APIRequestContext,
+  email: string,
+): Promise<string> {
+  const res = await postWithRetry(request, BASE + '/auth/login', {
+    headers: { 'X-Tenant-Slug': 'platform', 'Content-Type': 'application/json' },
+    data: { email, password: TEST_PASSWORD },
+  });
+  if (!res.ok()) throw new Error(`refreshAccountToken(${email}) failed: ${await res.text()}`);
+  const data = await res.json();
+  return data.access_token as string;
+}
+
 // ── Block 1: Invite Lifecycle ─────────────────────────────────────────────────
 
 test.describe.serial('Invite Lifecycle', () => {
   let ownerAToken: string;
+  let ownerAEmail: string;
   let tenantA1: { id: string; slug: string };
   let memberCToken: string;
   let memberCEmail: string;
@@ -174,6 +167,7 @@ test.describe.serial('Invite Lifecycle', () => {
   test.beforeAll(async ({ request }) => {
     const ownerA = await createTestAccount(request, 'owner-a-inv');
     ownerAToken = ownerA.token;
+    ownerAEmail = ownerA.email;
 
     tenantA1 = await createTestTenant(request, ownerAToken, 'Invite Tenant A1');
 
@@ -184,11 +178,12 @@ test.describe.serial('Invite Lifecycle', () => {
 
   test.afterAll(async ({ request }) => {
     if (tenantA1?.id) {
+      const freshToken = await refreshAccountToken(request, ownerAEmail);
       await request.delete(
         BASE + '/platform/self-serve/tenants/' + tenantA1.id,
         {
           headers: {
-            Authorization: 'Bearer ' + ownerAToken,
+            Authorization: 'Bearer ' + freshToken,
             'Content-Type': 'application/json',
           },
           data: { confirm_slug: tenantA1.slug },
@@ -338,13 +333,14 @@ test.describe.serial('Role Enforcement', () => {
   });
 
   test.afterAll(async ({ request }) => {
+    const freshToken = await refreshAccountToken(request, ownerAEmail);
     for (const tenant of [tenantA1, tenantA2]) {
       if (tenant?.id) {
         await request.delete(
           BASE + '/platform/self-serve/tenants/' + tenant.id,
           {
             headers: {
-              Authorization: 'Bearer ' + ownerAToken,
+              Authorization: 'Bearer ' + freshToken,
               'Content-Type': 'application/json',
             },
             data: { confirm_slug: tenant.slug },
@@ -570,11 +566,12 @@ test.describe('Cross-Account Isolation', () => {
 
   test.afterAll(async ({ request }) => {
     if (tenantA1?.id) {
+      const freshA = await refreshAccountToken(request, ownerAEmail);
       await request.delete(
         BASE + '/platform/self-serve/tenants/' + tenantA1.id,
         {
           headers: {
-            Authorization: 'Bearer ' + ownerAToken,
+            Authorization: 'Bearer ' + freshA,
             'Content-Type': 'application/json',
           },
           data: { confirm_slug: tenantA1.slug },
@@ -582,11 +579,12 @@ test.describe('Cross-Account Isolation', () => {
       );
     }
     if (tenantB1?.id) {
+      const freshB = await refreshAccountToken(request, ownerBEmail);
       await request.delete(
         BASE + '/platform/self-serve/tenants/' + tenantB1.id,
         {
           headers: {
-            Authorization: 'Bearer ' + ownerBToken,
+            Authorization: 'Bearer ' + freshB,
             'Content-Type': 'application/json',
           },
           data: { confirm_slug: tenantB1.slug },

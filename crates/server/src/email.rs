@@ -572,6 +572,7 @@ mod tests {
             compliance: ComplianceConfig::default(),
             ssf_signing_key_pem: None,
             maxmind_db_path: None,
+            ws_ticket_ttl_secs: 30,
         }
     }
 }

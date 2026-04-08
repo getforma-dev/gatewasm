@@ -1,18 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { BASE } from './helpers';
-
-async function postJsonWithRetry(request: any, url: string, options: any, attempts = 4) {
-  let response: any;
-  for (let attempt = 0; attempt < attempts; attempt += 1) {
-    response = await request.post(url, options);
-    if (response.status() !== 429) {
-      return response;
-    }
-    const retryAfter = Number(response.headers()['retry-after'] || '1');
-    await new Promise((resolve) => setTimeout(resolve, Math.max(500, retryAfter * 1000)));
-  }
-  return response;
-}
+import { BASE, postWithRetry } from './helpers';
 
 test.describe('Tenant workspace lifecycle', () => {
 
@@ -27,7 +14,7 @@ test.describe('Tenant workspace lifecycle', () => {
     platformEmail = `e2e-${Date.now()}@test.com`;
 
     // Register platform account via API
-    const signup = await postJsonWithRetry(request, BASE + '/auth/register', {
+    const signup = await postWithRetry(request, BASE + '/auth/register', {
       headers: { 'X-Tenant-Slug': 'platform', 'Content-Type': 'application/json' },
       data: { email: platformEmail, password: platformPassword, name: 'E2E User' },
     });
@@ -39,7 +26,7 @@ test.describe('Tenant workspace lifecycle', () => {
     if (!platformToken) throw new Error('Platform signup failed: ' + JSON.stringify(signupData));
 
     // Create tenant via API
-    const create = await postJsonWithRetry(request, BASE + '/platform/self-serve/tenants', {
+    const create = await postWithRetry(request, BASE + '/platform/self-serve/tenants', {
       headers: { 'Authorization': 'Bearer ' + platformToken, 'Content-Type': 'application/json' },
       data: { name: 'E2E Workspace App', slug: tenantSlug },
     });
@@ -84,7 +71,7 @@ test.describe('Tenant workspace lifecycle', () => {
   test('registering a tenant user updates workspace stats', async ({ request }) => {
     // Register a user on the tenant via API
     tenantUserEmail = 'testuser-' + Date.now().toString(36) + '@e2e.com';
-    const reg = await postJsonWithRetry(request, BASE + '/auth/register', {
+    const reg = await postWithRetry(request, BASE + '/auth/register', {
       headers: { 'X-Tenant-Slug': tenantSlug, 'Content-Type': 'application/json' },
       data: {
         email: tenantUserEmail,
@@ -93,15 +80,12 @@ test.describe('Tenant workspace lifecycle', () => {
       },
     });
     expect(reg.status()).toBeLessThan(300);
-    const regData = await reg.json();
-    console.log('User registered:', regData.user_id ? 'yes' : 'check response');
 
     // Verify stats show the user
     const stats = await request.get(BASE + '/platform/self-serve/tenants/' + tenantId + '/stats', {
       headers: { 'Authorization': 'Bearer ' + platformToken },
     });
     const statsData = await stats.json();
-    console.log('Stats:', { total_users: statsData.total_users, latest_user: statsData.latest_user });
     expect(statsData.total_users).toBeGreaterThanOrEqual(1);
     expect(statsData.latest_user).toBeTruthy();
     expect(statsData.latest_user.email).toBe(tenantUserEmail);

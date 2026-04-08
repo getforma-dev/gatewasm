@@ -41,16 +41,14 @@ test('tenant login renders login form after JS loads', async ({ page }) => {
 
 test('tenant login: no console errors', async ({ page }) => {
   const errors = collectErrors(page);
-  await page.goto(TENANT_LOGIN);
-  await page.waitForTimeout(2000);
-  await expectNoConsoleErrors(errors);
+  await page.goto(TENANT_LOGIN, { waitUntil: 'networkidle' });
+  expectNoConsoleErrors(errors);
 });
 
 test('tenant login: no hydration warnings', async ({ page }) => {
   const warnings = collectWarnings(page);
-  await page.goto(TENANT_LOGIN);
-  await page.waitForTimeout(2000);
-  await expectNoHydrationWarnings(warnings);
+  await page.goto(TENANT_LOGIN, { waitUntil: 'networkidle' });
+  expectNoHydrationWarnings(warnings);
 });
 
 // --- Branding ---
@@ -77,7 +75,7 @@ test('tenant login shows powered-by footer', async ({ page }) => {
 
 // --- Form Interaction ---
 
-test('email input accepts typing', async ({ page }) => {
+test('tenant login: email input accepts typing', async ({ page }) => {
   await page.goto(TENANT_LOGIN);
   await page.waitForSelector('.tl-card', { timeout: 5000 });
 
@@ -87,7 +85,7 @@ test('email input accepts typing', async ({ page }) => {
   expect(value).toBe('test@example.com');
 });
 
-test('password toggle switches between password and text', async ({ page }) => {
+test('tenant login: password toggle switches between password and text', async ({ page }) => {
   await page.goto(TENANT_LOGIN);
   await page.waitForSelector('.tl-card', { timeout: 5000 });
 
@@ -136,7 +134,6 @@ test('toggle between login and register modes', async ({ page }) => {
 // --- Layout ---
 
 test('tenant login: no layout overflow', async ({ page }) => {
-  await page.goto(TENANT_LOGIN);
-  await page.waitForTimeout(1000);
+  await page.goto(TENANT_LOGIN, { waitUntil: 'networkidle' });
   await expectNoLayoutOverflow(page);
 });

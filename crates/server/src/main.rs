@@ -73,7 +73,7 @@ async fn main() {
         render_modes,
         ir_modules,
         event_bus: EventBus::new(),
-        ticket_store: TicketStore::new(),
+        ticket_store: TicketStore::new(config.ws_ticket_ttl_secs),
         connection_limits: ConnectionLimits::new(),
         shutdown_tx,
     };

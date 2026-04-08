@@ -7,10 +7,15 @@ type DefaultGovernorLayer = GovernorLayer<
 >;
 
 /// Rate limit for login endpoints: replenishes 6 tokens/sec, burst of 10 per IP.
+/// Override burst size with LOGIN_RATE_LIMIT_BURST env var (useful for e2e tests).
 pub fn login_limiter() -> DefaultGovernorLayer {
+    let burst: u32 = std::env::var("LOGIN_RATE_LIMIT_BURST")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(10);
     let config = GovernorConfigBuilder::default()
         .per_second(6)
-        .burst_size(10)
+        .burst_size(burst)
         .finish()
         .expect("Failed to build login rate limiter");
     GovernorLayer::new(config)
@@ -32,10 +37,15 @@ pub fn register_limiter() -> DefaultGovernorLayer {
 }
 
 /// Rate limit for token endpoints: replenishes 2 tokens/sec, burst of 30 per IP.
+/// Override burst size with TOKEN_RATE_LIMIT_BURST env var (useful for e2e tests).
 pub fn token_limiter() -> DefaultGovernorLayer {
+    let burst: u32 = std::env::var("TOKEN_RATE_LIMIT_BURST")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(30);
     let config = GovernorConfigBuilder::default()
         .per_second(2)
-        .burst_size(30)
+        .burst_size(burst)
         .finish()
         .expect("Failed to build token rate limiter");
     GovernorLayer::new(config)

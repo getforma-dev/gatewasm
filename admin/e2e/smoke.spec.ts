@@ -26,9 +26,8 @@ const AUTH_ROUTES = [
 for (const route of PUBLIC_ROUTES) {
   test(`${route.name}: loads without console errors`, async ({ page }) => {
     const errors = collectErrors(page);
-    await page.goto(route.path, { waitUntil: 'domcontentloaded' });
-    await page.waitForTimeout(2000);
-    await expectNoConsoleErrors(errors);
+    await page.goto(route.path, { waitUntil: 'networkidle' });
+    expectNoConsoleErrors(errors);
   });
 }
 
@@ -58,17 +57,15 @@ for (const route of PUBLIC_ROUTES) {
 for (const route of PUBLIC_ROUTES) {
   test(`${route.name}: no hydration warnings`, async ({ page }) => {
     const warnings = collectWarnings(page);
-    await page.goto(route.path, { waitUntil: 'domcontentloaded' });
-    await page.waitForTimeout(2000);
-    await expectNoHydrationWarnings(warnings);
+    await page.goto(route.path, { waitUntil: 'networkidle' });
+    expectNoHydrationWarnings(warnings);
   });
 }
 
 // Category 4: No layout overflow on public pages
 for (const route of PUBLIC_ROUTES) {
   test(`${route.name}: no layout overflow`, async ({ page }) => {
-    await page.goto(route.path, { waitUntil: 'domcontentloaded' });
-    await page.waitForTimeout(1000);
+    await page.goto(route.path, { waitUntil: 'networkidle' });
     await expectNoLayoutOverflow(page);
   });
 }
@@ -77,16 +74,14 @@ for (const route of PUBLIC_ROUTES) {
 for (const route of AUTH_ROUTES) {
   test(`${route.name}: redirects to login when unauthenticated`, async ({ page }) => {
     await page.goto(route.path, { waitUntil: 'domcontentloaded' });
-    // Allow time for JS boot + redirect
-    await page.waitForTimeout(3000);
+    await page.waitForURL('**' + route.redirectTo, { timeout: 8000 });
     expect(page.url()).toContain(route.redirectTo);
   });
 }
 
 // Category 6: Debug builds should not emit or keep a service worker registration
 test('debug build does not register a service worker', async ({ page }) => {
-  await page.goto('/platform/benchmark');
-  await page.waitForTimeout(2000);
+  await page.goto('/platform/benchmark', { waitUntil: 'networkidle' });
   const hasRegistrationScript = await page.evaluate(() =>
     Array.from(document.scripts).some((script) =>
       (script.textContent || '').includes('serviceWorker.register')

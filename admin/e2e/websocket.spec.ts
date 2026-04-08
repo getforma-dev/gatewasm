@@ -7,34 +7,9 @@
  *
  * Block 1: Ticket issuance and connection lifecycle
  */
-import { test, expect, Browser, BrowserContext, Page } from '@playwright/test';
+import { test, expect, BrowserContext, Page } from '@playwright/test';
 import { loginAsTestUser } from './auth-helper';
-import { BASE } from './helpers';
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-/** Exchange the refresh cookie for a short-lived access token. */
-async function getAccessToken(context: BrowserContext): Promise<string> {
-  // Retry up to 3 times — token refresh can fail transiently under rate limiting
-  for (let attempt = 0; attempt < 3; attempt++) {
-    const res = await context.request.post(BASE + '/t/platform/auth/token', {
-      data: { grant_type: 'refresh_token' },
-    });
-    if (res.ok()) {
-      const data = await res.json();
-      return data.access_token as string;
-    }
-    if (res.status() === 429) {
-      const retryAfter = Number(res.headers()['retry-after'] || '2');
-      await new Promise(r => setTimeout(r, Math.max(1000, retryAfter * 1000 + 500)));
-      continue;
-    }
-    throw new Error(`getAccessToken failed: ${res.status()} ${await res.text()}`);
-  }
-  throw new Error('getAccessToken: max retries exceeded');
-}
+import { BASE, getAccessToken } from './helpers';
 
 /** Make an authenticated JSON API call using Node's native fetch.
  *  Playwright's BrowserContext.request doesn't reliably send JSON bodies,
@@ -146,13 +121,11 @@ async function connectWebSocket(page: Page, ticket: string) {
 // Suite setup
 // ---------------------------------------------------------------------------
 
-let sharedBrowser: Browser;
 let sharedContext: BrowserContext;
 let sharedPage: Page;
 
-test.describe('WS Ticket Auth & Connection Lifecycle', () => {
+test.describe.serial('WS Ticket Auth & Connection Lifecycle', () => {
   test.beforeAll(async ({ browser }) => {
-    sharedBrowser = browser;
     const { context, page } = await loginAsTestUser(browser);
     sharedContext = context;
     sharedPage = page;
@@ -246,10 +219,10 @@ test.describe('WS Ticket Auth & Connection Lifecycle', () => {
   });
 
   // -------------------------------------------------------------------------
-  // Test 6 — WS upgrade rejects expired ticket (30 s TTL)
+  // Test 6 — WS upgrade rejects expired ticket (TTL configured via WS_TICKET_TTL_SECS)
   // -------------------------------------------------------------------------
-  test('WS upgrade rejects expired ticket (30s TTL)', async ({ browser }) => {
-    test.setTimeout(45000);
+  test('WS upgrade rejects expired ticket', async ({ browser }) => {
+    test.setTimeout(20000);
 
     const { context, page } = await loginAsTestUser(browser);
     const token = await getAccessToken(context);
@@ -257,8 +230,8 @@ test.describe('WS Ticket Auth & Connection Lifecycle', () => {
     await page.goto(BASE + '/platform/console');
     await page.waitForLoadState('networkidle');
 
-    // Wait for the ticket to expire
-    await page.waitForTimeout(31000);
+    // Wait for the ticket to expire (5s in test env via WS_TICKET_TTL_SECS)
+    await page.waitForTimeout(6000);
 
     const ws = await connectWebSocket(page, ticket);
     await ws.waitForClose();
@@ -296,7 +269,7 @@ test.describe('WS Ticket Auth & Connection Lifecycle', () => {
 // Block 2 — WS Event Delivery
 // ---------------------------------------------------------------------------
 
-test.describe('WS Event Delivery', () => {
+test.describe.serial('WS Event Delivery', () => {
   let evtContext: BrowserContext;
   let evtPage: Page;
   let accessToken: string;

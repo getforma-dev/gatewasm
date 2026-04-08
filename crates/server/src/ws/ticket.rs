@@ -8,8 +8,6 @@ use rand::RngCore;
 use crate::error::AppError;
 use crate::AppState;
 
-const TICKET_TTL: Duration = Duration::from_secs(30);
-
 #[derive(Debug, Clone)]
 pub struct TicketInfo {
     pub account_id: String,
@@ -21,12 +19,14 @@ pub struct TicketInfo {
 #[derive(Clone)]
 pub struct TicketStore {
     tickets: Arc<DashMap<String, TicketInfo>>,
+    ttl: Duration,
 }
 
 impl TicketStore {
-    pub fn new() -> Self {
+    pub fn new(ttl_secs: u64) -> Self {
         Self {
             tickets: Arc::new(DashMap::new()),
+            ttl: Duration::from_secs(ttl_secs),
         }
     }
 
@@ -40,8 +40,9 @@ impl TicketStore {
 
     /// Look up and burn (single-use). Returns None if missing or expired.
     pub fn take(&self, ticket: &str) -> Option<TicketInfo> {
+        let ttl = self.ttl;
         self.tickets.remove(ticket).and_then(|(_, info)| {
-            if info.created_at.elapsed() < TICKET_TTL {
+            if info.created_at.elapsed() < ttl {
                 Some(info)
             } else {
                 None
@@ -51,7 +52,8 @@ impl TicketStore {
 
     /// Remove all expired tickets. Call from the background cleanup loop.
     pub fn cleanup_expired(&self) {
-        self.tickets.retain(|_, info| info.created_at.elapsed() < TICKET_TTL);
+        let ttl = self.ttl;
+        self.tickets.retain(|_, info| info.created_at.elapsed() < ttl);
     }
 }
 
