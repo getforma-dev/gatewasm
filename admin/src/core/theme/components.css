@@ -3430,6 +3430,59 @@
   left: 32px;
 }
 
+/* Wizard toggle switch */
+
+.wizard-toggle {
+  position: relative;
+  width: 40px;
+  height: 22px;
+  flex-shrink: 0;
+}
+
+.wizard-toggle input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+  position: absolute;
+}
+
+.wizard-toggle-track {
+  position: absolute;
+  inset: 0;
+  background: var(--surface-overlay);
+  border-radius: 11px;
+  border: 1px solid var(--border);
+  cursor: pointer;
+  transition: background 0.2s, border-color 0.2s;
+}
+
+.wizard-toggle input:checked + .wizard-toggle-track {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.wizard-toggle-track::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  background: var(--text);
+  border-radius: 50%;
+  transition: transform 0.2s;
+}
+
+.wizard-toggle input:checked + .wizard-toggle-track::after {
+  transform: translateX(18px);
+  background: #fff;
+}
+
+.wizard-toggle input:disabled + .wizard-toggle-track {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
 /* Intent grid (Step 0) */
 
 .intent-grid {
@@ -3448,6 +3501,8 @@
   text-align: left;
   cursor: pointer;
   transition: border-color 0.15s, box-shadow 0.15s;
+  overflow: hidden;
+  min-width: 0;
 }
 
 .intent-card:hover {
@@ -3469,6 +3524,9 @@
 .intent-card-desc {
   font-size: 0.78rem;
   color: var(--text-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* Split pane (Steps 1-2) */
@@ -3624,6 +3682,8 @@
   cursor: pointer;
   transition: border-color 0.15s, box-shadow 0.15s;
   position: relative;
+  overflow: hidden;
+  min-width: 0;
 }
 
 .mode-card:hover {
@@ -3657,6 +3717,8 @@
   font-size: 0.82rem;
   color: var(--text-dim);
   margin-bottom: 12px;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
 }
 
 .mode-card-list {

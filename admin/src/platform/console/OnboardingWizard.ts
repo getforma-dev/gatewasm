@@ -1,6 +1,6 @@
 import { h, createSignal, createShow } from 'formajs';
 import {
-  selectedTenant, updateTenant, toast, serverUrl, saveSecurityConfig,
+  selectedTenant, updateTenant, toast, serverUrl, saveSecurityConfig, api, selectTenant,
 } from './store';
 import type { Tenant } from './store';
 
@@ -77,8 +77,9 @@ async function skipWizard(): Promise<void> {
       mfa_policy: defaults.mfa_policy,
     } as any);
   }
-  await updateTenant(tenant.id, { onboarding_completed: true, onboarding_step: 6 as any });
+  const updated = await updateTenant(tenant.id, { onboarding_completed: true, onboarding_step: 6 as any });
   toast.show('Your workspace is ready', 'success');
+  if (updated) selectTenant(updated);
 }
 
 // ── Step 0: Intent Capture ─────────────────────────────────────────────
@@ -234,13 +235,16 @@ function StepBranding(): ReturnType<typeof h> {
         ),
       ),
 
-      h('label', { class: 'wizard-field wizard-field-row' },
+      h('div', { class: 'wizard-field wizard-field-row' },
         h('span', null, 'Dark mode'),
-        h('input', {
-          type: 'checkbox',
-          checked: () => darkMode(),
-          onChange: (e: Event) => { setDarkMode((e.target as HTMLInputElement).checked); immediatePost(); },
-        }),
+        h('label', { class: 'wizard-toggle' },
+          h('input', {
+            type: 'checkbox',
+            checked: () => darkMode(),
+            onChange: (e: Event) => { setDarkMode((e.target as HTMLInputElement).checked); immediatePost(); },
+          }),
+          h('span', { class: 'wizard-toggle-track' }),
+        ),
       ),
 
       h('label', { class: 'wizard-field' },
@@ -337,12 +341,15 @@ function StepAuthMethods(): ReturnType<typeof h> {
         opt.subtitle ? h('span', { class: 'wizard-provider-subtitle' }, opt.subtitle) : null,
         disabled ? h('span', { class: 'wizard-provider-badge' }, 'Coming soon') : null,
       ),
-      h('input', {
-        type: 'checkbox',
-        checked: () => providers().includes(opt.key),
-        disabled: disabled,
-        onChange: () => toggleProvider(opt.key),
-      }),
+      h('label', { class: 'wizard-toggle' },
+        h('input', {
+          type: 'checkbox',
+          checked: () => providers().includes(opt.key),
+          disabled: disabled,
+          onChange: () => toggleProvider(opt.key),
+        }),
+        h('span', { class: 'wizard-toggle-track' }),
+      ),
     );
   }
 
@@ -470,45 +477,18 @@ function StepLiveTest(): ReturnType<typeof h> {
     if (pollInterval) clearInterval(pollInterval);
     pollInterval = setInterval(async () => {
       if (testState() !== 'waiting') {
-        clearInterval(pollInterval!);
-        return;
-      }
-      try {
-        const res = await fetch(serverUrl + '/platform/self-serve/tenants/' + tenant.id, {
-          credentials: 'include',
-        });
-        if (!res.ok) return;
-        const data = await res.json();
-        // The tenant detail response includes user_count or we check via stats
-        // For now, detect via the tenant list which includes the tenant
-        // Actually let's check if the tenant response has any indication of users
-        // The simplest check: re-fetch tenant detail to see if there are active sessions
-      } catch { /* ignore */ }
-    }, 3000);
-
-    // Simpler approach: use a dedicated stats check
-    pollInterval = setInterval(async () => {
-      if (testState() !== 'waiting') {
         if (pollInterval) clearInterval(pollInterval);
         return;
       }
       try {
-        // Check for any users on this tenant by hitting the users endpoint
-        const res = await fetch(
-          serverUrl + '/t/' + tenant.slug + '/admin/users?limit=1',
-          { credentials: 'include' },
-        );
-        if (!res.ok) return;
-        const data = await res.json();
-        // If there are users beyond the initial owner, we have a sign-in
-        if (data.users && data.users.length > 0) {
-          const latest = data.users[0];
+        const data = await api.get<any>('/platform/self-serve/tenants/' + encodeURIComponent(tenant.id));
+        if (data && data.active_sessions > 0) {
           if (pollInterval) clearInterval(pollInterval);
           if (nudgeTimer) clearTimeout(nudgeTimer);
-          setSessionEmail(latest.email || 'End user');
+          setSessionEmail(data.owner_email || 'End user');
           setTestState('success');
         }
-      } catch { /* ignore polling errors */ }
+      } catch { /* ignore polling errors — auth token may be refreshing */ }
     }, 3000);
   }
 
@@ -516,7 +496,7 @@ function StepLiveTest(): ReturnType<typeof h> {
     createShow(() => testState() === 'prompt', () =>
       h('div', { class: 'wizard-test-prompt' },
         h('h1', { class: 'wizard-headline' }, 'Try signing in as an end user'),
-        h('p', { class: 'wizard-subtitle' }, 'We\u2019ll open your login page in a new tab. Sign in and watch the session appear here in real-time.'),
+        h('p', { class: 'wizard-subtitle' }, 'You\u2019re your own first user \u2014 the same credentials you used to sign into fAuth will work here. We\u2019ll open the login page and detect your session in real-time.'),
         h('button', {
           type: 'button',
           class: 'btn btn-accent btn-lg',
@@ -586,7 +566,7 @@ function StepLaunch(): ReturnType<typeof h> {
   const siteUrl = window.location.origin + '/t/' + tenant.slug + '/site';
   const loginUrl = window.location.origin + '/t/' + tenant.slug + '/login';
   const [copied, setCopied] = createSignal(false);
-  const [activeFramework, setActiveFramework] = createSignal('react');
+  const [activeFramework, setActiveFramework] = createSignal('bridge');
 
   function copyText(text: string): void {
     navigator.clipboard.writeText(text).then(() => {
@@ -597,16 +577,19 @@ function StepLaunch(): ReturnType<typeof h> {
 
   async function handleLaunch(): Promise<void> {
     setSaving(true);
-    await updateTenant(tenant.id, { onboarding_completed: true, onboarding_step: 6 as any });
+    const updated = await updateTenant(tenant.id, { onboarding_completed: true, onboarding_step: 6 as any });
     setSaving(false);
     toast.show('Your workspace is ready', 'success');
+    // Re-select the tenant to trigger full workspace data loading
+    // The createShow in ConsoleApp will now render the dashboard since onboarding_completed is true
+    if (updated) {
+      selectTenant(updated);
+    }
   }
 
   const SNIPPETS: Record<string, string> = {
-    react: '<script src="' + serverUrl + '/t/' + tenant.slug + '/auth.js"></script>\n\n// Initialize in your app:\nFormaAuth.init({ tenant: "' + tenant.slug + '" });',
-    nextjs: '// Install: npm install @getforma/nextjs\n\nimport { FormaProvider } from "@getforma/nextjs";\n\n<FormaProvider tenant="' + tenant.slug + '" />',
-    vanilla: '<script src="' + serverUrl + '/t/' + tenant.slug + '/auth.js"></script>\n<script>\n  FormaAuth.init({ tenant: "' + tenant.slug + '" });\n</script>',
-    rest: 'curl -X POST ' + serverUrl + '/t/' + tenant.slug + '/auth/login \\\n  -H "Content-Type: application/json" \\\n  -d \'{"email": "user@example.com", "password": "..."}\'',
+    bridge: '<script src="' + serverUrl + '/bridge.js"><\/script>\n<script>\n  GateAuthBridge.init({\n    serverUrl: \'' + serverUrl + '\',\n    slug: \'' + tenant.slug + '\',\n    onStateChange: ({ state, user }) => {\n      if (state === \'authenticated\') {\n        console.log(\'Hello,\', user.name);\n      }\n    }\n  });\n<\/script>',
+    rest: '# Login\ncurl -X POST ' + serverUrl + '/t/' + tenant.slug + '/auth/login \\\n  -H "Content-Type: application/json" \\\n  -d \'{"email": "user@example.com", "password": "..."}\'\n\n# Check session\ncurl ' + serverUrl + '/t/' + tenant.slug + '/auth/me \\\n  -H "Cookie: refresh_token=..."',
   };
 
   if (isHosted) {
@@ -671,12 +654,12 @@ function StepLaunch(): ReturnType<typeof h> {
     ),
 
     h('div', { class: 'wizard-framework-tabs' },
-      ...['react', 'nextjs', 'vanilla', 'rest'].map((fw) =>
+      ...([['bridge', 'Bridge (any framework)'], ['rest', 'REST API']] as const).map(([key, label]) =>
         h('button', {
           type: 'button',
-          class: () => 'wizard-fw-tab' + (activeFramework() === fw ? ' wizard-fw-tab-active' : ''),
-          onClick: () => setActiveFramework(fw),
-        }, fw === 'nextjs' ? 'Next.js' : fw === 'rest' ? 'REST API' : fw.charAt(0).toUpperCase() + fw.slice(1)),
+          class: () => 'wizard-fw-tab' + (activeFramework() === key ? ' wizard-fw-tab-active' : ''),
+          onClick: () => setActiveFramework(key),
+        }, label),
       ),
     ),
 

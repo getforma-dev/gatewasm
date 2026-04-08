@@ -46,12 +46,21 @@ pub async fn login_page(
 
     // no-store prevents bfcache — back button makes a fresh server request
     let page = login_page_render(&state, &tenant, preview_mode).await;
+
+    // In preview mode, relax CSP to allow framing from the platform console
+    let csp = if preview_mode {
+        page.csp
+            .replace("frame-ancestors 'none'", &format!("frame-ancestors {}", state.config.server_url))
+    } else {
+        page.csp
+    };
+
     (
         [
             (axum::http::header::CACHE_CONTROL, "no-store".to_string()),
             (
                 axum::http::header::HeaderName::from_static("content-security-policy"),
-                page.csp,
+                csp,
             ),
         ],
         Html(page.html),

@@ -29,10 +29,14 @@ pub async fn dashboard_page(State(state): State<AppState>) -> impl IntoResponse 
         slots: None,
     });
 
+    // Add frame-src 'self' to allow the onboarding wizard's live preview iframe
+    // of the tenant login page (same origin)
+    let csp = page.csp + "; frame-src 'self'; connect-src 'self'";
+
     (
         [
             (axum::http::header::CACHE_CONTROL, "no-store".to_string()),
-            (axum::http::header::HeaderName::from_static("content-security-policy"), page.csp),
+            (axum::http::header::HeaderName::from_static("content-security-policy"), csp),
         ],
         Html(page.html),
     ).into_response()

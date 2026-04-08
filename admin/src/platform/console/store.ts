@@ -10,6 +10,7 @@ import type { IntrospectData } from '../../core/types';
 export const serverUrl: string = (window as any).__FORMA_SERVER_URL__ || window.location.origin;
 const auth = createAuth({ serverUrl, tenant: 'platform' });
 const api = createApi(auth);
+export { api };
 export const toast = createToast();
 const socket = createSocket(auth);
 export { socket };

@@ -640,6 +640,14 @@ pub async fn get_my_tenant(
         .await
         .unwrap_or(0);
 
+    let active_sessions: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM refresh_tokens WHERE tenant_id = $1 AND revoked = FALSE AND expires_at > NOW()"
+    )
+        .bind(&id)
+        .fetch_one(&state.db)
+        .await
+        .unwrap_or(0);
+
     Ok(Json(serde_json::json!({
         "id": id,
         "name": row.get::<String, _>("name"),
@@ -650,6 +658,7 @@ pub async fn get_my_tenant(
         "allowed_origins": row.get::<serde_json::Value, _>("allowed_origins"),
         "max_users": row.get::<i32, _>("max_users"),
         "user_count": user_count,
+        "active_sessions": active_sessions,
         "plan": row.get::<String, _>("plan"),
         "trial_ends_at": row.get::<Option<chrono::DateTime<Utc>>, _>("trial_ends_at").map(|t| t.to_rfc3339()),
         "primary_color": row.get::<Option<String>, _>("branding_primary_color"),
