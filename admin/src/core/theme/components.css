@@ -3443,14 +3443,16 @@
 
 .wizard-actions {
   margin-top: 32px;
+  padding-bottom: 60px;
   display: flex;
   gap: 12px;
 }
 
 .wizard-back {
   position: fixed;
-  bottom: 32px;
-  left: 32px;
+  bottom: 24px;
+  left: 24px;
+  z-index: 10;
 }
 
 /* Wizard toggle switch */
@@ -4110,11 +4112,24 @@
   padding: 32px 20px 36px;
   background-color: var(--lp-bg);
   background-image:
-    linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px);
-  background-size: 40px 40px;
+    linear-gradient(var(--lp-card-border) 1px, transparent 1px),
+    linear-gradient(90deg, var(--lp-card-border) 1px, transparent 1px);
+  background-size: 60px 60px;
+  background-blend-mode: normal;
+  opacity: 1;
   transition: background-color 0.2s;
   min-height: 460px;
+  position: relative;
+}
+
+.lp-page::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: inherit;
+  background-size: inherit;
+  opacity: 0.25;
+  pointer-events: none;
 }
 
 .lp-card {
@@ -4375,6 +4390,46 @@
   text-align: right;
   margin-top: 4px;
   font-family: 'DM Mono', monospace;
+}
+
+/* ── Wizard Pro section (gated features) ─────────────────────────── */
+
+.wizard-pro-section {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 14px 16px;
+  background: var(--surface-raised);
+  margin-top: 8px;
+}
+
+.wizard-pro-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+.wizard-pro-label {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+}
+
+.wizard-pro-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 0;
+  font-size: 0.82rem;
+  color: var(--text-dim);
+  opacity: 0.5;
+}
+
+.wizard-pro-item + .wizard-pro-item {
+  border-top: 1px solid var(--border);
+  padding-top: 10px;
+  margin-top: 4px;
 }
 
 /* Security intent note */
