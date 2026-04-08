@@ -34,6 +34,11 @@ async fn run_migrations(pool: &PgPool) -> Result<(), sqlx::Error> {
             "full schema (squashed)",
             include_str!("pg_migrations/001_schema.sql"),
         ),
+        (
+            2,
+            "onboarding wizard columns + mfa_policy",
+            include_str!("pg_migrations/002_onboarding_wizard.sql"),
+        ),
     ];
 
     for &(version, label, sql) in migrations {
