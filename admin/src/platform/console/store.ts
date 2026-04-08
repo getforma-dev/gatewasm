@@ -268,6 +268,25 @@ export type Plane = 'operator' | 'organization' | 'enduser';
 export type AppMode = 'account' | 'workspace';
 export type AccountTab = 'tenants' | 'team' | 'api-keys' | 'account-settings';
 
+// ── URL hash helpers ───────────────────────────────────────────────────
+
+const VALID_ACCOUNT_TABS: readonly string[] = ['tenants', 'team', 'api-keys', 'account-settings'];
+const VALID_CONSOLE_VIEWS: readonly string[] = [
+  'overview', 'integrate', 'security', 'members', 'hosted-page',
+  'organizations', 'roles', 'audit-log', 'sessions', 'passkeys', 'tokens', 'activity',
+];
+
+function readHash(): string {
+  return window.location.hash.replace(/^#/, '');
+}
+
+function writeHash(value: string): void {
+  const currentHash = window.location.hash.replace(/^#/, '');
+  if (value === currentHash) return;
+  const url = window.location.pathname + window.location.search + (value ? '#' + value : '');
+  history.pushState(null, '', url);
+}
+
 export interface TenantAssignment {
   tenant_id: string;
   tenant_name: string;
@@ -379,7 +398,12 @@ const [plane, setPlaneSignal] = createSignal<Plane>('operator');
 export { plane };
 const [mode, setMode] = createSignal<AppMode>('account');
 export { mode };
-export const [accountTab, setAccountTab] = createSignal<AccountTab>('tenants');
+const [accountTab, _setAccountTab] = createSignal<AccountTab>('tenants');
+export { accountTab };
+export function setAccountTab(tab: AccountTab): void {
+  _setAccountTab(tab);
+  if (mode() === 'account') writeHash(tab === 'tenants' ? '' : tab);
+}
 const [securityConfig, setSecurityConfig] = createSignal<SecurityConfig | null>(null);
 export { securityConfig };
 const [securityConfigLoading, setSecurityConfigLoading] = createSignal(false);
@@ -1287,6 +1311,7 @@ export function navigateTenantView(nextView: TenantWorkspaceView): void {
 
   setView(nextView);
   setPlaneSignal(planeForView(nextView));
+  writeHash(nextView === 'overview' ? '' : nextView);
 
   void hydrateTenantView(nextView, tenant);
 }
@@ -1367,8 +1392,8 @@ export async function refreshCurrentView(): Promise<void> {
 // ── Navigation ──────────────────────────────────────────────────────────
 
 // Internal: switch to workspace mode without pushing history
-function switchToWorkspaceInternal(tenant: Tenant): void {
-  const nextView = preferredTenantView(tenant);
+function switchToWorkspaceInternal(tenant: Tenant, hashView?: ConsoleView): void {
+  const nextView = hashView ?? preferredTenantView(tenant);
   batch(() => {
     setSelectedTenant(tenant);
     resetTenantScopedState();
@@ -1376,14 +1401,13 @@ function switchToWorkspaceInternal(tenant: Tenant): void {
     setPlaneSignal(planeForView(nextView));
     setMode('workspace');
   });
-
-  // hydrateTenantView handles all data loading (including loadTenantDetail for overview)
   void hydrateTenantView(nextView, tenant);
 }
 
 // Internal: switch to account mode without pushing history
-function switchToAccountInternal(): void {
+function switchToAccountInternal(hashTab?: AccountTab): void {
   clearOverviewRefresh();
+  const nextTab = hashTab ?? 'tenants';
   batch(() => {
     tenantDetailRequestSeq += 1;
     usersRequestSeq += 1;
@@ -1394,36 +1418,76 @@ function switchToAccountInternal(): void {
     setSelectedTenant(null);
     resetTenantScopedState();
     setMode('account');
-    setAccountTab('tenants');
+    _setAccountTab(nextTab);
   });
-
 }
 
 export function selectTenant(tenant: Tenant): void {
   switchToWorkspaceInternal(tenant);
-  history.pushState({ slug: tenant.slug }, '', '/platform/console/' + tenant.slug);
+  const v = view();
+  history.pushState({ slug: tenant.slug }, '', '/platform/console/' + tenant.slug + (v === 'overview' ? '' : '#' + v));
 }
 
-export function backToTenants(): void {
-  switchToAccountInternal();
-  history.pushState(null, '', '/platform/console');
+export function backToTenants(tab?: AccountTab): void {
+  switchToAccountInternal(tab);
+  const hashSuffix = tab && tab !== 'tenants' ? '#' + tab : '';
+  history.pushState(null, '', '/platform/console' + hashSuffix);
 }
 
 export function initRouting(): void {
+  // Guard: popstate fires before hashchange on back/forward — prevent double handling
+  let popstateHandled = false;
+
   window.addEventListener('popstate', () => {
+    popstateHandled = true;
+    queueMicrotask(() => { popstateHandled = false; });
+
     const path = window.location.pathname;
-    const match = path.match(/^\/platform\/console\/([^/]+)/);
-    if (match) {
-      const slug = match[1];
+    const hash = readHash();
+    const slugMatch = path.match(/^\/platform\/console\/([^/]+)/);
+
+    if (slugMatch) {
+      const slug = slugMatch[1];
       const tenant = tenants().find((t) => t.slug === slug);
-      if (tenant) {
-        switchToWorkspaceInternal(tenant);
-      } else {
+      if (!tenant) {
         switchToAccountInternal();
         history.replaceState(null, '', '/platform/console');
+        return;
       }
+
+      // Same tenant, hash-only change — update view without full state reset
+      if (mode() === 'workspace' && selectedTenant()?.slug === slug) {
+        const nextView = VALID_CONSOLE_VIEWS.includes(hash)
+          ? (hash as ConsoleView)
+          : 'overview';
+        setView(nextView);
+        setPlaneSignal(planeForView(nextView));
+        void hydrateTenantView(nextView, tenant);
+        return;
+      }
+
+      // Different tenant or mode switch — full reset
+      const hashView = VALID_CONSOLE_VIEWS.includes(hash) ? (hash as ConsoleView) : undefined;
+      switchToWorkspaceInternal(tenant, hashView);
     } else {
-      switchToAccountInternal();
+      const hashTab = VALID_ACCOUNT_TABS.includes(hash) ? (hash as AccountTab) : undefined;
+      switchToAccountInternal(hashTab);
+    }
+  });
+
+  // Handle manual URL editing in address bar (skipped when popstate already handled it)
+  window.addEventListener('hashchange', () => {
+    if (popstateHandled) return;
+    const h = readHash();
+    if (mode() === 'account' && VALID_ACCOUNT_TABS.includes(h)) {
+      _setAccountTab(h as AccountTab);
+    } else if (mode() === 'workspace' && VALID_CONSOLE_VIEWS.includes(h)) {
+      const tenant = selectedTenant();
+      if (tenant) {
+        setView(h as ConsoleView);
+        setPlaneSignal(planeForView(h as ConsoleView));
+        void hydrateTenantView(h as ConsoleView, tenant);
+      }
     }
   });
 }
@@ -1451,6 +1515,10 @@ socket.subscribe('tenant:activity', () => {
   if (view() === 'sessions') {
     loadAllSessions(t.id);
   }
+});
+
+socket.subscribe('account:updated', () => {
+  loadCurrentUser();
 });
 
 // ── Lifecycle ───────────────────────────────────────────────────────────
@@ -1499,7 +1567,7 @@ export async function init(): Promise<void> {
 
     // Clean query params if any were consumed
     if (inviteParam || initParams.get('verified') === null) {
-      const cleanPath = window.location.pathname + (initParams.toString() ? '?' + initParams.toString() : '');
+      const cleanPath = window.location.pathname + (initParams.toString() ? '?' + initParams.toString() : '') + window.location.hash;
       history.replaceState(null, '', cleanPath);
     }
 
@@ -1509,7 +1577,9 @@ export async function init(): Promise<void> {
       const slug = urlMatch[1];
       const tenant = tenants().find((t) => t.slug === slug);
       if (tenant) {
-        switchToWorkspaceInternal(tenant);
+        const initHash = readHash();
+        const initView = VALID_CONSOLE_VIEWS.includes(initHash) ? (initHash as ConsoleView) : undefined;
+        switchToWorkspaceInternal(tenant, initView);
         auth.startAutoRefresh();
         socket.connect(serverUrl + '/ws/ticket');
         return;
@@ -1520,6 +1590,10 @@ export async function init(): Promise<void> {
 
     // /platform/console (no slug) = account mode, always
     // Don't restore workspace state from localStorage — URL is the source of truth
+    const initHash = readHash();
+    if (VALID_ACCOUNT_TABS.includes(initHash)) {
+      _setAccountTab(initHash as AccountTab);
+    }
 
     auth.startAutoRefresh();
     socket.connect(serverUrl + '/ws/ticket');
@@ -1588,12 +1662,79 @@ export async function removeTeamMember(memberId: string): Promise<boolean> {
   }
 }
 
-export async function resendVerification(): Promise<boolean> {
+const RESEND_COOLDOWN_SEC = 60;
+const MAX_RESEND_ATTEMPTS = 5;
+const RESEND_STORAGE_KEY = 'forma:resend-verification';
+
+interface ResendStorage { sentAt: number; attempts: number; }
+
+function loadResendState(): ResendStorage {
   try {
-    await api.post('/t/platform/auth/resend-verification', {});
-    toast.show('Verification email sent — check your inbox', 'success');
+    const raw = sessionStorage.getItem(RESEND_STORAGE_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch { /* ignore */ }
+  return { sentAt: 0, attempts: 0 };
+}
+
+function saveResendState(state: ResendStorage): void {
+  try { sessionStorage.setItem(RESEND_STORAGE_KEY, JSON.stringify(state)); } catch { /* ignore */ }
+}
+
+const [resendCooldown, setResendCooldown] = createSignal(0);
+export { resendCooldown };
+const [resendAttempts, setResendAttempts] = createSignal(0);
+export { resendAttempts };
+export const resendMaxed = () => resendAttempts() >= MAX_RESEND_ATTEMPTS;
+let resendTimer: ReturnType<typeof setInterval> | null = null;
+
+// Restore cooldown + attempts from sessionStorage on load
+(function restoreResendState() {
+  const stored = loadResendState();
+  setResendAttempts(stored.attempts);
+  if (stored.attempts >= MAX_RESEND_ATTEMPTS) return;
+  if (stored.sentAt > 0) {
+    const elapsed = Math.floor((Date.now() - stored.sentAt) / 1000);
+    const remaining = RESEND_COOLDOWN_SEC - elapsed;
+    if (remaining > 0) {
+      setResendCooldown(remaining);
+      startCooldownTimer();
+    }
+  }
+})();
+
+function startCooldownTimer(): void {
+  if (resendTimer) clearInterval(resendTimer);
+  resendTimer = setInterval(() => {
+    const next = resendCooldown() - 1;
+    if (next <= 0) {
+      clearInterval(resendTimer!);
+      resendTimer = null;
+      setResendCooldown(0);
+    } else {
+      setResendCooldown(next);
+    }
+  }, 1000);
+}
+
+export async function resendVerification(): Promise<boolean> {
+  if (resendCooldown() !== 0 || resendMaxed()) return false;
+  setResendCooldown(-1); // -1 = sending in progress
+  try {
+    await api.post('/auth/resend-verification', {});
+    const nextAttempts = resendAttempts() + 1;
+    setResendAttempts(nextAttempts);
+    saveResendState({ sentAt: Date.now(), attempts: nextAttempts });
+    if (nextAttempts >= MAX_RESEND_ATTEMPTS) {
+      setResendCooldown(0);
+      toast.show('Verification email sent — you\u2019ve reached the maximum resend limit', 'success');
+    } else {
+      setResendCooldown(RESEND_COOLDOWN_SEC);
+      startCooldownTimer();
+      toast.show('Verification email sent — check your inbox or spam folder', 'success');
+    }
     return true;
   } catch (e) {
+    setResendCooldown(0);
     toast.show(e instanceof Error ? e.message : 'Failed to send verification email', 'error');
     return false;
   }

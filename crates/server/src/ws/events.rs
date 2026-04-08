@@ -18,6 +18,18 @@ pub fn emit_activity(bus: &EventBus, tenant_id: &str, hint: &str) {
     });
 }
 
+/// Emits `account:updated`. Called when operator account state changes
+/// (e.g. email verified).
+pub fn emit_account_updated(bus: &EventBus, tenant_id: &str, hint: &str) {
+    let now = chrono::Utc::now().timestamp_millis();
+    bus.send(WsEvent {
+        tenant_id: tenant_id.to_string(),
+        topic: "account:updated".into(),
+        hint: Some(hint.into()),
+        timestamp: now,
+    });
+}
+
 /// Emits `team:changed`. Called from team/invite handlers.
 pub fn emit_team_changed(bus: &EventBus, tenant_id: &str, hint: &str) {
     let now = chrono::Utc::now().timestamp_millis();

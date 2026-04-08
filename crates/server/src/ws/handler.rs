@@ -18,7 +18,7 @@ use tokio::time::Instant;
 
 use crate::AppState;
 
-const VALID_TOPICS: &[&str] = &["team:changed", "tenant:activity", "metrics:updated"];
+const VALID_TOPICS: &[&str] = &["team:changed", "tenant:activity", "metrics:updated", "account:updated"];
 const PING_INTERVAL: Duration = Duration::from_secs(30);
 const MAX_INVALID_MESSAGES: u8 = 5;
 

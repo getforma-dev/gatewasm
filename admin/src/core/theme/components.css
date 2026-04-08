@@ -1457,6 +1457,22 @@
   color: var(--warning);
 }
 
+.verify-banner .btn {
+  color: var(--warning);
+  border-color: var(--warning-border);
+  background: var(--warning-dim);
+}
+
+.verify-banner .btn:hover:not(:disabled) {
+  background: var(--warning-border);
+  border-color: var(--warning);
+}
+
+.verify-banner .btn:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
 .invite-accept-banner {
   display: flex;
   align-items: center;

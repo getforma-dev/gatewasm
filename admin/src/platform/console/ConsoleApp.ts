@@ -33,7 +33,7 @@ import {
   accountOwner,
   canEdit,
   serverUrl,
-  resendVerification,
+  resendVerification, resendCooldown, resendAttempts, resendMaxed,
   pendingInvites,
   acceptInviteFromDashboard,
 } from './store';
@@ -459,12 +459,25 @@ export function ConsoleApp() {
       createShow(
         () => currentUser() !== null && !currentUser()!.email_verified,
         () => h('div', { class: 'verify-banner' },
-          h('span', null, 'Verify your email address to secure your account. Check your inbox.'),
-          h('button', {
-            type: 'button',
-            class: 'btn btn-sm btn-ghost',
-            onClick: () => void resendVerification(),
-          }, 'Resend'),
+          h('span', null, () => {
+            if (resendMaxed()) return 'Too many resend attempts. Please check your inbox or spam folder, or try again later.';
+            if (resendAttempts() > 0) return 'Verification email sent! Check your inbox or spam folder.';
+            return 'Verify your email address to secure your account. Check your inbox.';
+          }),
+          createShow(
+            () => !resendMaxed(),
+            () => h('button', {
+              type: 'button',
+              class: 'btn btn-sm',
+              disabled: () => resendCooldown() !== 0,
+              onClick: () => void resendVerification(),
+            }, () => {
+              const cd = resendCooldown();
+              if (cd === -1) return 'Sending\u2026';
+              if (cd > 0) return 'Resend in ' + cd + 's';
+              return 'Resend';
+            }),
+          ),
         ),
       ),
       // Pending invite banners
@@ -716,7 +729,7 @@ export function ConsoleApp() {
               view: () => view(),
               onPlaneSwitch: (p: Plane) => setPlane(p),
               onTabSwitch: (v: ConsoleView) => navigateTenantView(v),
-              onSettings: () => { backToTenants(); setAccountTab('account-settings'); },
+              onSettings: () => backToTenants('account-settings'),
               onSignOut: () => void signout(),
               onThemeToggle: handleThemeToggle,
               themeLabel: () => themeMode() === 'dark' ? 'Light Mode' : 'Dark Mode',

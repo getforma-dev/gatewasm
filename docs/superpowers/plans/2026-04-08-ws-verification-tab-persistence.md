@@ -214,10 +214,17 @@ function readHash(): string {
 }
 
 function writeHash(value: string): void {
+  const currentHash = window.location.hash.replace(/^#/, '');
+  if (value === currentHash) return; // dedup — don't push identical entries
   const url = window.location.pathname + window.location.search + (value ? '#' + value : '');
-  history.replaceState(history.state, '', url);
+  history.pushState(null, '', url);
 }
 ```
+
+Key design decisions:
+- **`pushState`** (not `replaceState`) — creates history entries so back/forward works between tabs (like Clerk, Vercel, Linear)
+- **Dedup guard** — prevents duplicate entries when clicking the already-active tab
+- **Empty hash for defaults** — `tenants` and `overview` use empty hash to keep URLs clean
 
 - [ ] **Step 2: Update `setAccountTab` calls to write hash**
 
@@ -269,42 +276,13 @@ export function navigateTenantView(nextView: TenantWorkspaceView): void {
 }
 ```
 
-- [ ] **Step 4: Clear hash on mode transitions**
+- [ ] **Step 4: Update switchInternal functions to accept hash override**
 
-In `switchToAccountInternal` (line 1385), add hash restore at the end of the function, after line 1400 (after the closing `});`):
-
-```ts
-  const h = readHash();
-  if (VALID_ACCOUNT_TABS.includes(h)) {
-    _setAccountTab(h as AccountTab);
-  } else {
-    _setAccountTab('tenants');
-  }
-  writeHash(accountTab() === 'tenants' ? '' : accountTab());
-```
-
-In `switchToWorkspaceInternal` (line 1370), after `setView(nextView);` on line 1375, the hash is already set by `navigateTenantView` for user-driven navigation. But for popstate/init restoration, add after line 1381:
+Replace `switchToWorkspaceInternal` (lines 1370-1382). The hash is read by the caller (popstate/init) and passed in, NOT read inside the function. When called from `selectTenant`, no hash is passed — defaults to `preferredTenantView`:
 
 ```ts
-  const h = readHash();
-  if (VALID_CONSOLE_VIEWS.includes(h)) {
-    setView(h as ConsoleView);
-    setPlaneSignal(planeForView(h as ConsoleView));
-    void hydrateTenantView(h as ConsoleView, tenant);
-  }
-  writeHash(view() === 'overview' ? '' : view());
-```
-
-Wait — `switchToWorkspaceInternal` already sets the view via `preferredTenantView`. The hash should override it. Restructure:
-
-Replace `switchToWorkspaceInternal` (lines 1370-1382) entirely:
-
-```ts
-function switchToWorkspaceInternal(tenant: Tenant): void {
-  const h = readHash();
-  const nextView = VALID_CONSOLE_VIEWS.includes(h)
-    ? (h as ConsoleView)
-    : preferredTenantView(tenant);
+function switchToWorkspaceInternal(tenant: Tenant, hashView?: ConsoleView): void {
+  const nextView = hashView ?? preferredTenantView(tenant);
   batch(() => {
     setSelectedTenant(tenant);
     resetTenantScopedState();
@@ -312,20 +290,16 @@ function switchToWorkspaceInternal(tenant: Tenant): void {
     setPlaneSignal(planeForView(nextView));
     setMode('workspace');
   });
-  writeHash(nextView === 'overview' ? '' : nextView);
   void hydrateTenantView(nextView, tenant);
 }
 ```
 
-And replace `switchToAccountInternal` (lines 1385-1400) — preserve all existing seq bumps and calls:
+Replace `switchToAccountInternal` (lines 1385-1400). Same pattern — hash override passed by caller:
 
 ```ts
-function switchToAccountInternal(): void {
+function switchToAccountInternal(hashTab?: AccountTab): void {
   clearOverviewRefresh();
-  const h = readHash();
-  const nextTab = VALID_ACCOUNT_TABS.includes(h)
-    ? (h as AccountTab)
-    : 'tenants';
+  const nextTab = hashTab ?? 'tenants';
   batch(() => {
     tenantDetailRequestSeq += 1;
     usersRequestSeq += 1;
@@ -338,33 +312,52 @@ function switchToAccountInternal(): void {
     setMode('account');
     _setAccountTab(nextTab);
   });
-  writeHash(nextTab === 'tenants' ? '' : nextTab);
 }
 ```
 
-- [ ] **Step 5: Add `hashchange` listener in `initRouting`**
+Note: these functions no longer call `writeHash` — the hash is already correct in the URL when called from popstate, and `selectTenant`/`backToTenants` set the URL explicitly via pushState.
 
-In `initRouting` (line 1412), add a `hashchange` listener after the existing `popstate` listener:
+- [ ] **Step 5: Update popstate handler with hash-aware routing**
+
+Replace `initRouting` (line 1412). Key improvement: for same-tenant hash-only changes, update signals directly without calling `resetTenantScopedState()` — avoids re-fetching all data for a simple tab switch:
 
 ```ts
 export function initRouting(): void {
   window.addEventListener('popstate', () => {
     const path = window.location.pathname;
-    const match = path.match(/^\/platform\/console\/([^/]+)/);
-    if (match) {
-      const slug = match[1];
+    const hash = readHash();
+    const slugMatch = path.match(/^\/platform\/console\/([^/]+)/);
+
+    if (slugMatch) {
+      const slug = slugMatch[1];
       const tenant = tenants().find((t) => t.slug === slug);
-      if (tenant) {
-        switchToWorkspaceInternal(tenant);
-      } else {
+      if (!tenant) {
         switchToAccountInternal();
         history.replaceState(null, '', '/platform/console');
+        return;
       }
+
+      // Same tenant, hash-only change — just update view, skip full reset
+      if (mode() === 'workspace' && selectedTenant()?.slug === slug) {
+        const nextView = VALID_CONSOLE_VIEWS.includes(hash)
+          ? (hash as ConsoleView)
+          : 'overview';
+        setView(nextView);
+        setPlaneSignal(planeForView(nextView));
+        void hydrateTenantView(nextView, tenant);
+        return;
+      }
+
+      // Different tenant or mode switch — full reset
+      const hashView = VALID_CONSOLE_VIEWS.includes(hash) ? (hash as ConsoleView) : undefined;
+      switchToWorkspaceInternal(tenant, hashView);
     } else {
-      switchToAccountInternal();
+      const hashTab = VALID_ACCOUNT_TABS.includes(hash) ? (hash as AccountTab) : undefined;
+      switchToAccountInternal(hashTab);
     }
   });
 
+  // Handle manual URL editing in address bar
   window.addEventListener('hashchange', () => {
     const h = readHash();
     if (mode() === 'account' && VALID_ACCOUNT_TABS.includes(h)) {
@@ -381,16 +374,44 @@ export function initRouting(): void {
 }
 ```
 
-- [ ] **Step 6: Verify frontend builds**
+- [ ] **Step 6: Restore hash on initial load in `init()`**
+
+In `init()`, the existing `switchToWorkspaceInternal(tenant)` call (line 1512) needs hash awareness. Change:
+
+```ts
+switchToWorkspaceInternal(tenant);
+```
+
+to:
+
+```ts
+const initHash = readHash();
+const initView = VALID_CONSOLE_VIEWS.includes(initHash) ? (initHash as ConsoleView) : undefined;
+switchToWorkspaceInternal(tenant, initView);
+```
+
+For account mode (after line 1518 — the `// /platform/console (no slug)` comment), add hash restoration:
+
+```ts
+const initHash = readHash();
+if (VALID_ACCOUNT_TABS.includes(initHash)) {
+  _setAccountTab(initHash as AccountTab);
+}
+```
+
+- [ ] **Step 7: Verify frontend builds**
 
 Run: `cd /Users/victorvillacis/dev/forma/getforma-dev/gatewasm/admin && npx vite build 2>&1 | tail -5`
 Expected: build succeeds
 
-- [ ] **Step 7: Commit**
+- [ ] **Step 8: Commit**
 
 ```bash
 git add admin/src/platform/console/store.ts
-git commit -m "feat(console): URL hash persistence for account tabs and workspace views"
+git commit -m "feat(console): URL hash persistence for account tabs and workspace views
+
+Uses pushState for back/forward navigation between tabs (like Clerk).
+Includes dedup guard, efficient same-tenant popstate, and initial hash restore."
 ```
 
 ---
@@ -401,15 +422,20 @@ git commit -m "feat(console): URL hash persistence for account tabs and workspac
 
 Run: `cd /Users/victorvillacis/dev/forma/getforma-dev/gatewasm && npm run dev`
 
-- [ ] **Step 2: Test tab persistence**
+- [ ] **Step 2: Test tab persistence and back/forward**
 
 1. Navigate to `http://localhost:3001/platform/console`
 2. Click "Members" tab → URL should show `#team`
 3. Click "API Keys" → URL should show `#api-keys`
-4. Refresh page → should stay on API Keys tab, URL still has `#api-keys`
-5. Click "Tenants" → hash should clear (just `/platform/console`)
-6. Enter a workspace → click "Sessions" → URL should show `#sessions`
-7. Refresh → should stay on Sessions view
+4. Click browser back → should go to `#team` (Members tab)
+5. Click browser forward → should go to `#api-keys` (API Keys)
+6. Refresh page → should stay on API Keys tab, URL still has `#api-keys`
+7. Click "Tenants" → hash should clear (just `/platform/console`)
+8. Enter a workspace → click "Sessions" → URL should show `#sessions`
+9. Click "Passkeys" → URL should show `#passkeys`
+10. Click back → should go to `#sessions`
+11. Refresh → should stay on Sessions view
+12. Copy URL with hash, open in new tab → should land on correct tab/view
 
 - [ ] **Step 3: Test resend button**
 

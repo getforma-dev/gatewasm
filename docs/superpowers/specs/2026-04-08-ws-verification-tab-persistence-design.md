@@ -61,12 +61,15 @@ Three UX issues in the platform console:
 - `/platform/console/my-app#security` → Security view
 
 **State change → URL update:**
-- Wrap `setAccountTab` and `setView` to call `history.replaceState` with updated hash
-- `replaceState` (not `pushState`) so tab switches don't flood browser history
+- Wrap `setAccountTab` and `navigateTenantView` to call `history.pushState` with updated hash
+- `pushState` (not `replaceState`) so tab switches create history entries — enables browser back/forward between tabs (matches Clerk, Vercel, Linear patterns)
+- Dedup guard: skip `pushState` when the hash hasn't actually changed (e.g. clicking the active tab)
+- Default tabs (`tenants` in account, `overview` in workspace) use empty hash to keep URLs clean
 
 **URL → state restore:**
-- In `init()`, after determining mode, read `location.hash` and restore matching tab/view
-- Listen for `hashchange` event to handle back/forward
+- In `init()`, after determining mode, read `location.hash` and restore matching tab/view — enables bookmarked/shared URLs
+- `popstate` handler reads hash and restores tab/view. For same-tenant hash-only changes, update signals directly without calling `resetTenantScopedState()` (avoids re-fetching all data for a simple tab switch)
+- `hashchange` listener handles manual URL editing in address bar
 - Invalid or empty hash defaults to `tenants` (account) or `overview` (workspace)
 
 **Scope:** Top-level tab and view only. Sub-sections (overview window, integrate section, plane) stay signal-only.

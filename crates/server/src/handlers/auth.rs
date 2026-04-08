@@ -1869,6 +1869,11 @@ pub async fn verify_email(
         .await;
     }
 
+    // Notify connected WS clients so the verification banner disappears
+    if let Some(ref tid) = tenant_id {
+        crate::ws::events::emit_account_updated(&state.event_bus, tid, "email_verified");
+    }
+
     // Always redirect to login — avoids wrong-session issues when verification
     // link is opened in a different browser profile than the one that registered.
     let redirect_url = "/platform/login?verified=true";
