@@ -188,11 +188,13 @@ test.describe('WS Ticket Auth & Connection Lifecycle', () => {
   // -------------------------------------------------------------------------
   // Test 3 — WS upgrade succeeds with valid ticket
   // -------------------------------------------------------------------------
-  test('WS upgrade succeeds with valid ticket', async () => {
-    await sharedPage.goto(BASE + '/platform/console');
-    const token = await getAccessToken(sharedContext);
-    const ticket = await getWsTicket(sharedContext, token);
-    const ws = await connectWebSocket(sharedPage, ticket);
+  test('WS upgrade succeeds with valid ticket', async ({ browser }) => {
+    const { context, page } = await loginAsTestUser(browser);
+    const token = await getAccessToken(context);
+    const ticket = await getWsTicket(context, token);
+    await page.goto(BASE + '/platform/console');
+    await page.waitForLoadState('networkidle');
+    const ws = await connectWebSocket(page, ticket);
 
     await ws.waitForOpen();
 
@@ -201,16 +203,20 @@ test.describe('WS Ticket Auth & Connection Lifecycle', () => {
     await ws.waitForMessage((msg) => msg.type === 'pong');
 
     await ws.close();
+    await context.close();
   });
 
   // -------------------------------------------------------------------------
   // Test 4 — WS upgrade rejects invalid ticket
   // -------------------------------------------------------------------------
-  test('WS upgrade rejects invalid ticket', async () => {
-    await sharedPage.goto(BASE + '/platform/console');
+  test('WS upgrade rejects invalid ticket', async ({ browser }) => {
+    const { context, page } = await loginAsTestUser(browser);
+    await page.goto(BASE + '/platform/console');
+    await page.waitForLoadState('networkidle');
     const bogusTicket = 'a'.repeat(64);
-    const ws = await connectWebSocket(sharedPage, bogusTicket);
+    const ws = await connectWebSocket(page, bogusTicket);
     await ws.waitForClose();
+    await context.close();
   });
 
   // -------------------------------------------------------------------------
@@ -242,28 +248,33 @@ test.describe('WS Ticket Auth & Connection Lifecycle', () => {
   // -------------------------------------------------------------------------
   // Test 6 — WS upgrade rejects expired ticket (30 s TTL)
   // -------------------------------------------------------------------------
-  test('WS upgrade rejects expired ticket (30s TTL)', async () => {
+  test('WS upgrade rejects expired ticket (30s TTL)', async ({ browser }) => {
     test.setTimeout(45000);
 
-    await sharedPage.goto(BASE + '/platform/console');
-    const token = await getAccessToken(sharedContext);
-    const ticket = await getWsTicket(sharedContext, token);
+    const { context, page } = await loginAsTestUser(browser);
+    const token = await getAccessToken(context);
+    const ticket = await getWsTicket(context, token);
+    await page.goto(BASE + '/platform/console');
+    await page.waitForLoadState('networkidle');
 
     // Wait for the ticket to expire
-    await sharedPage.waitForTimeout(31000);
+    await page.waitForTimeout(31000);
 
-    const ws = await connectWebSocket(sharedPage, ticket);
+    const ws = await connectWebSocket(page, ticket);
     await ws.waitForClose();
+    await context.close();
   });
 
   // -------------------------------------------------------------------------
   // Test 7 — Server sends pong in response to ping
   // -------------------------------------------------------------------------
-  test('Server sends pong in response to ping', async () => {
-    await sharedPage.goto(BASE + '/platform/console');
-    const token = await getAccessToken(sharedContext);
-    const ticket = await getWsTicket(sharedContext, token);
-    const ws = await connectWebSocket(sharedPage, ticket);
+  test('Server sends pong in response to ping', async ({ browser }) => {
+    const { context, page } = await loginAsTestUser(browser);
+    const token = await getAccessToken(context);
+    const ticket = await getWsTicket(context, token);
+    await page.goto(BASE + '/platform/console');
+    await page.waitForLoadState('networkidle');
+    const ws = await connectWebSocket(page, ticket);
 
     await ws.waitForOpen();
     await ws.send(JSON.stringify({ type: 'ping' }));
@@ -277,6 +288,7 @@ test.describe('WS Ticket Auth & Connection Lifecycle', () => {
     expect(hasPong).toBe(true);
 
     await ws.close();
+    await context.close();
   });
 });
 
