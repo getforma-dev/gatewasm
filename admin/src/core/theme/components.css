@@ -4310,6 +4310,69 @@
   color: var(--accent);
 }
 
+/* ── Custom CSS editor ───────────────────────────────────────────── */
+
+.wizard-css-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 12px;
+  color: var(--text-dim);
+  font-size: 0.78rem;
+  cursor: pointer;
+  transition: border-color 0.15s;
+}
+
+.wizard-css-toggle:hover {
+  border-color: var(--border-strong);
+}
+
+.wizard-css-arrow {
+  font-size: 0.6rem;
+  color: var(--text-muted);
+}
+
+.wizard-css-editor {
+  margin-top: 8px;
+}
+
+.wizard-css-textarea {
+  width: 100%;
+  background: #0a0a0c;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px;
+  color: var(--text);
+  font-family: 'DM Mono', monospace;
+  font-size: 0.75rem;
+  line-height: 1.6;
+  resize: vertical;
+  box-sizing: border-box;
+}
+
+.wizard-css-textarea::placeholder {
+  color: var(--text-muted);
+}
+
+.wizard-css-hint {
+  font-size: 0.68rem;
+  color: var(--text-muted);
+  margin-top: 6px;
+  line-height: 1.4;
+}
+
+.wizard-css-count {
+  font-size: 0.65rem;
+  color: var(--text-muted);
+  text-align: right;
+  margin-top: 4px;
+  font-family: 'DM Mono', monospace;
+}
+
 /* Security intent note */
 
 .security-intent-note {
