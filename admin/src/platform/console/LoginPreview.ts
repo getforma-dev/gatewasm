@@ -78,8 +78,18 @@ export function LoginPreview(props: LoginPreviewProps) {
     ),
 
     // Page body
-    h('div', { class: 'lp-page' },
-      h('div', { class: 'lp-card', style: () => customStyle() },
+    h('div', {
+      class: 'lp-page',
+      style: () => ({ background: props.bgColor ? (props.bgColor() || tokens().bg) : tokens().bg }),
+    },
+      h('div', {
+        class: 'lp-card',
+        style: () => {
+          const base = 'background:' + (props.cardColor ? (props.cardColor() || tokens().surface) : tokens().surface) + ';';
+          const custom = customStyle();
+          return base + custom;
+        },
+      },
         h('div', { class: 'lp-logo-area' },
           createShow(
             () => props.logoUrl() !== '',
@@ -91,7 +101,10 @@ export function LoginPreview(props: LoginPreviewProps) {
               onLoad: (e: Event) => (e.target as HTMLElement).classList.remove('lp-logo-broken'),
             }),
           ),
-          h('div', { class: 'lp-app-name' }, () => props.appName() || 'Your App'),
+          createShow(
+            () => props.appName() !== '',
+            () => h('div', { class: 'lp-app-name' }, () => props.appName()),
+          ),
         ),
 
         h('div', { class: 'lp-subtitle' }, 'Sign in to your account'),

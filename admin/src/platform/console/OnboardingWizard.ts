@@ -324,7 +324,6 @@ function StepBranding(): ReturnType<typeof h> {
   const [customCSS, setCustomCSS] = createSignal(tenant.branding_custom_css || '');
   const [cssExpanded, setCssExpanded] = createSignal(false);
 
-  const defaultBg = () => darkMode() ? '#0a0a0c' : '#f8fafc';
   const defaultCard = () => darkMode() ? '#111114' : '#ffffff';
 
   // Derive providers from tenant for preview
@@ -434,31 +433,6 @@ function StepBranding(): ReturnType<typeof h> {
       ),
 
       h('label', { class: 'wizard-field' },
-        h('span', null, 'Page background'),
-        h('div', { class: 'wizard-color-row' },
-          h('input', {
-            type: 'color',
-            value: () => bgColor() || defaultBg(),
-            onInput: (e: Event) => setBgColor((e.target as HTMLInputElement).value),
-          }),
-          h('input', {
-            type: 'text',
-            class: 'input input-sm',
-            placeholder: () => defaultBg(),
-            value: () => bgColor(),
-            onInput: (e: Event) => setBgColor((e.target as HTMLInputElement).value),
-          }),
-          createShow(() => bgColor() !== '', () =>
-            h('button', {
-              type: 'button',
-              class: 'btn btn-ghost btn-sm',
-              onClick: () => setBgColor(''),
-            }, 'Reset'),
-          ),
-        ),
-      ),
-
-      h('label', { class: 'wizard-field' },
         h('span', null, 'Card background'),
         h('div', { class: 'wizard-color-row' },
           h('input', {
@@ -477,7 +451,7 @@ function StepBranding(): ReturnType<typeof h> {
             h('button', {
               type: 'button',
               class: 'btn btn-ghost btn-sm',
-              onClick: () => setCardColor(''),
+              onClick: () => setBgColor(''),
             }, 'Reset'),
           ),
         ),
@@ -514,7 +488,7 @@ function StepBranding(): ReturnType<typeof h> {
           h('span', null, 'Custom CSS'),
           h('span', { class: 'wizard-css-arrow' }, () => cssExpanded() ? '\u25B2' : '\u25BC'),
         ),
-        createShow(cssExpanded, () =>
+        createShow(() => cssExpanded(), () =>
           h('div', { class: 'wizard-css-editor' },
             h('textarea', {
               class: 'wizard-css-textarea',
@@ -534,6 +508,15 @@ function StepBranding(): ReturnType<typeof h> {
 
       h('div', { class: 'wizard-field wizard-field-row' },
         h('span', null, 'Remove fAuth branding'),
+        h('label', { class: 'wizard-toggle' },
+          h('input', { type: 'checkbox', disabled: true }),
+          h('span', { class: 'wizard-toggle-track' }),
+        ),
+        h('span', { class: 'wizard-provider-badge' }, 'Paid plan'),
+      ),
+
+      h('div', { class: 'wizard-field wizard-field-row' },
+        h('span', null, 'Customize page background'),
         h('label', { class: 'wizard-toggle' },
           h('input', { type: 'checkbox', disabled: true }),
           h('span', { class: 'wizard-toggle-track' }),

@@ -29,9 +29,10 @@ pub async fn dashboard_page(State(state): State<AppState>) -> impl IntoResponse 
         slots: None,
     });
 
-    // Add frame-src 'self' to allow the onboarding wizard's live preview iframe
-    // of the tenant login page (same origin)
-    let csp = page.csp + "; frame-src 'self'";
+    // Relax CSP for the platform console:
+    // - frame-src: allow live preview iframe of tenant login (same origin)
+    // - img-src: allow operators to paste external logo URLs (any HTTPS source)
+    let csp = page.csp.replace("img-src 'self' data:", "img-src 'self' data: https:") + "; frame-src 'self'";
 
     (
         [

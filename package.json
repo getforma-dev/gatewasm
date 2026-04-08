@@ -15,7 +15,7 @@
     "dev:frontend": "cd admin && npm run dev",
     "dev:server": "cargo run -p gatewasm-server",
     "dev:server:watch": "node scripts/wait-for-dev-manifest.mjs && cargo run -p gatewasm-server",
-    "dev:mailpit": "mailpit --smtp 0.0.0.0:1025 --listen 0.0.0.0:8025",
+    "dev:mailpit": "lsof -ti :8025 | xargs kill -9 2>/dev/null; mailpit --smtp 0.0.0.0:1025 --listen 0.0.0.0:8025",
     "dev": "concurrently -n server,frontend,mailpit -c blue,green,magenta \"npm run dev:server:watch\" \"npm run dev:frontend\" \"npm run dev:mailpit\"",
     "test": "cargo test --lib",
     "test:integration": "cargo test -p gatewasm-server --test integration",

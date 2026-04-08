@@ -1,10 +1,8 @@
 import { h, createSignal, createShow, createSwitch, onCleanup } from 'formajs';
-import { Field } from '../../core/components/ui/Field';
 import { LoadingBar } from '../../core/components/ui/LoadingBar';
 import { ToastView } from '../../core/components/ui/Toast';
 import { createKeyboard } from '../../core/hooks/createKeyboard';
 import { getThemeMode, toggleThemeMode, type ThemeMode } from '../../core/utils';
-import { normalizeTenantSlugInput } from '../tenantSlug';
 import { CommandPalette, type CommandPaletteSection } from './CommandPalette';
 import { PlaneNav } from './views/PlaneNav';
 import { userDisplayName, userInitials, FAuthMark } from './helpers';
@@ -26,22 +24,20 @@ import { TeamView } from './views/TeamView';
 import { OnboardingWizard } from './OnboardingWizard';
 import {
   view, loading, toast, backToTenants, signout,
-  selectedTenant, tenants, selectTenant, createTenant, checkSlugAvailability, currentUser,
+  selectedTenant, tenants, selectTenant, currentUser,
   navigateTenantView, refreshCurrentView, openIntegrateGuide, openSessionInspector,
   plane, setPlane, type Plane, type ConsoleView,
   type TenantWorkspaceView,
   mode, accountTab, setAccountTab, type AccountTab,
-  accountOwner,
   canEdit,
   serverUrl,
   resendVerification, resendCooldown, resendAttempts, resendMaxed,
   pendingInvites,
   acceptInviteFromDashboard,
+  startNewWorkspaceWizard,
 } from './store';
 
 function TenantsList() {
-  const [showCreate, setShowCreate] = createSignal(false);
-
   const ownTenants = () => tenants().filter((t: any) => t.access !== 'team');
   const teamTenants = () => tenants().filter((t: any) => t.access === 'team');
 
@@ -99,7 +95,7 @@ function TenantsList() {
           type: 'button',
           class: 'clip-btn',
           disabled: () => !canEdit(),
-          onClick: () => setShowCreate(true),
+          onClick: () => startNewWorkspaceWizard(),
         }, '+ New Workspace'),
       ),
     ),
@@ -119,7 +115,7 @@ function TenantsList() {
               type: 'button',
               class: 'clip-btn',
               disabled: () => !canEdit(),
-              onClick: () => setShowCreate(true),
+              onClick: () => startNewWorkspaceWizard(),
             }, '+ Create Workspace'),
           ),
         ),
@@ -144,12 +140,6 @@ function TenantsList() {
         ),
       ),
     ),
-
-    // Create modal
-    createShow(
-      () => showCreate(),
-      () => CreateTenantModal(() => setShowCreate(false)),
-    ),
   );
 }
 
@@ -157,224 +147,6 @@ function TenantMeta(label: string, value: string) {
   return h('div', { class: 'tenant-card-stat' },
     h('span', { class: 'tenant-card-stat-label' }, label),
     h('span', { class: 'tenant-card-stat-value' }, value),
-  );
-}
-
-function CreateTenantModal(onClose: () => void) {
-  const [name, setName] = createSignal('');
-  const [slug, setSlug] = createSignal('');
-  const [slugEdited, setSlugEdited] = createSignal(false);
-  const [saving, setSaving] = createSignal(false);
-  const [slugStatus, setSlugStatus] = createSignal<'idle' | 'checking' | 'available' | 'taken' | 'invalid'>('idle');
-  const [slugWarn, setSlugWarn] = createSignal('');
-  const [slugError, setSlugError] = createSignal('');
-  const [slugSuggestion, setSlugSuggestion] = createSignal('');
-  let checkTimer: ReturnType<typeof setTimeout> | undefined;
-
-  function closeModal() {
-    clearTimeout(checkTimer);
-    onClose();
-  }
-
-  function validateAndCheckSlug(raw: string, normalized: string) {
-    clearTimeout(checkTimer);
-    setSlugWarn('');
-    setSlugError('');
-
-    // Detect stripped characters — yellow warning only
-    if (raw !== normalized && raw.length > 0) {
-      const stripped = raw.replace(/[a-z0-9-]/g, '');
-      if (stripped.length > 0) {
-        setSlugWarn('Invalid characters removed');
-      }
-    }
-
-    // Validate the normalized slug
-    if (!normalized) {
-      setSlugStatus('idle');
-      return;
-    }
-
-    if (normalized.length < 2) {
-      setSlugStatus('invalid');
-      setSlugError('Slug must be at least 2 characters');
-      return;
-    }
-
-    if (normalized.length > 63) {
-      setSlugStatus('invalid');
-      setSlugError('Slug must be 63 characters or fewer');
-      return;
-    }
-
-    // Check reserved slugs client-side
-    const reserved = ['platform', 'api', 'admin', 'manage', 'auth', 'health', 'docs', 'www',
-      'app', 'dashboard', 'billing', 'support', 'login', 'register', 'signup',
-      'get-started', 'bridge', 'openapi', 't', 'static', 'assets'];
-    if (reserved.includes(normalized)) {
-      setSlugStatus('invalid');
-      setSlugError('\u201C' + normalized + '\u201D is reserved');
-      return;
-    }
-
-    // All local checks pass — check availability
-    setSlugStatus('checking');
-    checkTimer = setTimeout(async () => {
-      try {
-        const available = await checkSlugAvailability(normalized);
-        if (slug() === normalized) {
-          if (available) {
-            setSlugStatus('available');
-          } else {
-            setSlugStatus('taken');
-            setSlugSuggestion(normalized + '-' + Math.random().toString(36).slice(2, 5));
-          }
-        }
-      } catch {
-        // Network error — don't show false "available", reset to idle
-        if (slug() === normalized) {
-          setSlugStatus('idle');
-        }
-      }
-    }, 500);
-  }
-
-  function handleNameChange(value: string) {
-    setName(value);
-    if (!slugEdited()) {
-      const normalized = normalizeTenantSlugInput(value);
-      setSlug(normalized);
-      validateAndCheckSlug(normalized, normalized);
-    }
-  }
-
-  function handleSlugInput(e: Event) {
-    setSlugEdited(true);
-    const input = e.target as HTMLInputElement;
-    const raw = input.value;
-    const normalized = normalizeTenantSlugInput(raw);
-    if (input.value !== normalized) {
-      const pos = input.selectionStart ?? normalized.length;
-      const removed = raw.length - normalized.length;
-      input.value = normalized;
-      const newPos = Math.max(0, pos - removed);
-      input.setSelectionRange(newPos, newPos);
-    }
-    setSlug(normalized);
-    validateAndCheckSlug(raw.trim().toLowerCase(), normalized);
-  }
-
-  async function handleSubmit(event: Event) {
-    event.preventDefault();
-    clearTimeout(checkTimer);
-    const nextName = name().trim();
-    const nextSlug = slug().trim();
-    if (!nextName) { toast.show('App name is required', 'error'); return; }
-    if (!nextSlug) { toast.show('Tenant slug is required', 'error'); return; }
-    if (slugStatus() === 'taken') { toast.show('This slug is already taken', 'error'); return; }
-    setSaving(true);
-    const created = await createTenant({ name: nextName, slug: nextSlug });
-    setSaving(false);
-    if (!created) return;
-    closeModal();
-    selectTenant(created);
-  }
-
-  return h('div', { class: 'modal-overlay', onClick: (e: Event) => {
-    if ((e.target as HTMLElement).classList.contains('modal-overlay')) closeModal();
-  }},
-    h('div', { class: 'modal-content' },
-      h('div', { class: 'modal-header' },
-        h('h3', { class: 'section-title' }, 'Create Workspace'),
-        h('button', {
-          type: 'button',
-          class: 'modal-close',
-          onClick: closeModal,
-        }, '\u00D7'),
-      ),
-      h('p', { class: 'card-copy', style: 'padding: 0 var(--space-lg)' },
-        'Choose a name and slug for your new workspace. The slug becomes part of your hosted URLs.',
-      ),
-      h('form', { class: 'tenant-create-form', style: 'padding: var(--space-md) var(--space-lg) var(--space-lg)', onSubmit: handleSubmit },
-        Field({
-          label: 'App Name',
-          name: 'tenant-name',
-          value: name,
-          onChange: handleNameChange,
-          placeholder: 'Acme Workspace',
-          hint: 'This appears in the console and the hosted tenant experience.',
-          required: true,
-        }),
-        h('div', { class: 'field' },
-          h('label', { class: 'field-label', for: 'field-tenant-slug' }, 'Tenant Slug'),
-          h('input', {
-            id: 'field-tenant-slug',
-            type: 'text',
-            name: 'tenant-slug',
-            value: slug,
-            placeholder: 'acme-workspace',
-            required: true,
-            onInput: handleSlugInput,
-          }),
-          h('div', { class: 'field-hint' }, 'Lowercase letters, numbers, and hyphens only.'),
-        ),
-        // Slug validation + availability indicator
-        h('div', { class: 'slug-status' },
-          createShow(
-            () => slugWarn().length > 0,
-            () => h('span', { class: 'slug-status-hint' }, slugWarn),
-          ),
-          createShow(
-            () => slugStatus() === 'checking',
-            () => h('span', { class: 'slug-status-checking' }, 'Checking availability...'),
-          ),
-          createShow(
-            () => slugStatus() === 'available',
-            () => h('span', { class: 'slug-status-available' }, () => '\u2713 ' + slug() + ' is available'),
-          ),
-          createShow(
-            () => slugStatus() === 'invalid',
-            () => h('span', { class: 'slug-status-invalid' }, () => '\u2717 ' + slugError()),
-          ),
-          createShow(
-            () => slugStatus() === 'taken',
-            () => h('div', { class: 'slug-status-taken' },
-              h('span', null, '\u2717 Already taken'),
-              h('button', {
-                type: 'button',
-                class: 'slug-suggestion',
-                onClick: () => {
-                  const s = slugSuggestion();
-                  const input = document.getElementById('field-tenant-slug') as HTMLInputElement;
-                  if (input) input.value = s;
-                  setSlug(s);
-                  setSlugEdited(true);
-                  validateAndCheckSlug(s, s);
-                },
-              }, () => 'Try ' + slugSuggestion()),
-            ),
-          ),
-        ),
-        h('div', { class: 'tenant-create-preview' },
-          h('span', { class: 'detail-label' }, 'Tenant URL'),
-          h('code', { class: 'code-block code-inline-block break-all' },
-            () => slug() ? '/t/' + slug() : '/t/your-slug',
-          ),
-        ),
-        h('div', { class: 'modal-actions' },
-          h('button', {
-            type: 'button',
-            class: 'btn btn-ghost btn-sm',
-            onClick: closeModal,
-          }, 'Cancel'),
-          h('button', {
-            type: 'submit',
-            class: 'clip-btn',
-            disabled: () => saving() || !name().trim() || !slug().trim() || slugStatus() === 'taken' || slugStatus() === 'checking' || slugStatus() === 'invalid',
-          }, () => saving() ? 'Creating...' : 'Create Workspace'),
-        ),
-      ),
-    ),
   );
 }
 
