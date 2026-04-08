@@ -17,10 +17,15 @@ pub fn login_limiter() -> DefaultGovernorLayer {
 }
 
 /// Rate limit for register endpoints: replenishes 12 tokens/sec, burst of 5 per IP.
+/// Override burst size with REGISTER_RATE_LIMIT_BURST env var (useful for e2e tests).
 pub fn register_limiter() -> DefaultGovernorLayer {
+    let burst: u32 = std::env::var("REGISTER_RATE_LIMIT_BURST")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(5);
     let config = GovernorConfigBuilder::default()
         .per_second(12)
-        .burst_size(5)
+        .burst_size(burst)
         .finish()
         .expect("Failed to build register rate limiter");
     GovernorLayer::new(config)

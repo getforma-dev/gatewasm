@@ -9,7 +9,7 @@ async function postWithRetry(
   request: APIRequestContext,
   url: string,
   options: any,
-  attempts = 4,
+  attempts = 8,
 ) {
   let response: any;
   for (let attempt = 0; attempt < attempts; attempt += 1) {
@@ -17,9 +17,9 @@ async function postWithRetry(
     if (response.status() !== 429) {
       return response;
     }
-    const retryAfter = Number(response.headers()['retry-after'] || '1');
+    const retryAfter = Number(response.headers()['retry-after'] || '2');
     await new Promise((resolve) =>
-      setTimeout(resolve, Math.max(500, retryAfter * 1000)),
+      setTimeout(resolve, Math.max(1000, retryAfter * 1000 + 500)),
     );
   }
   return response;

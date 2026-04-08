@@ -17,12 +17,23 @@ import { BASE } from './helpers';
 
 /** Exchange the refresh cookie for a short-lived access token. */
 async function getAccessToken(context: BrowserContext): Promise<string> {
-  const res = await context.request.post(BASE + '/t/platform/auth/token', {
-    data: { grant_type: 'refresh_token' },
-  });
-  expect(res.ok()).toBeTruthy();
-  const data = await res.json();
-  return data.access_token as string;
+  // Retry up to 3 times — token refresh can fail transiently under rate limiting
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const res = await context.request.post(BASE + '/t/platform/auth/token', {
+      data: { grant_type: 'refresh_token' },
+    });
+    if (res.ok()) {
+      const data = await res.json();
+      return data.access_token as string;
+    }
+    if (res.status() === 429) {
+      const retryAfter = Number(res.headers()['retry-after'] || '2');
+      await new Promise(r => setTimeout(r, Math.max(1000, retryAfter * 1000 + 500)));
+      continue;
+    }
+    throw new Error(`getAccessToken failed: ${res.status()} ${await res.text()}`);
+  }
+  throw new Error('getAccessToken: max retries exceeded');
 }
 
 /** Make an authenticated JSON API call using Node's native fetch.
@@ -647,10 +658,10 @@ test.describe('WS Reconnection & Server-Initiated Close', () => {
   // -------------------------------------------------------------------------
   // Test 2 — Server sends auth_expired when JWT expires
   // -------------------------------------------------------------------------
-  // The test server is configured with JWT_ACCESS_TOKEN_EXPIRY=15 (15 seconds).
+  // The test server is configured with JWT_ACCESS_TOKEN_EXPIRY=60 (60 seconds).
   // The WS handler sets a timer based on the JWT's exp claim.
   test('server sends auth_expired when JWT expires', async ({ browser }) => {
-    test.setTimeout(30000); // Extended timeout — waiting for 15s token expiry
+    test.setTimeout(90000); // Extended timeout — waiting for 60s token expiry
 
     const { context, page } = await loginAsTestUser(browser);
 
@@ -666,10 +677,10 @@ test.describe('WS Reconnection & Server-Initiated Close', () => {
       // Subscribe so we can distinguish auth_expired from other messages
       await ws.send(JSON.stringify({ type: 'subscribe', topics: ['team:changed'] }));
 
-      // Wait for the JWT to expire (15s configured in test env + buffer)
+      // Wait for the JWT to expire (60s configured in test env + buffer)
       await ws.waitForMessage(
         (msg) => msg.type === 'auth_expired',
-        20000,
+        75000,
       );
 
       const messages = await ws.getMessages();
