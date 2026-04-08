@@ -4,7 +4,7 @@
   "scripts": {
     "build": "tsx build.ts",
     "build:ssr": "tsx build.ts --ssr",
-    "dev": "tsx build.ts --watch",
+    "dev": "mailpit --smtp 0.0.0.0:1025 --listen 0.0.0.0:8025 & tsx build.ts --watch",
     "mailpit": "mailpit --smtp 0.0.0.0:1025 --listen 0.0.0.0:8025",
     "test": "playwright test",
     "test:smoke": "playwright test --grep @smoke",
