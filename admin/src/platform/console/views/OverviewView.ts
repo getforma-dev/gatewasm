@@ -1,18 +1,11 @@
 import { h, createSignal, createShow } from 'formajs';
 import { Skeleton } from '../../../core/components/ui/Skeleton';
-import { CopyButton } from '../../../core/components/ui/CopyButton';
 import {
   selectedTenant,
   selectedTenantStats,
   loading,
   overviewWindow,
   changeOverviewWindow,
-  introspectData,
-  introspectUnavailable,
-  navigateTenantView,
-  openIntegrateGuide,
-  openSessionInspector,
-  updateTenant,
   type OverviewWindow as OverviewWindowValue,
   type TenantActivityItem,
   type TenantStats,
@@ -28,150 +21,28 @@ const WINDOW_LABELS: Record<OverviewWindowValue, string> = {
 export function OverviewView() {
   const tenant = selectedTenant()!;
   const tenantState = () => selectedTenant() || tenant;
-  const [hidingChecklist, setHidingChecklist] = createSignal(false);
-
-  function chooseStartingView(nextView: 'integrate' | 'hosted-page') {
-    void updateTenant(tenantState().id, { preferred_tab: nextView });
-    if (nextView === 'integrate') {
-      openIntegrateGuide();
-      return;
-    }
-    navigateTenantView(nextView);
-  }
-
-  async function hideChecklist() {
-    setHidingChecklist(true);
-    await updateTenant(tenantState().id, { onboarding_completed: true });
-    setHidingChecklist(false);
-  }
-
   const stats = () => selectedTenantStats();
   const activeWindow = () => stats()?.window || overviewWindow();
   const isBootstrapping = () => loading() && !stats();
-
-  const setupChecklistCard = () => {
-    if (tenantState().onboarding_completed) {
-      return null;
-    }
-
-    const hasLiveSession = !!introspectData();
-    const sessionStatus = hasLiveSession
-      ? 'Live session'
-      : introspectUnavailable()
-        ? 'Needs sign-in'
-        : 'Checking';
-    const preferredTab = tenantState().preferred_tab === 'hosted-page'
-      ? 'Hosted Page'
-      : tenantState().preferred_tab === 'integrate'
-        ? 'Integrate'
-        : 'Choose focus';
-
-    return h('div', { class: 'console-card setup-checklist-card' },
-      h('div', { class: 'card-label' }, 'Recommended Next Steps'),
-      h('h3', { class: 'section-title' }, 'Get the tenant into a working state quickly'),
-      h('p', { class: 'card-copy' },
-        'This stays lightweight on purpose: claim the URL, preview the hosted flow, create one real session, and decide which workspace you will spend time in most.',
-      ),
-      h('div', { class: 'setup-checklist' },
-        ChecklistItem(
-          'Claim the tenant URL you actually want',
-          'Your hosted URLs already resolve through /t/' + tenantState().slug + '. Rename it now if you want something cleaner before sharing it.',
-          'Ready',
-          h('button', {
-            type: 'button',
-            class: 'btn btn-sm btn-ghost',
-            onClick: () => navigateTenantView('integrate'),
-          }, 'Open Integrate'),
-        ),
-        ChecklistItem(
-          'Preview the login page',
-          'Review the hosted sign-in surface without following the active redirect into the protected site.',
-          'Preview',
-          h('a', {
-            href: () => '/t/' + tenantState().slug + '/login?preview=1',
-            target: '_blank',
-            class: 'btn btn-sm btn-ghost',
-          }, 'Preview Login'),
-        ),
-        ChecklistItem(
-          'Create one real tenant session',
-          hasLiveSession
-            ? 'A real tenant-user session is already present in this browser.'
-            : introspectUnavailable()
-              ? 'Auth Reference is always available. Sign in once to also see live session data.'
-              : 'The console is checking whether this browser already has a tenant session.',
-          sessionStatus,
-          hasLiveSession
-            ? h('button', {
-                type: 'button',
-                class: 'btn btn-sm btn-ghost',
-                onClick: openSessionInspector,
-              }, 'Open Auth Reference')
-            : h('a', {
-                href: () => '/t/' + tenantState().slug + '/login?redirect=/t/' + tenantState().slug + '/site',
-                target: '_blank',
-                class: 'btn btn-sm btn-ghost',
-              }, 'Start Tenant Sign-In'),
-        ),
-        ChecklistItem(
-          'Choose the area you will live in most',
-          'Pin the working area that should open first when you come back to this tenant.',
-          preferredTab,
-          h('div', { class: 'card-actions' },
-            h('button', {
-              type: 'button',
-              class: 'btn btn-sm btn-ghost',
-              onClick: () => chooseStartingView('integrate'),
-            }, 'Use Integrate'),
-            h('button', {
-              type: 'button',
-              class: 'btn btn-sm btn-ghost',
-              onClick: () => chooseStartingView('hosted-page'),
-            }, 'Use Hosted Page'),
-          ),
-        ),
-      ),
-      h('div', { class: 'card-actions' },
-        h('button', {
-          type: 'button',
-          class: 'btn btn-primary btn-sm',
-          disabled: hidingChecklist,
-          onClick: hideChecklist,
-        }, () => hidingChecklist() ? 'Hiding...' : 'Hide Checklist'),
-      ),
-    );
-  };
-
-  const quickLinksCard = () => h('div', { class: 'console-card' },
-    h('div', { class: 'card-label' }, 'Tenant Surfaces'),
-    h('div', { class: 'quick-links-grid' },
-      QuickLink(
-        'Login Page',
-        'Preview the hosted sign-in surface without auto-following an existing tenant session.',
-        () => '/t/' + tenantState().slug + '/login?preview=1',
-        'Preview login',
-      ),
-      QuickLink(
-        'Protected Site',
-        'Open the real end-user route. If you are signed out, it starts at the tenant login page.',
-        () => '/t/' + tenantState().slug + '/site',
-        'Open site',
-      ),
-      QuickAction(
-        'Auth Reference',
-        'Jump into Integrate to see the auth payload shape, token format, and endpoints.',
-        openSessionInspector,
-        'View reference',
-      ),
-    ),
-  );
 
   return h('div', { class: 'console-view' },
     h('div', { class: 'view-header view-header-split' },
       h('div', { class: 'view-header-body' },
         h('div', { class: 'view-eyebrow' }, 'Operator'),
         h('h2', { class: 'view-title' }, () => tenantState().name || 'Overview'),
-        h('p', { class: 'view-subtitle text-muted' }, () => '/t/' + tenantState().slug),
+        h('div', { style: 'display:flex;align-items:center;gap:8px' },
+          h('p', { class: 'view-subtitle text-muted' }, () => '/t/' + tenantState().slug),
+          createShow(
+            () => tenantState()?.tenant_intent != null,
+            () => {
+              const labels: Record<string, string> = {
+                saas: 'SaaS App', internal: 'Internal Tool', community: 'Community Site',
+                'client-portal': 'Client Portal', marketplace: 'Marketplace / API',
+              };
+              return h('span', { class: 'badge badge-dim' }, () => labels[tenantState()?.tenant_intent || ''] || '');
+            },
+          ),
+        ),
       ),
       h('div', { class: 'view-header-actions' },
         HeaderMetric('Users', () => String(stats()?.total_users ?? '-')),
@@ -195,8 +66,6 @@ export function OverviewView() {
       h('div', { class: 'dashboard-shell overview-shell' },
         h('div', { class: 'dashboard-main dashboard-stack' },
           ActivityFeedCard(stats, activeWindow, isBootstrapping),
-          setupChecklistCard,
-          quickLinksCard,
         ),
         h('div', { class: 'dashboard-aside dashboard-stack' },
           authStatusCard(),
@@ -457,19 +326,6 @@ function authStatusCard() {
   );
 }
 
-function ChecklistItem(title: string, description: string, status: string, action: HTMLElement | DocumentFragment) {
-  return h('div', { class: 'setup-checklist-item' },
-    h('div', { class: 'setup-checklist-heading' },
-      h('div', { class: 'quick-link-title' }, title),
-      h('span', { class: 'setup-status' }, status),
-    ),
-    h('div', { class: 'setup-checklist-copy' },
-      h('div', { class: 'quick-link-description' }, description),
-    ),
-    h('div', { class: 'setup-checklist-action' }, action),
-  );
-}
-
 function HeaderMetric(label: string, value: () => string) {
   return h('div', { class: 'header-metric' },
     h('span', { class: 'header-metric-label' }, label),
@@ -488,37 +344,6 @@ function OverviewDetailRow(label: string, value: string) {
   return h('div', { class: 'detail-row' },
     h('span', { class: 'detail-label' }, label),
     h('span', { class: 'detail-value' }, value),
-  );
-}
-
-function QuickLink(title: string, description: string, href: () => string, actionLabel: string) {
-  return h('div', { class: 'quick-link-card quick-link-card-static' },
-    h('span', { class: 'quick-link-copy' },
-      h('span', { class: 'quick-link-title' }, title),
-      h('span', { class: 'quick-link-description' }, description),
-    ),
-    h('div', { class: 'quick-link-actions' },
-      h('a', {
-        href,
-        target: '_blank',
-        class: 'btn btn-sm btn-ghost',
-      }, actionLabel),
-      CopyButton({ text: href, iconOnly: true, title: 'Copy ' + title.toLowerCase() + ' URL' }),
-    ),
-  );
-}
-
-function QuickAction(title: string, description: string, onClick: () => void, actionLabel: string) {
-  return h('button', {
-    type: 'button',
-    class: 'quick-link-card quick-link-card-button',
-    onClick,
-  },
-    h('span', { class: 'quick-link-copy' },
-      h('span', { class: 'quick-link-title' }, title),
-      h('span', { class: 'quick-link-description' }, description),
-    ),
-    h('span', { class: 'quick-link-footer' }, actionLabel),
   );
 }
 
