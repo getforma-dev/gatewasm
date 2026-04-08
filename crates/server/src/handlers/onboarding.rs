@@ -222,6 +222,34 @@ fn validate_slug(slug: &str) -> Result<String, AppError> {
     Ok(slug)
 }
 
+fn sanitize_custom_css(input: &str) -> String {
+    let truncated = if input.len() > 2000 { &input[..2000] } else { input };
+    let mut result = truncated.to_string();
+    let patterns = [
+        "url(", "@import", "expression(", "javascript:", "-moz-binding",
+        "behavior:", "</style", "<script", "<!--",
+    ];
+    for pat in &patterns {
+        let mut cleaned = String::with_capacity(result.len());
+        let lower = result.to_lowercase();
+        let pat_lower = pat.to_lowercase();
+        let mut pos = 0;
+        while pos < result.len() {
+            if pos + pat_lower.len() <= lower.len()
+                && &lower[pos..pos + pat_lower.len()] == pat_lower.as_str()
+            {
+                pos += pat_lower.len();
+            } else {
+                cleaned.push(result.as_bytes()[pos] as char);
+                pos += 1;
+            }
+        }
+        result = cleaned;
+    }
+    result.retain(|c| c != '<' && c != '>' && c != '\\' && c != '{' && c != '}');
+    result.trim().to_string()
+}
+
 // ── Self-Serve API ──────────────────────────────────────────────────────
 
 #[derive(Debug, Deserialize)]
@@ -249,6 +277,9 @@ pub struct UpdateTenantRequest {
     pub branding_dark_mode: Option<bool>,
     pub branding_button_text: Option<String>,
     pub signup_mode: Option<String>,
+    pub branding_bg_color: Option<String>,
+    pub branding_card_color: Option<String>,
+    pub branding_custom_css: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -515,7 +546,8 @@ pub async fn list_my_tenants(
          COALESCE(plan, 'trial') AS plan, trial_ends_at, created_at, \
          onboarding_completed, onboarding_step, preferred_tab, \
          branding_primary_color, login_redirect_url, \
-         tenant_intent, branding_dark_mode, branding_button_text \
+         tenant_intent, branding_dark_mode, branding_button_text, \
+         branding_bg_color, branding_card_color, branding_custom_css \
          FROM tenants WHERE owner_user_id = $1 AND status != 'deleted' \
          ORDER BY created_at DESC",
     )
@@ -531,7 +563,8 @@ pub async fn list_my_tenants(
          COALESCE(t.plan, 'trial') AS plan, t.trial_ends_at, t.created_at, \
          t.onboarding_completed, t.onboarding_step, t.preferred_tab, \
          t.branding_primary_color, t.login_redirect_url, \
-         t.tenant_intent, t.branding_dark_mode, t.branding_button_text, pmt.role AS team_role \
+         t.tenant_intent, t.branding_dark_mode, t.branding_button_text, \
+         t.branding_bg_color, t.branding_card_color, t.branding_custom_css, pmt.role AS team_role \
          FROM platform_members pm \
          JOIN platform_member_tenants pmt ON pmt.member_id = pm.id \
          JOIN tenants t ON t.id = pmt.tenant_id \
@@ -569,6 +602,9 @@ pub async fn list_my_tenants(
             "tenant_intent": row.get::<Option<String>, _>("tenant_intent"),
             "branding_dark_mode": row.get::<bool, _>("branding_dark_mode"),
             "branding_button_text": row.get::<String, _>("branding_button_text"),
+            "branding_bg_color": row.get::<Option<String>, _>("branding_bg_color"),
+            "branding_card_color": row.get::<Option<String>, _>("branding_card_color"),
+            "branding_custom_css": row.get::<Option<String>, _>("branding_custom_css"),
             "access": access,
         });
         if let Some(role) = team_role {
@@ -618,6 +654,7 @@ pub async fn get_my_tenant(
          login_redirect_url, \
          onboarding_completed, onboarding_step, preferred_tab, \
          tenant_intent, branding_dark_mode, branding_button_text, \
+         branding_bg_color, branding_card_color, branding_custom_css, \
          created_at, updated_at \
          FROM tenants WHERE id = $1 AND status != 'deleted'",
     )
@@ -675,6 +712,9 @@ pub async fn get_my_tenant(
         "tenant_intent": row.get::<Option<String>, _>("tenant_intent"),
         "branding_dark_mode": row.get::<bool, _>("branding_dark_mode"),
         "branding_button_text": row.get::<String, _>("branding_button_text"),
+        "branding_bg_color": row.get::<Option<String>, _>("branding_bg_color"),
+        "branding_card_color": row.get::<Option<String>, _>("branding_card_color"),
+        "branding_custom_css": row.get::<Option<String>, _>("branding_custom_css"),
         "created_at": row.get::<chrono::DateTime<Utc>, _>("created_at").to_rfc3339(),
         "updated_at": row.get::<chrono::DateTime<Utc>, _>("updated_at").to_rfc3339(),
     })))
@@ -899,6 +939,37 @@ pub async fn update_my_tenant(
         .execute(&mut *tx)
         .await?;
     }
+    if let Some(ref v) = body.branding_bg_color {
+        let val = if v.is_empty() { None } else { Some(v.as_str()) };
+        sqlx::query(
+            "UPDATE tenants SET branding_bg_color = $1, updated_at = NOW() WHERE id = $2",
+        )
+        .bind(val)
+        .bind(&tenant_id)
+        .execute(&mut *tx)
+        .await?;
+    }
+    if let Some(ref v) = body.branding_card_color {
+        let val = if v.is_empty() { None } else { Some(v.as_str()) };
+        sqlx::query(
+            "UPDATE tenants SET branding_card_color = $1, updated_at = NOW() WHERE id = $2",
+        )
+        .bind(val)
+        .bind(&tenant_id)
+        .execute(&mut *tx)
+        .await?;
+    }
+    if let Some(ref v) = body.branding_custom_css {
+        let sanitized = sanitize_custom_css(v);
+        let val = if sanitized.is_empty() { None } else { Some(sanitized) };
+        sqlx::query(
+            "UPDATE tenants SET branding_custom_css = $1, updated_at = NOW() WHERE id = $2",
+        )
+        .bind(val.as_deref())
+        .bind(&tenant_id)
+        .execute(&mut *tx)
+        .await?;
+    }
     if let Some(ref v) = body.signup_mode {
         let normalized = match v.as_str() {
             "invite_only" | "open" => v.clone(),
@@ -926,6 +997,7 @@ pub async fn update_my_tenant(
          login_redirect_url, \
          onboarding_completed, onboarding_step, preferred_tab, \
          tenant_intent, branding_dark_mode, branding_button_text, \
+         branding_bg_color, branding_card_color, branding_custom_css, \
          created_at, updated_at \
          FROM tenants WHERE id = $1",
     )
@@ -961,6 +1033,9 @@ pub async fn update_my_tenant(
         "tenant_intent": row.get::<Option<String>, _>("tenant_intent"),
         "branding_dark_mode": row.get::<bool, _>("branding_dark_mode"),
         "branding_button_text": row.get::<String, _>("branding_button_text"),
+        "branding_bg_color": row.get::<Option<String>, _>("branding_bg_color"),
+        "branding_card_color": row.get::<Option<String>, _>("branding_card_color"),
+        "branding_custom_css": row.get::<Option<String>, _>("branding_custom_css"),
         "created_at": row.get::<chrono::DateTime<Utc>, _>("created_at").to_rfc3339(),
         "updated_at": row.get::<chrono::DateTime<Utc>, _>("updated_at").to_rfc3339(),
     })))
