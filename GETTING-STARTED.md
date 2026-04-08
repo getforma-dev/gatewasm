@@ -130,14 +130,20 @@ This is the page customers embed or link from their own app. End users never see
 ## Local Dev Quick Start
 
 ```bash
-# 1. Start database + server
-npm run db && npm run dev
+# 1. Start database
+npm run db
 
-# 2. Seed test data (first time only)
+# 2. Build + start everything (server + frontend + email inbox)
+npm run build:ssr
+npm run dev
+
+# 3. Seed test data (first time only)
 npm run db:seed
-
-# 3. Test the flows
 ```
+
+- **App:** http://localhost:3001
+- **Email inbox (Mailpit):** http://localhost:8025 — all dev emails captured here
+- **See `CONTRIBUTING.md`** for full command reference and reset options
 
 | Flow | URL | Credentials |
 |------|-----|-------------|
