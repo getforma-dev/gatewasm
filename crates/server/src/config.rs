@@ -57,6 +57,8 @@ pub struct AppConfig {
     pub maxmind_db_path: Option<String>,
     /// WebSocket ticket time-to-live in seconds (default 30).
     pub ws_ticket_ttl_secs: u64,
+    /// Suppress all outbound email delivery (for test environments).
+    pub suppress_email: bool,
 }
 
 impl std::fmt::Debug for AppConfig {
@@ -217,6 +219,9 @@ impl AppConfig {
                 .unwrap_or_else(|_| "30".to_string())
                 .parse()
                 .unwrap_or(30),
+            suppress_email: env::var("SUPPRESS_EMAIL")
+                .map(|v| v == "true" || v == "1")
+                .unwrap_or(false),
         }
     }
 }

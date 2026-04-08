@@ -45,6 +45,12 @@ pub async fn send_email(
     text_body: &str,
     html_body: &str,
 ) -> Result<(), String> {
+    // Suppress all emails in test environments (e.g., e2e tests)
+    if config.suppress_email {
+        tracing::debug!(to = to_email, subject, "email suppressed (SUPPRESS_EMAIL=true)");
+        return Ok(());
+    }
+
     // Prefer Resend if API key is configured
     if let Some(ref api_key) = config.resend_api_key {
         return send_via_resend(
@@ -573,6 +579,7 @@ mod tests {
             ssf_signing_key_pem: None,
             maxmind_db_path: None,
             ws_ticket_ttl_secs: 30,
+            suppress_email: true,
         }
     }
 }

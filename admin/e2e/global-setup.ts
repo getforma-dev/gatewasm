@@ -26,6 +26,7 @@ export default async function globalSetup() {
       LOGIN_RATE_LIMIT_BURST: process.env.LOGIN_RATE_LIMIT_BURST || '500',
       TOKEN_RATE_LIMIT_BURST: process.env.TOKEN_RATE_LIMIT_BURST || '500',
       WS_TICKET_TTL_SECS: process.env.WS_TICKET_TTL_SECS || '5',
+      SUPPRESS_EMAIL: process.env.SUPPRESS_EMAIL || 'true',
     },
     stdio: ['ignore', 'pipe', 'pipe'],
     detached: true,

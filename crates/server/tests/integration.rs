@@ -106,6 +106,7 @@ async fn test_app_with_compliance(compliance: ComplianceConfig) -> (axum::Router
         ssf_signing_key_pem: None,
         maxmind_db_path: None,
         ws_ticket_ttl_secs: 30,
+        suppress_email: true,
     };
 
     let keys = KeyPair::from_pem_or_generate(None);
@@ -209,6 +210,7 @@ async fn test_app_with_pool() -> (axum::Router, PgPool) {
         ssf_signing_key_pem: None,
         maxmind_db_path: None,
         ws_ticket_ttl_secs: 30,
+        suppress_email: true,
     };
 
     let keys = KeyPair::from_pem_or_generate(None);
