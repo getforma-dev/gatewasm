@@ -24,7 +24,7 @@ const AUTH_ROUTES = [
 
 // Category 1: Pages load without errors
 for (const route of PUBLIC_ROUTES) {
-  test(`${route.name}: loads without console errors`, async ({ page }) => {
+  test(`${route.name}: loads without console errors @smoke @regression`, async ({ page }) => {
     const errors = collectErrors(page);
     await page.goto(route.path, { waitUntil: 'networkidle' });
     expectNoConsoleErrors(errors);
@@ -33,7 +33,7 @@ for (const route of PUBLIC_ROUTES) {
 
 // Category 2: Public pages ship a boot shell with assets/config even before JS runs
 for (const route of PUBLIC_ROUTES) {
-  test(`${route.name}: serves the boot shell without JS`, async ({ browser }) => {
+  test(`${route.name}: serves the boot shell without JS @smoke @regression`, async ({ browser }) => {
     const ctx = await browser.newContext({ javaScriptEnabled: false });
     const page = await ctx.newPage();
     await page.goto(route.path);
@@ -55,7 +55,7 @@ for (const route of PUBLIC_ROUTES) {
 
 // Category 3: No hydration warnings on public pages
 for (const route of PUBLIC_ROUTES) {
-  test(`${route.name}: no hydration warnings`, async ({ page }) => {
+  test(`${route.name}: no hydration warnings @smoke @regression`, async ({ page }) => {
     const warnings = collectWarnings(page);
     await page.goto(route.path, { waitUntil: 'networkidle' });
     expectNoHydrationWarnings(warnings);
@@ -64,7 +64,7 @@ for (const route of PUBLIC_ROUTES) {
 
 // Category 4: No layout overflow on public pages
 for (const route of PUBLIC_ROUTES) {
-  test(`${route.name}: no layout overflow`, async ({ page }) => {
+  test(`${route.name}: no layout overflow @smoke @regression`, async ({ page }) => {
     await page.goto(route.path, { waitUntil: 'networkidle' });
     await expectNoLayoutOverflow(page);
   });
@@ -72,7 +72,7 @@ for (const route of PUBLIC_ROUTES) {
 
 // Category 5: Auth routes redirect to login when unauthenticated
 for (const route of AUTH_ROUTES) {
-  test(`${route.name}: redirects to login when unauthenticated`, async ({ page }) => {
+  test(`${route.name}: redirects to login when unauthenticated @smoke @regression`, async ({ page }) => {
     await page.goto(route.path, { waitUntil: 'domcontentloaded' });
     await page.waitForURL('**' + route.redirectTo, { timeout: 8000 });
     expect(page.url()).toContain(route.redirectTo);
@@ -80,7 +80,7 @@ for (const route of AUTH_ROUTES) {
 }
 
 // Category 6: Debug builds should not emit or keep a service worker registration
-test('debug build does not register a service worker', async ({ page }) => {
+test('debug build does not register a service worker @smoke @regression', async ({ page }) => {
   await page.goto('/platform/benchmark', { waitUntil: 'networkidle' });
   const hasRegistrationScript = await page.evaluate(() =>
     Array.from(document.scripts).some((script) =>

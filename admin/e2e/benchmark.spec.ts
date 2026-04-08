@@ -9,7 +9,7 @@ import {
 
 // --- Boot Shell Correctness ---
 
-test('benchmark page serves the boot shell with data/config scripts when JS is disabled', async ({ browser }) => {
+test('benchmark page serves the boot shell with data/config scripts when JS is disabled @regression', async ({ browser }) => {
   const context = await browser.newContext({ javaScriptEnabled: false });
   const page = await context.newPage();
   await page.goto('/platform/benchmark');
@@ -36,13 +36,13 @@ test('benchmark page serves the boot shell with data/config scripts when JS is d
 
 // --- Hydration Integrity ---
 
-test('benchmark: no console errors after hydration', async ({ page }) => {
+test('benchmark: no console errors after hydration @regression', async ({ page }) => {
   const errors = collectErrors(page);
   await page.goto('/platform/benchmark', { waitUntil: 'networkidle' });
   expectNoConsoleErrors(errors);
 });
 
-test('benchmark: no FormaJS warnings for registered islands', async ({ page }) => {
+test('benchmark: no FormaJS warnings for registered islands @regression', async ({ page }) => {
   const warnings = collectWarnings(page);
   await page.goto('/platform/benchmark', { waitUntil: 'networkidle' });
   // Sub-islands (PerfStat, island_1) emit expected warnings since they are
@@ -54,7 +54,7 @@ test('benchmark: no FormaJS warnings for registered islands', async ({ page }) =
   expectNoHydrationWarnings(registeredWarnings);
 });
 
-test('benchmark: 1000 rows visible after JS loads', async ({ page }) => {
+test('benchmark: 1000 rows visible after JS loads @regression', async ({ page }) => {
   await page.goto('/platform/benchmark', { waitUntil: 'networkidle' });
   const rows = await page.locator('tbody tr').count();
   expect(rows).toBe(1000);
@@ -62,7 +62,7 @@ test('benchmark: 1000 rows visible after JS loads', async ({ page }) => {
 
 // --- Island activation ---
 
-test('benchmark shell hydrates exactly one interactive layout', async ({ page }) => {
+test('benchmark shell hydrates exactly one interactive layout @regression', async ({ page }) => {
   await page.goto('/platform/benchmark', { waitUntil: 'networkidle' });
   const filterBars = await page.locator('.benchmark-filter-bar').count();
   const dataTables = await page.locator('.benchmark-data-table').count();
@@ -74,7 +74,7 @@ test('benchmark shell hydrates exactly one interactive layout', async ({ page })
 
 // --- FilterBar interactions (client-side, no server fetch) ---
 
-test('search input filters table rows client-side', async ({ page }) => {
+test('search input filters table rows client-side @regression', async ({ page }) => {
   await page.goto('/platform/benchmark', { waitUntil: 'networkidle' });
 
   await page.fill('#bench-search', 'admin');
@@ -86,7 +86,7 @@ test('search input filters table rows client-side', async ({ page }) => {
   expect(rows).toBeLessThan(1000);
 });
 
-test('sort select reorders table client-side', async ({ page }) => {
+test('sort select reorders table client-side @regression', async ({ page }) => {
   await page.goto('/platform/benchmark', { waitUntil: 'networkidle' });
 
   // Get first name before sort
@@ -99,7 +99,7 @@ test('sort select reorders table client-side', async ({ page }) => {
   expect(firstAfter).not.toBe(firstBefore);
 });
 
-test('direction toggle reverses order client-side', async ({ page }) => {
+test('direction toggle reverses order client-side @regression', async ({ page }) => {
   await page.goto('/platform/benchmark', { waitUntil: 'networkidle' });
 
   const firstIdBefore = await page.locator('tbody tr:first-child td:first-child').textContent();
@@ -110,7 +110,7 @@ test('direction toggle reverses order client-side', async ({ page }) => {
   expect(firstIdAfter).not.toBe(firstIdBefore);
 });
 
-test('row count decrease is client-side (no fetch)', async ({ page }) => {
+test('row count decrease is client-side (no fetch) @regression', async ({ page }) => {
   await page.goto('/platform/benchmark', { waitUntil: 'networkidle' });
 
   // 1000 → 100: we already have 1000 rows, no fetch needed
@@ -121,7 +121,7 @@ test('row count decrease is client-side (no fetch)', async ({ page }) => {
   expect(rows).toBe(100);
 });
 
-test('row count increase fetches from server', async ({ page }) => {
+test('row count increase fetches from server @regression', async ({ page }) => {
   await page.goto('/platform/benchmark', { waitUntil: 'networkidle' });
 
   // 1000 → 5000: need more data, triggers fetch
@@ -137,7 +137,7 @@ test('row count increase fetches from server', async ({ page }) => {
 
 // --- DataTable interactions ---
 
-test('click column header sorts client-side', async ({ page }) => {
+test('click column header sorts client-side @regression', async ({ page }) => {
   await page.goto('/platform/benchmark', { waitUntil: 'networkidle' });
 
   const firstBefore = await page.locator('tbody tr:first-child td:nth-child(2)').textContent();
@@ -150,7 +150,7 @@ test('click column header sorts client-side', async ({ page }) => {
 
 // --- PerfPanel ---
 
-test('perf panel shows row count', async ({ page }) => {
+test('perf panel shows row count @regression', async ({ page }) => {
   await page.goto('/platform/benchmark', { waitUntil: 'networkidle' });
   const perfText = await page.evaluate(() => {
     const stats = document.querySelectorAll('.perf-stat-value');
@@ -162,12 +162,12 @@ test('perf panel shows row count', async ({ page }) => {
 
 // --- Layout ---
 
-test('benchmark: no layout overflow', async ({ page }) => {
+test('benchmark: no layout overflow @regression', async ({ page }) => {
   await page.goto('/platform/benchmark', { waitUntil: 'networkidle' });
   await expectNoLayoutOverflow(page);
 });
 
-test('benchmark: no DOM doubling after hydration', async ({ page }) => {
+test('benchmark: no DOM doubling after hydration @regression', async ({ page }) => {
   await page.goto('/platform/benchmark', { waitUntil: 'networkidle' });
 
   // Each key element appears exactly once (no duplication)

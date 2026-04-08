@@ -98,3 +98,48 @@ jobs:
           exit 1
       - name: Run integration tests
         run: cargo test -p gatewasm-server --test integration -- --nocapture
+
+  e2e-tests:
+    name: E2E smoke tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    needs: frontend
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: gatewasm
+          POSTGRES_PASSWORD: gatewasm
+          POSTGRES_DB: gatewasm_test
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -U gatewasm -d gatewasm_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: admin/package-lock.json
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Build admin assets
+        working-directory: admin
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+          npx tsx build.ts --ssr
+      - name: Run e2e smoke tests
+        working-directory: admin
+        run: npx playwright test --grep @smoke
+      - name: Upload Playwright report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: admin/test-results/
+          retention-days: 7

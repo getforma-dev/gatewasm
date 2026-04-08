@@ -8,41 +8,21 @@
  * 4. Agency (Multi-Tenant) — Tenant switcher, API Keys at a glance
  */
 
-import { test, expect, BrowserContext, Page } from '@playwright/test';
+import { test, expect, Page } from '@playwright/test';
 import { loginAsTestUser } from './auth-helper';
-import { BASE, getAccessToken } from './helpers';
-
-// ── Helper: create tenant via API ──────────────────────────────────────
-async function createTenant(context: BrowserContext, token: string, name: string, slug: string): Promise<string> {
-  const res = await context.request.post(BASE + '/platform/self-serve/tenants', {
-    headers: { Authorization: 'Bearer ' + token },
-    data: { name, slug },
-  });
-  expect(res.ok()).toBeTruthy();
-  const json = await res.json();
-  return String(json.tenant.id);
-}
-
-// ── Helper: delete tenant via API ──────────────────────────────────────
-async function deleteTenant(context: BrowserContext, tenantId: string, slug: string): Promise<void> {
-  try {
-    const token = await getAccessToken(context);
-    await context.request.delete(BASE + '/platform/self-serve/tenants/' + tenantId, {
-      headers: { Authorization: 'Bearer ' + token },
-      data: { confirm_slug: slug },
-    });
-  } catch (e) { console.warn('Tenant cleanup failed:', e); }
-}
+import { getAccessToken } from './helpers';
+import { createTestTenant, deleteTestTenantFromContext } from './factories';
+import { Account, Workspace } from './selectors';
 
 // ── Helper: click a plane tab button (scoped to .plane-tier2) ──────────
 async function clickTab(page: Page, name: string) {
-  await page.locator('.plane-tier2').getByRole('button', { name }).click();
+  await page.locator(Workspace.tier2).getByRole('button', { name }).click();
   await page.waitForTimeout(800);
 }
 
 // ── Helper: click a plane button (scoped to .plane-tier1) ──────────────
 async function clickPlane(page: Page, name: string) {
-  await page.locator('.plane-tier1').getByRole('button', { name }).click();
+  await page.locator(Workspace.tier1).getByRole('button', { name }).click();
   await page.waitForTimeout(500);
 }
 
@@ -52,32 +32,31 @@ async function clickPlane(page: Page, name: string) {
 // ═══════════════════════════════════════════════════════════════════════
 
 test.describe('Persona: Indie Dev', () => {
-  test('create tenant → Overview → Integrate → Auth Reference → Webhooks', async ({ browser }) => {
+  test('create tenant → Overview → Integrate → Auth Reference → Webhooks @regression', async ({ browser }) => {
     test.setTimeout(45000);
     const { context, page } = await loginAsTestUser(browser);
-    const slug = 'indie-' + Date.now().toString(36);
-    let tenantId = '';
+    let tenant: { id: string; slug: string } | undefined;
 
     try {
       const token = await getAccessToken(context);
-      tenantId = await createTenant(context, token, 'Indie App', slug);
+      tenant = await createTestTenant(context.request, token, 'Indie App');
 
       // Land in Account mode
       await page.goto('/platform/console');
       await page.waitForTimeout(1500);
 
       // Account mode: should see Tenants tab active
-      await expect(page.locator('.account-tabs')).toBeVisible();
+      await expect(page.locator(Account.tabs)).toBeVisible();
 
       // Select the tenant → enters Workspace mode
       await page.locator('.tenant-card').filter({ hasText: 'Indie App' }).first().click();
       await page.waitForTimeout(1000);
 
       // Should be in Workspace mode with PlaneNav visible
-      await expect(page.locator('.plane-nav')).toBeVisible();
+      await expect(page.locator(Workspace.planeNav)).toBeVisible();
 
       // Operator plane should be active by default
-      await expect(page.locator('.plane-btn.active')).toContainText('Operator');
+      await expect(page.locator(Workspace.activePlane)).toContainText('Operator');
 
       // Navigate to Integrate tab (scoped to tier2 to avoid matching overview buttons)
       await clickTab(page, 'Integrate');
@@ -99,7 +78,7 @@ test.describe('Persona: Indie Dev', () => {
       await expect(page.locator('.section-title').filter({ hasText: 'Webhooks' })).toBeVisible();
 
     } finally {
-      if (tenantId) await deleteTenant(context, tenantId, slug);
+      if (tenant) await deleteTestTenantFromContext(context, tenant.id, tenant.slug);
       await context.close();
     }
   });
@@ -111,15 +90,14 @@ test.describe('Persona: Indie Dev', () => {
 // ═══════════════════════════════════════════════════════════════════════
 
 test.describe('Persona: Startup B2B', () => {
-  test('Members → Invites → Organizations → Roles → Audit Log', async ({ browser }) => {
+  test('Members → Invites → Organizations → Roles → Audit Log @regression', async ({ browser }) => {
     test.setTimeout(45000);
     const { context, page } = await loginAsTestUser(browser);
-    const slug = 'startup-' + Date.now().toString(36);
-    let tenantId = '';
+    let tenant: { id: string; slug: string } | undefined;
 
     try {
       const token = await getAccessToken(context);
-      tenantId = await createTenant(context, token, 'Startup SaaS', slug);
+      tenant = await createTestTenant(context.request, token, 'Startup SaaS');
 
       await page.goto('/platform/console');
       await page.waitForTimeout(1500);
@@ -153,7 +131,7 @@ test.describe('Persona: Startup B2B', () => {
       await expect(page.getByText('Login Attempts', { exact: true })).toBeVisible();
 
     } finally {
-      if (tenantId) await deleteTenant(context, tenantId, slug);
+      if (tenant) await deleteTestTenantFromContext(context, tenant.id, tenant.slug);
       await context.close();
     }
   });
@@ -165,15 +143,14 @@ test.describe('Persona: Startup B2B', () => {
 // ═══════════════════════════════════════════════════════════════════════
 
 test.describe('Persona: Enterprise', () => {
-  test('Security Config → Sessions → Passkeys → Tokens → Activity', async ({ browser }) => {
+  test('Security Config → Sessions → Passkeys → Tokens → Activity @regression', async ({ browser }) => {
     test.setTimeout(45000);
     const { context, page } = await loginAsTestUser(browser);
-    const slug = 'enterprise-' + Date.now().toString(36);
-    let tenantId = '';
+    let tenant: { id: string; slug: string } | undefined;
 
     try {
       const token = await getAccessToken(context);
-      tenantId = await createTenant(context, token, 'Enterprise Corp', slug);
+      tenant = await createTestTenant(context.request, token, 'Enterprise Corp');
 
       await page.goto('/platform/console');
       await page.waitForTimeout(1500);
@@ -207,7 +184,7 @@ test.describe('Persona: Enterprise', () => {
       await expect(page.getByText('Authentication Timeline')).toBeVisible();
 
     } finally {
-      if (tenantId) await deleteTenant(context, tenantId, slug);
+      if (tenant) await deleteTestTenantFromContext(context, tenant.id, tenant.slug);
       await context.close();
     }
   });
@@ -219,18 +196,16 @@ test.describe('Persona: Enterprise', () => {
 // ═══════════════════════════════════════════════════════════════════════
 
 test.describe('Persona: Agency Multi-Tenant', () => {
-  test('create 2 tenants → switch between them → API Keys view', async ({ browser }) => {
+  test('create 2 tenants → switch between them → API Keys view @regression', async ({ browser }) => {
     test.setTimeout(45000);
     const { context, page } = await loginAsTestUser(browser);
-    const slug1 = 'client-a-' + Date.now().toString(36);
-    const slug2 = 'client-b-' + Date.now().toString(36);
-    let tenantId1 = '';
-    let tenantId2 = '';
+    let tenant1: { id: string; slug: string } | undefined;
+    let tenant2: { id: string; slug: string } | undefined;
 
     try {
       const token = await getAccessToken(context);
-      tenantId1 = await createTenant(context, token, 'Client Alpha', slug1);
-      tenantId2 = await createTenant(context, token, 'Client Beta', slug2);
+      tenant1 = await createTestTenant(context.request, token, 'Client Alpha');
+      tenant2 = await createTestTenant(context.request, token, 'Client Beta');
 
       await page.goto('/platform/console');
       await page.waitForTimeout(2000);
@@ -251,51 +226,51 @@ test.describe('Persona: Agency Multi-Tenant', () => {
       await expect(page.locator('.tenant-card').filter({ hasText: 'Client Beta' })).toBeVisible();
 
       // ── API Keys tab ─────────────────────────────────────────────
-      await page.locator('.account-tabs').getByRole('button', { name: 'API Keys' }).click();
+      await page.locator(Account.tabs).getByRole('button', { name: 'API Keys' }).click();
       await page.waitForTimeout(1000);
 
       // Should see tenant keys section
       await expect(page.getByText('Your Workspaces')).toBeVisible();
 
       // ── Select first tenant ──────────────────────────────────────
-      await page.locator('.account-tabs').getByRole('button', { name: 'Tenants' }).click();
+      await page.locator(Account.tabs).getByRole('button', { name: 'Tenants' }).click();
       await page.waitForTimeout(500);
 
       await page.locator('.tenant-card').filter({ hasText: 'Client Alpha' }).first().click();
       await page.waitForTimeout(1000);
 
       // Should be in workspace mode
-      await expect(page.locator('.plane-nav')).toBeVisible();
+      await expect(page.locator(Workspace.planeNav)).toBeVisible();
 
       // Tenant name should appear in the tenant switcher
-      await expect(page.locator('.plane-tenant-name')).toContainText('Client Alpha');
+      await expect(page.locator(Workspace.tenantName)).toContainText('Client Alpha');
 
       // ── Use tenant switcher to switch to Client Beta ─────────────
-      await page.locator('.plane-tenant-trigger').click();
+      await page.locator(Workspace.tenantTrigger).click();
       await page.waitForTimeout(500);
 
       // Tenant switcher dropdown should show
-      await expect(page.locator('.plane-tenant-menu')).toBeVisible();
+      await expect(page.locator(Workspace.tenantMenu)).toBeVisible();
 
       // Click Client Beta in the dropdown
-      await page.locator('.plane-tenant-menu-item').filter({ hasText: 'Client Beta' }).click();
+      await page.locator(Workspace.tenantMenuItem).filter({ hasText: 'Client Beta' }).click();
       await page.waitForTimeout(1000);
 
       // Should now show Client Beta in the header
-      await expect(page.locator('.plane-tenant-name')).toContainText('Client Beta');
+      await expect(page.locator(Workspace.tenantName)).toContainText('Client Beta');
 
       // ── Use tenant switcher to go back to Account mode ───────────
-      await page.locator('.plane-tenant-trigger').click();
+      await page.locator(Workspace.tenantTrigger).click();
       await page.waitForTimeout(500);
-      await page.locator('.plane-tenant-menu-back').click();
+      await page.locator(Workspace.tenantMenuBack).click();
       await page.waitForTimeout(1000);
 
       // Should be back in Account mode
-      await expect(page.locator('.account-tabs')).toBeVisible();
+      await expect(page.locator(Account.tabs)).toBeVisible();
 
     } finally {
-      if (tenantId1) await deleteTenant(context, tenantId1, slug1);
-      if (tenantId2) await deleteTenant(context, tenantId2, slug2);
+      if (tenant1) await deleteTestTenantFromContext(context, tenant1.id, tenant1.slug);
+      if (tenant2) await deleteTestTenantFromContext(context, tenant2.id, tenant2.slug);
       await context.close();
     }
   });
@@ -306,15 +281,14 @@ test.describe('Persona: Agency Multi-Tenant', () => {
 // ═══════════════════════════════════════════════════════════════════════
 
 test.describe('Navigation Completeness', () => {
-  test('all 3 account tabs + 12 workspace tabs are reachable', async ({ browser }) => {
+  test('all 3 account tabs + 12 workspace tabs are reachable @regression', async ({ browser }) => {
     test.setTimeout(45000);
     const { context, page } = await loginAsTestUser(browser);
-    const slug = 'nav-test-' + Date.now().toString(36);
-    let tenantId = '';
+    let tenant: { id: string; slug: string } | undefined;
 
     try {
       const token = await getAccessToken(context);
-      tenantId = await createTenant(context, token, 'Nav Test', slug);
+      tenant = await createTestTenant(context.request, token, 'Nav Test');
 
       await page.goto('/platform/console');
       await page.waitForTimeout(2000);
@@ -331,7 +305,7 @@ test.describe('Navigation Completeness', () => {
       await page.waitForTimeout(2000);
 
       // ── Account Mode: 3 tabs ─────────────────────────────────────
-      const accountTabs = page.locator('.account-tabs');
+      const accountTabs = page.locator(Account.tabs);
       await expect(accountTabs.getByRole('button', { name: 'Tenants' })).toBeVisible();
       await expect(accountTabs.getByRole('button', { name: 'API Keys' })).toBeVisible();
       await expect(accountTabs.getByRole('button', { name: 'Settings' })).toBeVisible();
@@ -376,19 +350,18 @@ test.describe('Navigation Completeness', () => {
       // If we got here without errors, all 15 tabs are reachable
 
     } finally {
-      if (tenantId) await deleteTenant(context, tenantId, slug);
+      if (tenant) await deleteTestTenantFromContext(context, tenant.id, tenant.slug);
       await context.close();
     }
   });
 
-  test('keyboard shortcuts switch planes', async ({ browser }) => {
+  test('keyboard shortcuts switch planes @regression', async ({ browser }) => {
     const { context, page } = await loginAsTestUser(browser);
-    const slug = 'kb-' + Date.now().toString(36);
-    let tenantId = '';
+    let tenant: { id: string; slug: string } | undefined;
 
     try {
       const token = await getAccessToken(context);
-      tenantId = await createTenant(context, token, 'KB Test', slug);
+      tenant = await createTestTenant(context.request, token, 'KB Test');
 
       // Navigate to console — the init() will load tenants fresh
       await page.goto('/platform/console');
@@ -411,29 +384,29 @@ test.describe('Navigation Completeness', () => {
       // Press '2' to switch to Organization plane
       await page.keyboard.press('2');
       await page.waitForTimeout(500);
-      await expect(page.locator('.plane-btn.active')).toContainText('Organization');
+      await expect(page.locator(Workspace.activePlane)).toContainText('Organization');
 
       // Press '3' to switch to End User plane
       await page.keyboard.press('3');
       await page.waitForTimeout(500);
-      await expect(page.locator('.plane-btn.active')).toContainText('End User');
+      await expect(page.locator(Workspace.activePlane)).toContainText('End User');
 
       // Press '1' to switch back to Operator
       await page.keyboard.press('1');
       await page.waitForTimeout(500);
-      await expect(page.locator('.plane-btn.active')).toContainText('Operator');
+      await expect(page.locator(Workspace.activePlane)).toContainText('Operator');
 
       // Press backtick to collapse nav
       await page.keyboard.press('`');
       await page.waitForTimeout(500);
-      await expect(page.locator('.plane-nav')).toHaveClass(/plane-nav-collapsed/);
+      await expect(page.locator(Workspace.planeNav)).toHaveClass(/plane-nav-collapsed/);
 
       // Press backtick again to expand
       await page.keyboard.press('`');
       await page.waitForTimeout(500);
 
     } finally {
-      if (tenantId) await deleteTenant(context, tenantId, slug);
+      if (tenant) await deleteTestTenantFromContext(context, tenant.id, tenant.slug);
       await context.close();
     }
   });

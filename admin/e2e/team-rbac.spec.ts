@@ -1,155 +1,9 @@
-import { test, expect, APIRequestContext } from '@playwright/test';
+import { test, expect } from '@playwright/test';
 import { BASE, postWithRetry } from './helpers';
-
-const TEST_PASSWORD = 'E2eTestPassword123!';
-
-async function createTestAccount(
-  request: APIRequestContext,
-  label: string,
-): Promise<{ token: string; userId: string; email: string }> {
-  const random = Math.random().toString(36).slice(2, 8);
-  const email = `e2e-${label}-${Date.now()}-${random}@test.local`;
-
-  const res = await postWithRetry(request, BASE + '/auth/register', {
-    headers: {
-      'X-Tenant-Slug': 'platform',
-      'Content-Type': 'application/json',
-    },
-    data: { email, password: TEST_PASSWORD, name: `E2E ${label}` },
-  });
-
-  if (!res.ok()) {
-    throw new Error(`createTestAccount(${label}) failed: ${await res.text()}`);
-  }
-
-  const data = await res.json();
-  const token: string = data.access_token;
-  const userId: string = data.user_id || data.id;
-  if (!token) {
-    throw new Error(`createTestAccount(${label}): no access_token in ${JSON.stringify(data)}`);
-  }
-
-  return { token, userId, email };
-}
-
-async function createTestTenant(
-  request: APIRequestContext,
-  token: string,
-  name: string,
-): Promise<{ id: string; slug: string }> {
-  const slug = `e2e-${name.toLowerCase().replace(/\s+/g, '-')}-${Date.now().toString(36)}`;
-
-  const res = await postWithRetry(request, BASE + '/platform/self-serve/tenants', {
-    headers: {
-      Authorization: 'Bearer ' + token,
-      'Content-Type': 'application/json',
-    },
-    data: { name, slug },
-  });
-
-  if (!res.ok()) {
-    throw new Error(`createTestTenant(${name}) failed: ${await res.text()}`);
-  }
-
-  const data = await res.json();
-  const id: string = data.id || data.tenant?.id;
-  if (!id) {
-    throw new Error(`createTestTenant(${name}): no id in ${JSON.stringify(data)}`);
-  }
-
-  return { id, slug };
-}
-
-async function inviteMember(
-  request: APIRequestContext,
-  ownerToken: string,
-  email: string,
-  role: string,
-  tenantIds: string[],
-): Promise<{ inviteId: string; inviteToken: string }> {
-  const res = await postWithRetry(request, BASE + '/platform/admin/team/invites', {
-    headers: {
-      Authorization: 'Bearer ' + ownerToken,
-      'Content-Type': 'application/json',
-    },
-    data: { email, role, tenant_ids: tenantIds },
-  });
-
-  if (!res.ok()) {
-    throw new Error(`inviteMember(${email}) failed: ${await res.text()}`);
-  }
-
-  const data = await res.json();
-  const inviteId: string = data.invite?.id;
-  const inviteToken: string = data.invite_token;
-  if (!inviteId || !inviteToken) {
-    throw new Error(`inviteMember(${email}): unexpected response ${JSON.stringify(data)}`);
-  }
-
-  return { inviteId, inviteToken };
-}
-
-async function acceptInvite(
-  request: APIRequestContext,
-  memberToken: string,
-  inviteToken: string,
-): Promise<any> {
-  const res = await postWithRetry(request, BASE + '/platform/admin/invites/accept', {
-    headers: {
-      Authorization: 'Bearer ' + memberToken,
-      'Content-Type': 'application/json',
-    },
-    data: { token: inviteToken },
-  });
-
-  if (!res.ok()) {
-    throw new Error(`acceptInvite failed: ${await res.text()}`);
-  }
-
-  return res.json();
-}
-
-async function listTeam(request: APIRequestContext, token: string): Promise<any> {
-  const res = await request.get(BASE + '/platform/admin/team', {
-    headers: { Authorization: 'Bearer ' + token },
-  });
-
-  if (!res.ok()) {
-    throw new Error(`listTeam failed: ${await res.text()}`);
-  }
-
-  return res.json();
-}
-
-async function listTenants(
-  request: APIRequestContext,
-  token: string,
-): Promise<any[]> {
-  const res = await request.get(BASE + '/platform/self-serve/tenants', {
-    headers: { Authorization: 'Bearer ' + token },
-  });
-
-  if (!res.ok()) {
-    throw new Error(`listTenants failed: ${await res.text()}`);
-  }
-
-  const data = await res.json();
-  return data.tenants || [];
-}
-
-/** Re-login to get a fresh access token (avoids stale token in afterAll). */
-async function refreshAccountToken(
-  request: APIRequestContext,
-  email: string,
-): Promise<string> {
-  const res = await postWithRetry(request, BASE + '/auth/login', {
-    headers: { 'X-Tenant-Slug': 'platform', 'Content-Type': 'application/json' },
-    data: { email, password: TEST_PASSWORD },
-  });
-  if (!res.ok()) throw new Error(`refreshAccountToken(${email}) failed: ${await res.text()}`);
-  const data = await res.json();
-  return data.access_token as string;
-}
+import {
+  createTestAccount, createTestTenant, inviteMember, acceptInvite,
+  listTeam, listTenants, refreshAccountToken,
+} from './factories';
 
 // ── Block 1: Invite Lifecycle ─────────────────────────────────────────────────
 
@@ -192,7 +46,7 @@ test.describe.serial('Invite Lifecycle', () => {
     }
   });
 
-  test('owner can create invite with email and tenant assignments', async ({ request }) => {
+  test('owner can create invite with email and tenant assignments @rbac @regression', async ({ request }) => {
     const res = await postWithRetry(request, BASE + '/platform/admin/team/invites', {
       headers: {
         Authorization: 'Bearer ' + ownerAToken,
@@ -215,7 +69,7 @@ test.describe.serial('Invite Lifecycle', () => {
     createdInviteToken = data.invite_token;
   });
 
-  test('pending invite appears in team list', async ({ request }) => {
+  test('pending invite appears in team list @rbac @regression', async ({ request }) => {
     // The team invites list is at /platform/admin/team/invites
     const res = await request.get(BASE + '/platform/admin/team/invites', {
       headers: { Authorization: 'Bearer ' + ownerAToken },
@@ -233,13 +87,13 @@ test.describe.serial('Invite Lifecycle', () => {
     expect(found).toBeDefined();
   });
 
-  test('invited member can accept invite', async ({ request }) => {
+  test('invited member can accept invite @rbac @regression', async ({ request }) => {
     const data = await acceptInvite(request, memberCToken, createdInviteToken);
 
     expect(data.accepted).toBe(true);
   });
 
-  test('accepted member appears in team member list', async ({ request }) => {
+  test('accepted member appears in team member list @rbac @regression', async ({ request }) => {
     const data = await listTeam(request, ownerAToken);
     const members: any[] = data.members || [];
 
@@ -251,7 +105,7 @@ test.describe.serial('Invite Lifecycle', () => {
     expect(found).toBeDefined();
   });
 
-  test('owner can revoke a pending invite', async ({ request }) => {
+  test('owner can revoke a pending invite @rbac @regression', async ({ request }) => {
     // Create a fresh invite for a different address
     const random = Math.random().toString(36).slice(2, 8);
     const revokeTargetEmail = `e2e-revoke-${Date.now()}-${random}@test.local`;
@@ -350,7 +204,7 @@ test.describe.serial('Role Enforcement', () => {
     }
   });
 
-  test('viewer can read tenant data', async ({ request }) => {
+  test('viewer can read tenant data @rbac @regression', async ({ request }) => {
     const tenants = await listTenants(request, memberCToken);
     const a1 = tenants.find((t: any) => t.id === tenantA1.id);
 
@@ -359,7 +213,7 @@ test.describe.serial('Role Enforcement', () => {
     expect(a1.team_role).toBe('viewer');
   });
 
-  test('viewer cannot delete a tenant', async ({ request }) => {
+  test('viewer cannot delete a tenant @rbac @regression', async ({ request }) => {
     const res = await request.delete(
       BASE + '/platform/self-serve/tenants/' + tenantA1.id,
       {
@@ -374,7 +228,7 @@ test.describe.serial('Role Enforcement', () => {
     expect(res.status()).toBe(403);
   });
 
-  test('viewer cannot rotate tenant API key', async ({ request }) => {
+  test('viewer cannot rotate tenant API key @rbac @regression', async ({ request }) => {
     const res = await postWithRetry(
       request,
       BASE + '/platform/self-serve/tenants/' + tenantA1.id + '/rotate-key',
@@ -390,7 +244,7 @@ test.describe.serial('Role Enforcement', () => {
     expect(res.status()).toBe(403);
   });
 
-  test('admin can access mutation endpoints', async ({ request }) => {
+  test('admin can access mutation endpoints @rbac @regression', async ({ request }) => {
     // PATCH A1 name as admin member D
     const res = await request.patch(
       BASE + '/platform/self-serve/tenants/' + tenantA1.id,
@@ -406,7 +260,7 @@ test.describe.serial('Role Enforcement', () => {
     expect(res.status()).toBe(200);
   });
 
-  test('member only sees assigned tenants', async ({ request }) => {
+  test('member only sees assigned tenants @rbac @regression', async ({ request }) => {
     const cTenants = await listTenants(request, memberCToken);
     const dTenants = await listTenants(request, memberDToken);
 
@@ -422,7 +276,7 @@ test.describe.serial('Role Enforcement', () => {
     expect(dIds).toContain(tenantA2.id);
   });
 
-  test('account owner cannot remove themselves', async ({ request }) => {
+  test('account owner cannot remove themselves @rbac @regression', async ({ request }) => {
     // Find owner A's member ID from their team list
     const teamData = await listTeam(request, ownerAToken);
     const members: any[] = teamData.members || [];
@@ -448,7 +302,7 @@ test.describe.serial('Role Enforcement', () => {
     expect(errCode).toMatch(/cannot_remove_self/i);
   });
 
-  test('member cannot remove other members', async ({ request }) => {
+  test('member cannot remove other members @rbac @regression', async ({ request }) => {
     // Get D's member ID from owner's team list
     const teamData = await listTeam(request, ownerAToken);
     const members: any[] = teamData.members || [];
@@ -471,7 +325,7 @@ test.describe.serial('Role Enforcement', () => {
     expect(res.status()).toBeGreaterThanOrEqual(400);
   });
 
-  test('owner can update member role', async ({ request }) => {
+  test('owner can update member role @rbac @regression', async ({ request }) => {
     // Find C's member ID
     const teamData = await listTeam(request, ownerAToken);
     const members: any[] = teamData.members || [];
@@ -502,7 +356,7 @@ test.describe.serial('Role Enforcement', () => {
     expect(a1.team_role).toBe('editor');
   });
 
-  test('owner can remove a team member', async ({ request }) => {
+  test('owner can remove a team member @rbac @regression', async ({ request }) => {
     // Find C's member ID again (after possible role update)
     const teamData = await listTeam(request, ownerAToken);
     const members: any[] = teamData.members || [];
@@ -593,7 +447,7 @@ test.describe('Cross-Account Isolation', () => {
     }
   });
 
-  test('owner A cannot see owner B team members', async ({ request }) => {
+  test('owner A cannot see owner B team members @rbac @regression', async ({ request }) => {
     const teamData = await listTeam(request, ownerAToken);
     const members: any[] = teamData.members || [];
     const emails = members.map((m: any) => m.email?.toLowerCase());
@@ -601,14 +455,14 @@ test.describe('Cross-Account Isolation', () => {
     expect(emails).not.toContain(ownerBEmail.toLowerCase());
   });
 
-  test('owner A cannot see owner B tenants', async ({ request }) => {
+  test('owner A cannot see owner B tenants @rbac @regression', async ({ request }) => {
     const tenants = await listTenants(request, ownerAToken);
     const ids = tenants.map((t: any) => t.id);
 
     expect(ids).not.toContain(tenantB1.id);
   });
 
-  test('member of account A cannot access account B tenant', async ({ request }) => {
+  test('member of account A cannot access account B tenant @rbac @regression', async ({ request }) => {
     // D is on A's team; tries to GET B's tenant detail
     const res = await request.get(
       BASE + '/platform/self-serve/tenants/' + tenantB1.id,
@@ -620,7 +474,7 @@ test.describe('Cross-Account Isolation', () => {
     expect(res.status()).toBeGreaterThanOrEqual(400);
   });
 
-  test('invite from owner A cannot grant access to owner B tenant', async ({ request }) => {
+  test('invite from owner A cannot grant access to owner B tenant @rbac @regression', async ({ request }) => {
     // Owner A tries to invite someone with B's tenant_id — should fail validation
     const random = Math.random().toString(36).slice(2, 8);
     const targetEmail = `e2e-cross-${Date.now()}-${random}@test.local`;
@@ -637,7 +491,7 @@ test.describe('Cross-Account Isolation', () => {
     expect(res.status()).toBeGreaterThanOrEqual(400);
   });
 
-  test("accepting A invite does not grant access to B data", async ({ request }) => {
+  test("accepting A invite does not grant access to B data @rbac @regression", async ({ request }) => {
     // D is already on A's team. Verify D's tenants don't include B1.
     const tenants = await listTenants(request, memberDToken);
     const ids = tenants.map((t: any) => t.id);

@@ -49,7 +49,7 @@ test.describe('Tenant workspace lifecycle', () => {
     });
   });
 
-  test('platform login now lands in the console workspace instead of the removed wizard', async ({ browser }) => {
+  test('platform login now lands in the console workspace instead of the removed wizard @regression', async ({ browser }) => {
     const context = await browser.newContext();
     const page = await context.newPage();
 
@@ -68,7 +68,7 @@ test.describe('Tenant workspace lifecycle', () => {
     await context.close();
   });
 
-  test('registering a tenant user updates workspace stats', async ({ request }) => {
+  test('registering a tenant user updates workspace stats @regression', async ({ request }) => {
     // Register a user on the tenant via API
     tenantUserEmail = 'testuser-' + Date.now().toString(36) + '@e2e.com';
     const reg = await postWithRetry(request, BASE + '/auth/register', {
@@ -91,7 +91,7 @@ test.describe('Tenant workspace lifecycle', () => {
     expect(statsData.latest_user.email).toBe(tenantUserEmail);
   });
 
-  test('removed tenant sandbox route now returns 404', async ({ request }) => {
+  test('removed tenant sandbox route now returns 404 @regression', async ({ request }) => {
     const resp = await request.get(BASE + '/t/' + tenantSlug + '/sandbox', {
       maxRedirects: 0,
     });

@@ -17,15 +17,16 @@ import {
   expectNoHydrationWarnings,
   expectNoLayoutOverflow,
 } from './helpers';
+import { TenantLogin } from './selectors';
 
 const TENANT_LOGIN = '/t/platform/login';
 
 // --- Page Load ---
 
-test('tenant login renders login form after JS loads', async ({ page }) => {
+test('tenant login renders login form after JS loads @smoke @regression', async ({ page }) => {
   await page.goto(TENANT_LOGIN);
   // Wait for island activation
-  await page.waitForSelector('.tl-card', { timeout: 5000 });
+  await page.waitForSelector(TenantLogin.card, { timeout: 5000 });
 
   // Login form visible
   const emailInput = page.locator('input[type="email"]');
@@ -39,13 +40,13 @@ test('tenant login renders login form after JS loads', async ({ page }) => {
   await expect(submitBtn).toHaveText('Sign in');
 });
 
-test('tenant login: no console errors', async ({ page }) => {
+test('tenant login: no console errors @smoke @regression', async ({ page }) => {
   const errors = collectErrors(page);
   await page.goto(TENANT_LOGIN, { waitUntil: 'networkidle' });
   expectNoConsoleErrors(errors);
 });
 
-test('tenant login: no hydration warnings', async ({ page }) => {
+test('tenant login: no hydration warnings @regression', async ({ page }) => {
   const warnings = collectWarnings(page);
   await page.goto(TENANT_LOGIN, { waitUntil: 'networkidle' });
   expectNoHydrationWarnings(warnings);
@@ -53,31 +54,31 @@ test('tenant login: no hydration warnings', async ({ page }) => {
 
 // --- Branding ---
 
-test('tenant login shows app name', async ({ page }) => {
+test('tenant login shows app name @regression', async ({ page }) => {
   await page.goto(TENANT_LOGIN);
-  await page.waitForSelector('.tl-card', { timeout: 5000 });
+  await page.waitForSelector(TenantLogin.card, { timeout: 5000 });
 
-  const appName = page.locator('.tl-app-name');
+  const appName = page.locator(TenantLogin.appName);
   await expect(appName).toBeVisible();
   // "forma" tenant name (seeded as "Forma" or slug "forma")
   const text = await appName.textContent();
   expect(text!.length).toBeGreaterThan(0);
 });
 
-test('tenant login shows powered-by footer', async ({ page }) => {
+test('tenant login shows powered-by footer @regression', async ({ page }) => {
   await page.goto(TENANT_LOGIN);
-  await page.waitForSelector('.tl-card', { timeout: 5000 });
+  await page.waitForSelector(TenantLogin.card, { timeout: 5000 });
 
-  const footer = page.locator('.secured-badge');
+  const footer = page.locator(TenantLogin.footer);
   await expect(footer).toBeVisible();
   await expect(footer).toContainText('fAuth');
 });
 
 // --- Form Interaction ---
 
-test('tenant login: email input accepts typing', async ({ page }) => {
+test('tenant login: email input accepts typing @regression', async ({ page }) => {
   await page.goto(TENANT_LOGIN);
-  await page.waitForSelector('.tl-card', { timeout: 5000 });
+  await page.waitForSelector(TenantLogin.card, { timeout: 5000 });
 
   const emailInput = page.locator('input[type="email"]');
   await emailInput.fill('test@example.com');
@@ -85,38 +86,38 @@ test('tenant login: email input accepts typing', async ({ page }) => {
   expect(value).toBe('test@example.com');
 });
 
-test('tenant login: password toggle switches between password and text', async ({ page }) => {
+test('tenant login: password toggle switches between password and text @regression', async ({ page }) => {
   await page.goto(TENANT_LOGIN);
-  await page.waitForSelector('.tl-card', { timeout: 5000 });
+  await page.waitForSelector(TenantLogin.card, { timeout: 5000 });
 
   // Initially type="password"
-  const pwField = page.locator('#tl-password');
+  const pwField = page.locator(TenantLogin.passwordField);
   const typeBefore = await pwField.getAttribute('type');
   expect(typeBefore).toBe('password');
 
   // Click toggle
-  await page.locator('.tl-password-toggle').first().click();
+  await page.locator(TenantLogin.passwordToggle).first().click();
   const typeAfter = await pwField.getAttribute('type');
   expect(typeAfter).toBe('text');
 
   // Click toggle again — back to password
-  await page.locator('.tl-password-toggle').first().click();
+  await page.locator(TenantLogin.passwordToggle).first().click();
   const typeReset = await pwField.getAttribute('type');
   expect(typeReset).toBe('password');
 });
 
 // --- Mode Switching ---
 
-test('toggle between login and register modes', async ({ page }) => {
+test('toggle between login and register modes @regression', async ({ page }) => {
   await page.goto(TENANT_LOGIN);
-  await page.waitForSelector('.tl-card', { timeout: 5000 });
+  await page.waitForSelector(TenantLogin.card, { timeout: 5000 });
 
   // Start in login mode
-  const subtitle = page.locator('.tl-subtitle');
+  const subtitle = page.locator(TenantLogin.subtitle);
   await expect(subtitle).toHaveText('Sign in to your account');
 
   // Click "Sign up" link
-  const toggleLink = page.locator('.tl-toggle .tl-link');
+  const toggleLink = page.locator(TenantLogin.toggleLink);
   await toggleLink.click();
 
   // Should switch to register mode
@@ -133,7 +134,7 @@ test('toggle between login and register modes', async ({ page }) => {
 
 // --- Layout ---
 
-test('tenant login: no layout overflow', async ({ page }) => {
+test('tenant login: no layout overflow @regression', async ({ page }) => {
   await page.goto(TENANT_LOGIN, { waitUntil: 'networkidle' });
   await expectNoLayoutOverflow(page);
 });

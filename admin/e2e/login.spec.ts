@@ -16,7 +16,7 @@ import {
 
 // --- Boot Shell Correctness (JS disabled) ---
 
-test('login page serves the boot shell with JS disabled', async ({ browser }) => {
+test('login page serves the boot shell with JS disabled @smoke @regression', async ({ browser }) => {
   const context = await browser.newContext({ javaScriptEnabled: false });
   const page = await context.newPage();
   await page.goto('/platform/login');
@@ -37,7 +37,7 @@ test('login page serves the boot shell with JS disabled', async ({ browser }) =>
   await context.close();
 });
 
-test('password field is masked once the login UI hydrates', async ({ page }) => {
+test('password field is masked once the login UI hydrates @smoke @regression', async ({ page }) => {
   await page.goto('/platform/login');
   const passwordType = await page.locator('#password').getAttribute('type');
   expect(passwordType).toBe('password');
@@ -45,13 +45,13 @@ test('password field is masked once the login UI hydrates', async ({ page }) => 
 
 // --- Hydration Integrity ---
 
-test('login: no console errors after hydration', async ({ page }) => {
+test('login: no console errors after hydration @smoke @regression', async ({ page }) => {
   const errors = collectErrors(page);
   await page.goto('/platform/login', { waitUntil: 'networkidle' });
   expectNoConsoleErrors(errors);
 });
 
-test('login: no FormaJS warnings for registered islands', async ({ page }) => {
+test('login: no FormaJS warnings for registered islands @smoke @regression', async ({ page }) => {
   const warnings = collectWarnings(page);
   await page.goto('/platform/login', { waitUntil: 'networkidle' });
   // Sub-islands (island_1, island_2, etc.) emit expected warnings since they are
@@ -66,7 +66,7 @@ test('login: no FormaJS warnings for registered islands', async ({ page }) => {
 
 // --- Form Interaction ---
 
-test('login: email input accepts typing', async ({ page }) => {
+test('login: email input accepts typing @smoke @regression', async ({ page }) => {
   await page.goto('/platform/login');
   await page.locator('#email').waitFor();
 
@@ -75,7 +75,7 @@ test('login: email input accepts typing', async ({ page }) => {
   expect(value).toBe('test@example.com');
 });
 
-test('login: password toggle switches between password and text', async ({ page }) => {
+test('login: password toggle switches between password and text @smoke @regression', async ({ page }) => {
   await page.goto('/platform/login');
   await page.locator('#password').waitFor();
 
@@ -94,7 +94,7 @@ test('login: password toggle switches between password and text', async ({ page 
   expect(typeReset).toBe('password');
 });
 
-test('login: submit empty form shows error message', async ({ page }) => {
+test('login: submit empty form shows error message @smoke @regression', async ({ page }) => {
   await page.goto('/platform/login');
   await page.locator('button[type="submit"]').waitFor();
 
@@ -108,7 +108,7 @@ test('login: submit empty form shows error message', async ({ page }) => {
 
 // --- Navigation ---
 
-test('"New here?" link navigates to /platform/onboarding', async ({ page }) => {
+test('"New here?" link navigates to /platform/onboarding @smoke @regression', async ({ page }) => {
   await page.goto('/platform/login');
   await page.locator('a[href="/platform/onboarding"]').waitFor();
 
@@ -121,12 +121,12 @@ test('"New here?" link navigates to /platform/onboarding', async ({ page }) => {
 
 // --- Layout ---
 
-test('login: no layout overflow', async ({ page }) => {
+test('login: no layout overflow @smoke @regression', async ({ page }) => {
   await page.goto('/platform/login', { waitUntil: 'networkidle' });
   await expectNoLayoutOverflow(page);
 });
 
-test('login: no DOM doubling after hydration', async ({ browser, page }) => {
+test('login: no DOM doubling after hydration @smoke @regression', async ({ browser, page }) => {
   await page.goto('/platform/login', { waitUntil: 'networkidle' });
   await expect(page.locator('#email')).toHaveCount(1);
   await expect(page.locator('#password')).toHaveCount(1);

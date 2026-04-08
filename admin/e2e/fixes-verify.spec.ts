@@ -1,9 +1,10 @@
 import { test, expect } from '@playwright/test';
 import { BASE, postWithRetry } from './helpers';
+import { TenantLogin } from './selectors';
 
 test.describe('Route and cache fixes', () => {
 
-  test('/dev/clear-cache clears SW, caches, storage, and cookies', async ({ page }) => {
+  test('/dev/clear-cache clears SW, caches, storage, and cookies @regression', async ({ page }) => {
     // Set some state first
     await page.goto(BASE + '/t/platform/login', { waitUntil: 'networkidle' });
     await page.evaluate(() => {
@@ -27,22 +28,22 @@ test.describe('Route and cache fixes', () => {
     expect(lsValue).toBeNull();
   });
 
-  test('dashboard does NOT doom-loop', async ({ page }) => {
+  test('dashboard does NOT doom-loop @regression', async ({ page }) => {
     await page.goto(BASE + '/t/platform/dashboard');
     // Wait for the page to settle — should redirect to login, not loop
     await page.waitForURL('**/login', { timeout: 15000 });
     expect(page.url()).toContain('/login');
   });
 
-  test('login page respects mode=register param', async ({ page }) => {
+  test('login page respects mode=register param @regression', async ({ page }) => {
     await page.goto(BASE + '/t/platform/login?mode=register');
-    await page.waitForSelector('.tl-card', { timeout: 5000 });
+    await page.waitForSelector(TenantLogin.card, { timeout: 5000 });
     const body = await page.textContent('body');
     const hasRegister = body?.includes('Create') || body?.includes('Sign up');
     expect(hasRegister).toBeTruthy();
   });
 
-  test('redirect param works for tenant-owner login preview', async ({ page, request }) => {
+  test('redirect param works for tenant-owner login preview @regression', async ({ page, request }) => {
     const slug = 'redir-test-' + Date.now().toString(36);
     const email = `owner-${Date.now()}@test.com`;
 
@@ -68,7 +69,7 @@ test.describe('Route and cache fixes', () => {
     const tenantId = String(createJson.tenant?.id || createJson.id || '');
 
     await page.goto(BASE + '/t/' + slug + '/login?redirect=/t/' + slug + '/site&mode=register');
-    await page.waitForSelector('.tl-card', { timeout: 5000 });
+    await page.waitForSelector(TenantLogin.card, { timeout: 5000 });
 
     const body = await page.textContent('body');
     const hasRegister = body?.includes('Create') || body?.includes('Sign up');
@@ -80,7 +81,7 @@ test.describe('Route and cache fixes', () => {
     });
   });
 
-  test('removed sandbox route now returns 404', async ({ request }) => {
+  test('removed sandbox route now returns 404 @regression', async ({ request }) => {
     const sandbox = await request.get(BASE + '/t/platform/sandbox', { maxRedirects: 0 });
     expect(sandbox.status()).toBe(404);
   });

@@ -16,7 +16,7 @@ import {
 
 // --- Boot Shell Correctness (JS disabled) ---
 
-test('onboarding page serves the boot shell with JS disabled', async ({ browser }) => {
+test('onboarding page serves the boot shell with JS disabled @smoke @regression', async ({ browser }) => {
   const context = await browser.newContext({ javaScriptEnabled: false });
   const page = await context.newPage();
   await page.goto('/platform/onboarding');
@@ -37,7 +37,7 @@ test('onboarding page serves the boot shell with JS disabled', async ({ browser 
   await context.close();
 });
 
-test('password fields stay masked after the onboarding UI hydrates', async ({ page }) => {
+test('password fields stay masked after the onboarding UI hydrates @smoke @regression', async ({ page }) => {
   await page.goto('/platform/onboarding');
 
   const pwType = await page.locator('#reg-password').getAttribute('type');
@@ -49,13 +49,13 @@ test('password fields stay masked after the onboarding UI hydrates', async ({ pa
 
 // --- Hydration Integrity ---
 
-test('onboarding: no console errors after hydration', async ({ page }) => {
+test('onboarding: no console errors after hydration @smoke @regression', async ({ page }) => {
   const errors = collectErrors(page);
   await page.goto('/platform/onboarding', { waitUntil: 'networkidle' });
   expectNoConsoleErrors(errors);
 });
 
-test('onboarding: no FormaJS warnings for registered islands', async ({ page }) => {
+test('onboarding: no FormaJS warnings for registered islands @regression', async ({ page }) => {
   const warnings = collectWarnings(page);
   await page.goto('/platform/onboarding', { waitUntil: 'networkidle' });
   // Sub-islands (island_1, etc.) from inline createShow emit expected warnings.
@@ -68,7 +68,7 @@ test('onboarding: no FormaJS warnings for registered islands', async ({ page }) 
 
 // --- Form Interaction ---
 
-test('onboarding: email input accepts typing', async ({ page }) => {
+test('onboarding: email input accepts typing @regression', async ({ page }) => {
   await page.goto('/platform/onboarding');
   await page.locator('#reg-email').waitFor();
 
@@ -77,7 +77,7 @@ test('onboarding: email input accepts typing', async ({ page }) => {
   expect(value).toBe('test@example.com');
 });
 
-test('onboarding: password toggle switches between password and text', async ({ page }) => {
+test('onboarding: password toggle switches between password and text @regression', async ({ page }) => {
   await page.goto('/platform/onboarding');
   await page.locator('#reg-password').waitFor();
 
@@ -94,7 +94,7 @@ test('onboarding: password toggle switches between password and text', async ({ 
   expect(typeAfter).toBe('text');
 });
 
-test('onboarding: submit empty form shows email required error', async ({ page }) => {
+test('onboarding: submit empty form shows email required error @regression', async ({ page }) => {
   await page.goto('/platform/onboarding');
   await page.locator('button[type="submit"]').waitFor();
 
@@ -106,7 +106,7 @@ test('onboarding: submit empty form shows email required error', async ({ page }
   expect(text).toContain('Email is required');
 });
 
-test('onboarding: submit with short password shows validation error', async ({ page }) => {
+test('onboarding: submit with short password shows validation error @regression', async ({ page }) => {
   await page.goto('/platform/onboarding');
   await page.locator('#reg-email').waitFor();
 
@@ -121,7 +121,7 @@ test('onboarding: submit with short password shows validation error', async ({ p
   expect(text).toContain('at least 8 characters');
 });
 
-test('onboarding: submit with mismatched passwords shows validation error', async ({ page }) => {
+test('onboarding: submit with mismatched passwords shows validation error @regression', async ({ page }) => {
   await page.goto('/platform/onboarding');
   await page.locator('#reg-email').waitFor();
 
@@ -138,7 +138,7 @@ test('onboarding: submit with mismatched passwords shows validation error', asyn
 
 // --- Navigation ---
 
-test('sign-in link navigates to /platform/login', async ({ page }) => {
+test('sign-in link navigates to /platform/login @regression', async ({ page }) => {
   await page.goto('/platform/onboarding');
   await page.locator('a[href="/platform/login"]').waitFor();
 
@@ -149,7 +149,7 @@ test('sign-in link navigates to /platform/login', async ({ page }) => {
   expect(page.url()).toContain('/platform/login');
 });
 
-test('CTA links to auth section', async ({ page }) => {
+test('CTA links to auth section @regression', async ({ page }) => {
   await page.goto('/platform/onboarding');
   await page.locator('.cta-btn').waitFor();
 
@@ -162,12 +162,12 @@ test('CTA links to auth section', async ({ page }) => {
 
 // --- Layout ---
 
-test('onboarding: no layout overflow', async ({ page }) => {
+test('onboarding: no layout overflow @regression', async ({ page }) => {
   await page.goto('/platform/onboarding', { waitUntil: 'networkidle' });
   await expectNoLayoutOverflow(page);
 });
 
-test('onboarding: no DOM doubling after hydration', async ({ browser, page }) => {
+test('onboarding: no DOM doubling after hydration @regression', async ({ browser, page }) => {
   await page.goto('/platform/onboarding', { waitUntil: 'networkidle' });
   await expect(page.locator('#reg-email')).toHaveCount(1);
   await expect(page.locator('#reg-password')).toHaveCount(1);

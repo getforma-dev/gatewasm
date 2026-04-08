@@ -1,29 +1,23 @@
 import { test, expect } from '@playwright/test';
 import { loginAsTestUser } from './auth-helper';
-import { BASE, getAccessToken } from './helpers';
+import { getAccessToken } from './helpers';
+import { createTestTenant, deleteTestTenantFromContext } from './factories';
+import { Workspace } from './selectors';
 
-test('platform login hides owner MFA until required', async ({ page }) => {
+test('platform login hides owner MFA until required @regression', async ({ page }) => {
   await page.goto('/platform/login');
   await page.waitForTimeout(1000);
 
   await expect(page.getByText('Owner MFA Verification')).toHaveCount(0);
 });
 
-test('auth reference lives inside integrate', async ({ browser }) => {
+test('auth reference lives inside integrate @regression', async ({ browser }) => {
   const { context, page } = await loginAsTestUser(browser);
-  const slug = 'smoke-' + Date.now().toString(36);
-  let tenantId = '';
+  let tenant: { id: string; slug: string } | undefined;
 
   try {
     const accessToken = await getAccessToken(context);
-
-    const createTenant = await context.request.post(BASE + '/platform/self-serve/tenants', {
-      headers: { Authorization: 'Bearer ' + accessToken },
-      data: { name: 'Smoke Tenant', slug },
-    });
-    expect(createTenant.ok()).toBeTruthy();
-    const createJson = await createTenant.json();
-    tenantId = String(createJson.tenant.id);
+    tenant = await createTestTenant(context.request, accessToken, 'Smoke Tenant');
 
     await page.goto('/platform/console');
     await page.waitForTimeout(1500);
@@ -31,10 +25,10 @@ test('auth reference lives inside integrate', async ({ browser }) => {
     await page.locator('.tenant-card').filter({ hasText: 'Smoke Tenant' }).first().click();
 
     // Switch to Operator plane and navigate to Integrate tab
-    await page.locator('.plane-tier1').getByRole('button', { name: 'Operator' }).click();
+    await page.locator(Workspace.tier1).getByRole('button', { name: 'Operator' }).click();
     await page.waitForTimeout(500);
 
-    await page.locator('.plane-tier2').getByRole('button', { name: 'Integrate' }).click();
+    await page.locator(Workspace.tier2).getByRole('button', { name: 'Integrate' }).click();
     await page.waitForTimeout(1000);
 
     await expect(page.getByRole('tab', { name: 'Getting Started' })).toBeVisible();
@@ -50,35 +44,18 @@ test('auth reference lives inside integrate', async ({ browser }) => {
     await expect(page.getByText('Token Format', { exact: true })).toBeVisible();
     await expect(page.getByText('Auth Endpoints')).toBeVisible();
   } finally {
-    if (tenantId) {
-      try {
-        const cleanupToken = await getAccessToken(context);
-        await context.request.delete(BASE + '/platform/self-serve/tenants/' + tenantId, {
-          headers: { Authorization: 'Bearer ' + cleanupToken },
-          data: { confirm_slug: slug },
-        });
-      } catch { /* cleanup best-effort */ }
-    }
-
+    if (tenant) await deleteTestTenantFromContext(context, tenant.id, tenant.slug);
     await context.close();
   }
 });
 
-test('users view shows active session count', async ({ browser }) => {
+test('users view shows active session count @regression', async ({ browser }) => {
   const { context, page } = await loginAsTestUser(browser);
-  const slug = 'sess-' + Date.now().toString(36);
-  let tenantId = '';
+  let tenant: { id: string; slug: string } | undefined;
 
   try {
     const accessToken = await getAccessToken(context);
-
-    const createTenant = await context.request.post(BASE + '/platform/self-serve/tenants', {
-      headers: { Authorization: 'Bearer ' + accessToken },
-      data: { name: 'Session Test', slug },
-    });
-    expect(createTenant.ok()).toBeTruthy();
-    const createJson = await createTenant.json();
-    tenantId = String(createJson.tenant.id);
+    tenant = await createTestTenant(context.request, accessToken, 'Session Test');
 
     await page.goto('/platform/console');
     await page.waitForTimeout(1500);
@@ -86,25 +63,16 @@ test('users view shows active session count', async ({ browser }) => {
     await page.locator('.tenant-card').filter({ hasText: 'Session Test' }).first().click();
 
     // Switch to Organization plane and navigate to Members tab
-    await page.locator('.plane-tier1').getByRole('button', { name: 'Organization' }).click();
+    await page.locator(Workspace.tier1).getByRole('button', { name: 'Organization' }).click();
     await page.waitForTimeout(500);
 
-    await page.locator('.plane-tier2').getByRole('button', { name: 'Members' }).click();
+    await page.locator(Workspace.tier2).getByRole('button', { name: 'Members' }).click();
     await page.waitForTimeout(1000);
 
     // Members view should render (may be empty for a new tenant)
     await expect(page.getByRole('heading', { name: 'Members' })).toBeVisible();
   } finally {
-    if (tenantId) {
-      try {
-        const cleanupToken = await getAccessToken(context);
-        await context.request.delete(BASE + '/platform/self-serve/tenants/' + tenantId, {
-          headers: { Authorization: 'Bearer ' + cleanupToken },
-          data: { confirm_slug: slug },
-        });
-      } catch { /* cleanup best-effort */ }
-    }
-
+    if (tenant) await deleteTestTenantFromContext(context, tenant.id, tenant.slug);
     await context.close();
   }
 });

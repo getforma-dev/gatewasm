@@ -138,7 +138,7 @@ test.describe.serial('WS Ticket Auth & Connection Lifecycle', () => {
   // -------------------------------------------------------------------------
   // Test 1 — POST /ws/ticket returns a ticket when authenticated
   // -------------------------------------------------------------------------
-  test('POST /ws/ticket returns a ticket when authenticated', async () => {
+  test('POST /ws/ticket returns a ticket when authenticated @ws @regression', async () => {
     const token = await getAccessToken(sharedContext);
     const res = await sharedContext.request.post(BASE + '/ws/ticket', {
       headers: { Authorization: 'Bearer ' + token },
@@ -153,7 +153,7 @@ test.describe.serial('WS Ticket Auth & Connection Lifecycle', () => {
   // -------------------------------------------------------------------------
   // Test 2 — POST /ws/ticket rejects unauthenticated requests
   // -------------------------------------------------------------------------
-  test('POST /ws/ticket rejects unauthenticated requests', async () => {
+  test('POST /ws/ticket rejects unauthenticated requests @ws @regression', async () => {
     const res = await sharedContext.request.post(BASE + '/ws/ticket');
     expect(res.status()).toBe(401);
   });
@@ -161,7 +161,7 @@ test.describe.serial('WS Ticket Auth & Connection Lifecycle', () => {
   // -------------------------------------------------------------------------
   // Test 3 — WS upgrade succeeds with valid ticket
   // -------------------------------------------------------------------------
-  test('WS upgrade succeeds with valid ticket', async ({ browser }) => {
+  test('WS upgrade succeeds with valid ticket @ws @regression', async ({ browser }) => {
     const { context, page } = await loginAsTestUser(browser);
     const token = await getAccessToken(context);
     const ticket = await getWsTicket(context, token);
@@ -182,7 +182,7 @@ test.describe.serial('WS Ticket Auth & Connection Lifecycle', () => {
   // -------------------------------------------------------------------------
   // Test 4 — WS upgrade rejects invalid ticket
   // -------------------------------------------------------------------------
-  test('WS upgrade rejects invalid ticket', async ({ browser }) => {
+  test('WS upgrade rejects invalid ticket @ws @regression', async ({ browser }) => {
     const { context, page } = await loginAsTestUser(browser);
     await page.goto(BASE + '/platform/console');
     await page.waitForLoadState('networkidle');
@@ -195,7 +195,7 @@ test.describe.serial('WS Ticket Auth & Connection Lifecycle', () => {
   // -------------------------------------------------------------------------
   // Test 5 — WS upgrade rejects reused ticket
   // -------------------------------------------------------------------------
-  test('WS upgrade rejects reused ticket', async ({ browser }) => {
+  test('WS upgrade rejects reused ticket @ws @regression', async ({ browser }) => {
     const { context: freshCtx, page: freshPage } = await loginAsTestUser(browser);
     const token = await getAccessToken(freshCtx);
     const ticket = await getWsTicket(freshCtx, token);
@@ -221,7 +221,7 @@ test.describe.serial('WS Ticket Auth & Connection Lifecycle', () => {
   // -------------------------------------------------------------------------
   // Test 6 — WS upgrade rejects expired ticket (TTL configured via WS_TICKET_TTL_SECS)
   // -------------------------------------------------------------------------
-  test('WS upgrade rejects expired ticket', async ({ browser }) => {
+  test('WS upgrade rejects expired ticket @ws @regression', async ({ browser }) => {
     test.setTimeout(20000);
 
     const { context, page } = await loginAsTestUser(browser);
@@ -241,7 +241,7 @@ test.describe.serial('WS Ticket Auth & Connection Lifecycle', () => {
   // -------------------------------------------------------------------------
   // Test 7 — Server sends pong in response to ping
   // -------------------------------------------------------------------------
-  test('Server sends pong in response to ping', async ({ browser }) => {
+  test('Server sends pong in response to ping @ws @regression', async ({ browser }) => {
     const { context, page } = await loginAsTestUser(browser);
     const token = await getAccessToken(context);
     const ticket = await getWsTicket(context, token);
@@ -301,7 +301,7 @@ test.describe.serial('WS Event Delivery', () => {
   // -------------------------------------------------------------------------
   // Test 1 — receives team:changed when invite is created
   // -------------------------------------------------------------------------
-  test('receives team:changed when invite is created', async () => {
+  test('receives team:changed when invite is created @ws @regression', async () => {
     await evtPage.goto(BASE + '/platform/console');
     await evtPage.waitForLoadState('networkidle');
 
@@ -340,7 +340,7 @@ test.describe.serial('WS Event Delivery', () => {
   // tenant:activity events from child tenants have a different tenant_id and
   // won't match. To test tenant:activity delivery, we trigger a platform login
   // which emits with tenant_id "ten_platform".
-  test('receives tenant:activity on platform login', async () => {
+  test('receives tenant:activity on platform login @ws @regression', async () => {
     await evtPage.goto(BASE + '/platform/console');
     await evtPage.waitForLoadState('networkidle');
 
@@ -379,7 +379,7 @@ test.describe.serial('WS Event Delivery', () => {
   // -------------------------------------------------------------------------
   // Test 3 — receives metrics:updated alongside tenant:activity
   // -------------------------------------------------------------------------
-  test('receives metrics:updated alongside tenant:activity', async () => {
+  test('receives metrics:updated alongside tenant:activity @ws @regression', async () => {
     await evtPage.goto(BASE + '/platform/console');
     await evtPage.waitForLoadState('networkidle');
 
@@ -422,7 +422,7 @@ test.describe.serial('WS Event Delivery', () => {
   // -------------------------------------------------------------------------
   // Test 4 — does not receive events for unsubscribed topics
   // -------------------------------------------------------------------------
-  test('does not receive events for unsubscribed topics', async () => {
+  test('does not receive events for unsubscribed topics @ws @regression', async () => {
     await evtPage.goto(BASE + '/platform/console');
     await evtPage.waitForLoadState('networkidle');
 
@@ -451,7 +451,7 @@ test.describe.serial('WS Event Delivery', () => {
   // -------------------------------------------------------------------------
   // Test 5 — child tenant activity does not leak to platform-scoped WS
   // -------------------------------------------------------------------------
-  test('child tenant activity does not leak to platform-scoped WS', async () => {
+  test('child tenant activity does not leak to platform-scoped WS @ws @regression', async () => {
     // Create a second tenant
     const token = await getAccessToken(evtContext);
     const otherSlug = 'e2e-ws-other-' + Date.now().toString(36);
@@ -495,7 +495,7 @@ test.describe.serial('WS Event Delivery', () => {
   // -------------------------------------------------------------------------
   // Test 6 — subscribe/unsubscribe dynamically updates filtering
   // -------------------------------------------------------------------------
-  test('subscribe/unsubscribe dynamically updates filtering', async () => {
+  test('subscribe/unsubscribe dynamically updates filtering @ws @regression', async () => {
     await evtPage.goto(BASE + '/platform/console');
     await evtPage.waitForLoadState('networkidle');
 
@@ -546,7 +546,7 @@ test.describe('WS Health & Connection Count', () => {
   // -------------------------------------------------------------------------
   // Test 1 — health endpoint reports ws_connections count
   // -------------------------------------------------------------------------
-  test('health endpoint reports ws_connections count', async ({ browser }) => {
+  test('health endpoint reports ws_connections count @ws @regression', async ({ browser }) => {
     const { context, page } = await loginAsTestUser(browser);
 
     try {
@@ -616,7 +616,7 @@ test.describe('WS Reconnection & Server-Initiated Close', () => {
   // -------------------------------------------------------------------------
   // Test 1 — Server closes connection after 5 invalid messages
   // -------------------------------------------------------------------------
-  test('server closes connection after 5 invalid messages', async ({ browser }) => {
+  test('server closes connection after 5 invalid messages @ws @regression', async ({ browser }) => {
     const { context, page } = await loginAsTestUser(browser);
 
     try {
@@ -645,7 +645,7 @@ test.describe('WS Reconnection & Server-Initiated Close', () => {
   // -------------------------------------------------------------------------
   // The test server is configured with JWT_ACCESS_TOKEN_EXPIRY=60 (60 seconds).
   // The WS handler sets a timer based on the JWT's exp claim.
-  test('server sends auth_expired when JWT expires', async ({ browser }) => {
+  test('server sends auth_expired when JWT expires @ws @regression', async ({ browser }) => {
     test.setTimeout(90000); // Extended timeout — waiting for 60s token expiry
 
     const { context, page } = await loginAsTestUser(browser);
