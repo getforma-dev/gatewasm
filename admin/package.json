@@ -5,6 +5,7 @@
     "build": "tsx build.ts",
     "build:ssr": "tsx build.ts --ssr",
     "dev": "tsx build.ts --watch",
+    "mailpit": "mailpit --smtp 0.0.0.0:1025 --listen 0.0.0.0:8025",
     "test": "playwright test",
     "test:smoke": "playwright test --grep @smoke",
     "test:regression": "playwright test --grep @regression",
