@@ -1321,7 +1321,7 @@ export function navigateTenantView(nextView: TenantWorkspaceView): void {
 
   setView(nextView);
   setPlaneSignal(planeForView(nextView));
-  writeHash(nextView === 'overview' ? '' : nextView);
+  writeHash(nextView);
 
   void hydrateTenantView(nextView, tenant);
 }
@@ -1435,7 +1435,7 @@ function switchToAccountInternal(hashTab?: AccountTab): void {
 export function selectTenant(tenant: Tenant): void {
   switchToWorkspaceInternal(tenant);
   const v = view();
-  history.pushState({ slug: tenant.slug }, '', '/platform/console/' + tenant.slug + (v === 'overview' ? '' : '#' + v));
+  history.pushState({ slug: tenant.slug }, '', '/platform/console/' + tenant.slug + '#' + v);
 }
 
 export function backToTenants(tab?: AccountTab): void {

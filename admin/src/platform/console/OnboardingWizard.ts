@@ -1,6 +1,6 @@
 import { h, createSignal, createShow, onCleanup } from 'formajs';
 import {
-  selectedTenant, updateTenant, toast, serverUrl, saveSecurityConfig, api, selectTenant,
+  selectedTenant, updateTenant, toast, serverUrl, saveSecurityConfig, api, selectTenant, currentUser,
 } from './store';
 import type { Tenant } from './store';
 
@@ -259,6 +259,15 @@ function StepBranding(): ReturnType<typeof h> {
         }),
       ),
 
+      h('div', { class: 'wizard-field wizard-field-row' },
+        h('span', null, 'Remove fAuth branding'),
+        h('label', { class: 'wizard-toggle' },
+          h('input', { type: 'checkbox', disabled: true }),
+          h('span', { class: 'wizard-toggle-track' }),
+        ),
+        h('span', { class: 'wizard-provider-badge' }, 'Paid plan'),
+      ),
+
       h('div', { class: 'wizard-actions' },
         h('button', {
           type: 'button',
@@ -484,8 +493,14 @@ function StepLiveTest(): ReturnType<typeof h> {
     } catch { /* ignore */ }
   })();
 
+  const userEmail = currentUser()?.email || '';
+
   function openLoginPage(): void {
-    window.open(serverUrl + '/t/' + tenant.slug + '/login', '_blank');
+    window.open(
+      serverUrl + '/t/' + tenant.slug + '/login',
+      'fauth-test-login',
+      'width=480,height=640,left=200,top=100',
+    );
     setTestState('waiting');
     setNudge(false);
     nudgeTimer = setTimeout(() => setNudge(true), 60000);
@@ -515,7 +530,11 @@ function StepLiveTest(): ReturnType<typeof h> {
     createShow(() => testState() === 'prompt', () =>
       h('div', { class: 'wizard-test-prompt' },
         h('h1', { class: 'wizard-headline' }, 'Try signing in as an end user'),
-        h('p', { class: 'wizard-subtitle' }, 'You\u2019re your own first user \u2014 the same credentials you used to sign into fAuth will work here. We\u2019ll open the login page and detect your session in real-time.'),
+        h('p', { class: 'wizard-subtitle' },
+          'You\u2019re your own first user \u2014 sign in with ',
+          userEmail ? h('strong', null, userEmail) : 'your fAuth credentials',
+          '. We\u2019ll detect your session in real-time.',
+        ),
         h('button', {
           type: 'button',
           class: 'btn btn-accent btn-lg',
@@ -543,7 +562,7 @@ function StepLiveTest(): ReturnType<typeof h> {
         h('button', {
           type: 'button',
           class: 'btn btn-ghost btn-sm',
-          onClick: () => window.open(serverUrl + '/t/' + tenant.slug + '/login', '_blank'),
+          onClick: () => window.open(serverUrl + '/t/' + tenant.slug + '/login', 'fauth-test-login', 'width=480,height=640,left=200,top=100'),
         }, 'Reopen login page \u2192'),
         h('div', { style: 'margin-top:24px' },
           h('button', {
