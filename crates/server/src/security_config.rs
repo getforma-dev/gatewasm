@@ -15,6 +15,9 @@ pub struct TenantSecurityConfig {
     pub client_fingerprint: bool,
     #[serde(default = "default_max_sessions")]
     pub max_sessions_per_user: u32,
+    /// MFA policy: "required", "recommended", or "off"
+    #[serde(default = "default_mfa_policy")]
+    pub mfa_policy: String,
 
     // ── Pro (default OFF) ───────────────────────────────────────────
     #[serde(default)]
@@ -60,6 +63,9 @@ fn default_travel_speed() -> u32 {
 fn default_max_sessions() -> u32 {
     10
 }
+fn default_mfa_policy() -> String {
+    "off".to_string()
+}
 
 impl Default for TenantSecurityConfig {
     fn default() -> Self {
@@ -69,6 +75,7 @@ impl Default for TenantSecurityConfig {
             csp_enabled: true,
             client_fingerprint: true,
             max_sessions_per_user: 10,
+            mfa_policy: "off".to_string(),
             webauthn_enabled: false,
             webauthn_attestation: "none".to_string(),
             webauthn_require_device_bound: false,
