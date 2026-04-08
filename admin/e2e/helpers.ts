@@ -152,3 +152,34 @@ export async function expectNoDOMDoubling(
   // Allow some growth (islands add interactive elements) but not 2x
   expect(jsCount).toBeLessThan(ssrCount * 2);
 }
+
+// ---------------------------------------------------------------------------
+// Mailpit helpers — query the local email trap (http://127.0.0.1:8025)
+// ---------------------------------------------------------------------------
+
+const MAILPIT_API = 'http://127.0.0.1:8025/api/v1';
+
+/** Search Mailpit for emails matching a query. Returns message summaries. */
+export async function searchEmails(query: string): Promise<any[]> {
+  const res = await fetch(`${MAILPIT_API}/search?query=${encodeURIComponent(query)}`);
+  if (!res.ok) return [];
+  const data = await res.json();
+  return data.messages || [];
+}
+
+/** Get emails sent to a specific address. */
+export async function getEmailsTo(email: string): Promise<any[]> {
+  return searchEmails(`to:${email}`);
+}
+
+/** Get the full message (with HTML body) by message ID. */
+export async function getEmailById(id: string): Promise<any> {
+  const res = await fetch(`${MAILPIT_API}/message/${id}`);
+  if (!res.ok) throw new Error(`Mailpit: message ${id} not found`);
+  return res.json();
+}
+
+/** Delete all messages in Mailpit (call in beforeEach/beforeAll for clean state). */
+export async function clearMailpit(): Promise<void> {
+  await fetch(`${MAILPIT_API}/messages`, { method: 'DELETE' });
+}

@@ -2,12 +2,38 @@ import { execSync, spawn } from 'child_process';
 import { writeFileSync } from 'fs';
 
 const PORT = 3102;
+const MAILPIT_SMTP_PORT = 1025;
+const MAILPIT_UI_PORT = 8025;
 const PID_FILE = '/tmp/gatewasm-e2e.pid';
+const MAILPIT_PID_FILE = '/tmp/gatewasm-e2e-mailpit.pid';
 
 export default async function globalSetup() {
-  // Kill any existing server
+  // Kill any existing server and mailpit
   try { execSync(`lsof -ti :${PORT} | xargs kill 2>/dev/null`); } catch {}
+  try { execSync(`lsof -ti :${MAILPIT_SMTP_PORT} | xargs kill 2>/dev/null`); } catch {}
   await new Promise(r => setTimeout(r, 1000));
+
+  // Start Mailpit — local SMTP trap for capturing test emails
+  const mailpit = spawn('mailpit', [
+    '--smtp', `0.0.0.0:${MAILPIT_SMTP_PORT}`,
+    '--listen', `0.0.0.0:${MAILPIT_UI_PORT}`,
+  ], {
+    stdio: ['ignore', 'pipe', 'pipe'],
+    detached: true,
+  });
+  mailpit.stdout?.resume();
+  mailpit.stderr?.resume();
+  mailpit.unref();
+  writeFileSync(MAILPIT_PID_FILE, String(mailpit.pid));
+
+  // Wait for Mailpit to be ready
+  for (let i = 0; i < 10; i++) {
+    try {
+      const res = await fetch(`http://127.0.0.1:${MAILPIT_UI_PORT}/api/v1/messages?limit=1`);
+      if (res.ok) break;
+    } catch {}
+    await new Promise(r => setTimeout(r, 500));
+  }
 
   // Test-only defaults — override via environment for CI or shared envs.
   const server = spawn('cargo', ['run', '-p', 'gatewasm-server'], {
@@ -26,7 +52,13 @@ export default async function globalSetup() {
       LOGIN_RATE_LIMIT_BURST: process.env.LOGIN_RATE_LIMIT_BURST || '500',
       TOKEN_RATE_LIMIT_BURST: process.env.TOKEN_RATE_LIMIT_BURST || '500',
       WS_TICKET_TTL_SECS: process.env.WS_TICKET_TTL_SECS || '5',
-      SUPPRESS_EMAIL: process.env.SUPPRESS_EMAIL || 'true',
+      // Route emails to local Mailpit instead of Resend/external SMTP
+      SMTP_HOST: `127.0.0.1`,
+      SMTP_PORT: String(MAILPIT_SMTP_PORT),
+      SMTP_FROM_EMAIL: 'test@getforma.dev',
+      SMTP_STARTTLS: 'false',
+      // Unset Resend so the server uses SMTP (Mailpit) instead
+      RESEND_API_KEY: '',
     },
     stdio: ['ignore', 'pipe', 'pipe'],
     detached: true,
