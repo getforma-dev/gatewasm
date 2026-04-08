@@ -39,6 +39,11 @@ async fn run_migrations(pool: &PgPool) -> Result<(), sqlx::Error> {
             "onboarding wizard columns + mfa_policy",
             include_str!("pg_migrations/002_onboarding_wizard.sql"),
         ),
+        (
+            3,
+            "branding bg_color + card_color",
+            include_str!("pg_migrations/003_branding_colors.sql"),
+        ),
     ];
 
     for &(version, label, sql) in migrations {

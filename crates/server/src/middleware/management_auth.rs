@@ -63,6 +63,7 @@ async fn resolve_from_api_key(api_key: &str, state: &AppState) -> Result<TenantC
          github_client_id, github_client_secret, allowed_origins, status, login_redirect_url, \
          signup_mode, plan, trial_ends_at, owner_user_id, branding_logo_url, \
          branding_primary_color, branding_app_name, branding_custom_css, \
+         branding_bg_color, branding_card_color, \
          COALESCE(security_config, '{}') AS security_config \
          FROM tenants WHERE api_key_prefix = $1 AND api_key_hash = $2",
     )
