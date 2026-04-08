@@ -81,6 +81,21 @@ export function SecurityConfigView() {
       ),
     ),
 
+    createShow(
+      () => selectedTenant()?.tenant_intent != null,
+      () => {
+        const labels: Record<string, string> = {
+          saas: 'SaaS app', internal: 'internal tool', community: 'community site',
+          'client-portal': 'client portal', marketplace: 'marketplace / API',
+        };
+        const intent = selectedTenant()?.tenant_intent || '';
+        return h('div', { class: 'security-intent-note' },
+          'Your security defaults are tuned for a ' + (labels[intent] || intent) + '. ',
+          h('a', { class: 'security-intent-link', href: '#', onClick: (e: Event) => e.preventDefault() }, 'Customize \u2192'),
+        );
+      },
+    ),
+
     () => securityConfigLoading() && !config()
       ? Skeleton({ height: '240px' })
       : config()
