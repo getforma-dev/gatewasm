@@ -1,4 +1,4 @@
-import { h, createSignal, createShow } from 'formajs';
+import { h, createSignal, createShow, onCleanup } from 'formajs';
 import {
   selectedTenant, updateTenant, toast, serverUrl, saveSecurityConfig, api, selectTenant,
 } from './store';
@@ -53,7 +53,7 @@ function advanceStep(): void {
   setWizardStep(next);
   const tenant = selectedTenant();
   if (tenant) {
-    void updateTenant(tenant.id, { onboarding_step: (next + 1) as any });
+    void updateTenant(tenant.id, { onboarding_step: next + 1 });
   }
 }
 
@@ -70,14 +70,15 @@ async function skipWizard(): Promise<void> {
       tenant_intent: 'saas',
       preferred_tab: defaults.preferred_tab,
       allowed_providers: defaults.allowed_providers,
+      signup_mode: defaults.signup_mode,
     });
     await saveSecurityConfig(tenant.id, {
       idle_timeout_minutes: defaults.idle_timeout_minutes,
       max_sessions_per_user: defaults.max_sessions_per_user,
       mfa_policy: defaults.mfa_policy,
-    } as any);
+    });
   }
-  const updated = await updateTenant(tenant.id, { onboarding_completed: true, onboarding_step: 6 as any });
+  const updated = await updateTenant(tenant.id, { onboarding_completed: true, onboarding_step: 6 });
   toast.show('Your workspace is ready', 'success');
   if (updated) selectTenant(updated);
 }
@@ -100,12 +101,13 @@ function StepIntent(): ReturnType<typeof h> {
       tenant_intent: pick,
       preferred_tab: defaults.preferred_tab,
       allowed_providers: defaults.allowed_providers,
+      signup_mode: defaults.signup_mode,
     });
     await saveSecurityConfig(tenant.id, {
       idle_timeout_minutes: defaults.idle_timeout_minutes,
       max_sessions_per_user: defaults.max_sessions_per_user,
       mfa_policy: defaults.mfa_policy,
-    } as any);
+    });
     setSaving(false);
     advanceStep();
   }
@@ -465,6 +467,23 @@ function StepLiveTest(): ReturnType<typeof h> {
   let nudgeTimer: ReturnType<typeof setTimeout> | null = null;
   let pollInterval: ReturnType<typeof setInterval> | null = null;
 
+  // Cleanup on unmount — prevent leaked intervals
+  onCleanup(() => {
+    if (pollInterval) clearInterval(pollInterval);
+    if (nudgeTimer) clearTimeout(nudgeTimer);
+  });
+
+  // Check for existing sessions on mount — skip to success if already tested
+  (async () => {
+    try {
+      const data = await api.get<any>('/platform/self-serve/tenants/' + encodeURIComponent(tenant.id));
+      if (data && data.active_sessions > 0) {
+        setSessionEmail(data.owner_email || 'End user');
+        setTestState('success');
+      }
+    } catch { /* ignore */ }
+  })();
+
   function openLoginPage(): void {
     window.open(serverUrl + '/t/' + tenant.slug + '/login', '_blank');
     setTestState('waiting');
@@ -577,7 +596,7 @@ function StepLaunch(): ReturnType<typeof h> {
 
   async function handleLaunch(): Promise<void> {
     setSaving(true);
-    const updated = await updateTenant(tenant.id, { onboarding_completed: true, onboarding_step: 6 as any });
+    const updated = await updateTenant(tenant.id, { onboarding_completed: true, onboarding_step: 6 });
     setSaving(false);
     toast.show('Your workspace is ready', 'success');
     // Re-select the tenant to trigger full workspace data loading
@@ -691,10 +710,11 @@ function StepLaunch(): ReturnType<typeof h> {
 // ── Main Component ─────────────────────────────────────────────────────
 
 export function OnboardingWizard(): ReturnType<typeof h> {
+  // Always reset signals on mount — prevents stale state when switching tenants
   const tenant = selectedTenant();
-  if (tenant && tenant.onboarding_step > 1) {
-    setWizardStep(Math.min(tenant.onboarding_step - 1, 5));
-  }
+  const step = tenant ? Math.min(Math.max(tenant.onboarding_step - 1, 0), 5) : 0;
+  setWizardStep(step);
+  setSaving(false);
 
   return h('div', { class: 'wizard-root' },
     h('div', { class: 'wizard-header' },

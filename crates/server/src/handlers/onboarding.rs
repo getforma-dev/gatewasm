@@ -248,6 +248,7 @@ pub struct UpdateTenantRequest {
     pub tenant_intent: Option<String>,
     pub branding_dark_mode: Option<bool>,
     pub branding_button_text: Option<String>,
+    pub signup_mode: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -894,6 +895,19 @@ pub async fn update_my_tenant(
             "UPDATE tenants SET branding_button_text = $1, updated_at = NOW() WHERE id = $2",
         )
         .bind(v)
+        .bind(&tenant_id)
+        .execute(&mut *tx)
+        .await?;
+    }
+    if let Some(ref v) = body.signup_mode {
+        let normalized = match v.as_str() {
+            "invite_only" | "open" => v.clone(),
+            _ => "open".to_string(),
+        };
+        sqlx::query(
+            "UPDATE tenants SET signup_mode = $1, updated_at = NOW() WHERE id = $2",
+        )
+        .bind(&normalized)
         .bind(&tenant_id)
         .execute(&mut *tx)
         .await?;

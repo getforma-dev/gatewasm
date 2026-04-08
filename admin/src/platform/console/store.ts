@@ -35,6 +35,7 @@ export interface Tenant {
   primary_color: string | null;
   login_redirect_url: string | null;
   allowed_providers?: string[];
+  signup_mode?: string;
   management_api_key?: string;
   access?: 'own' | 'team';
   team_role?: string; // "admin" | "editor" | "viewer" — only for access === 'team'
@@ -166,6 +167,7 @@ export interface SecurityConfig {
   caep_enabled: boolean;
   impossible_travel_enabled: boolean;
   impossible_travel_speed_threshold_kmh: number;
+  mfa_policy: string;
 }
 
 export interface TenantInvite {
@@ -677,7 +679,7 @@ async function loadTenantDetail(id: string, statsWindow: OverviewWindow = overvi
 
 export async function updateTenant(
   id: string,
-  fields: Partial<Pick<Tenant, 'name' | 'slug' | 'primary_color' | 'login_redirect_url' | 'onboarding_completed' | 'onboarding_step' | 'preferred_tab' | 'tenant_intent' | 'branding_dark_mode' | 'branding_button_text' | 'branding_app_name' | 'branding_logo_url' | 'branding_primary_color' | 'allowed_providers'>>,
+  fields: Partial<Pick<Tenant, 'name' | 'slug' | 'primary_color' | 'login_redirect_url' | 'onboarding_completed' | 'onboarding_step' | 'preferred_tab' | 'tenant_intent' | 'branding_dark_mode' | 'branding_button_text' | 'branding_app_name' | 'branding_logo_url' | 'branding_primary_color' | 'allowed_providers' | 'signup_mode'>>,
 ): Promise<Tenant | null> {
   try {
     const updatedTenant = await api.patch<Tenant>(
