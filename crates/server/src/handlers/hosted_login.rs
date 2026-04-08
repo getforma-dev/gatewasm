@@ -161,10 +161,20 @@ else{{b.style.opacity='';b.style.pointerEvents='';}}
 
     let page_title = format!("{} — Sign In", html_escape(app_name));
 
-    let personality_css = format!(
-        "body{{background:#0a0a0c;color:#e8e6e3;--accent:{pc};}}",
-        pc = primary_color
+    let bg_color = tenant.branding_bg_color.as_deref().unwrap_or("#0a0a0c");
+    let mut personality_css = format!(
+        "body{{background:{bg};color:#e8e6e3;--accent:{pc};}}",
+        bg = bg_color,
+        pc = primary_color,
     );
+    if let Some(ref card_color) = tenant.branding_card_color {
+        personality_css.push_str(&format!(".tl-card{{background:{};}}",card_color));
+    }
+    if let Some(ref custom_css) = tenant.branding_custom_css {
+        if !custom_css.is_empty() {
+            personality_css.push_str(&format!(".tl-card{{{}}}", custom_css));
+        }
+    }
 
     render_page(&PageConfig {
         title: &page_title,

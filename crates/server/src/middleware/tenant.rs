@@ -41,6 +41,8 @@ pub struct TenantContext {
     pub branding_primary_color: String,
     pub branding_app_name: Option<String>,
     pub branding_custom_css: Option<String>,
+    pub branding_bg_color: Option<String>,
+    pub branding_card_color: Option<String>,
     pub login_redirect_url: String,
     // Security config (from JSONB column)
     pub security_config: TenantSecurityConfig,
@@ -92,6 +94,8 @@ impl TenantContext {
                 .unwrap_or_else(|| "#6366f1".to_string()),
             branding_app_name: row.get("branding_app_name"),
             branding_custom_css: row.get("branding_custom_css"),
+            branding_bg_color: row.get("branding_bg_color"),
+            branding_card_color: row.get("branding_card_color"),
             login_redirect_url: resolved_login_redirect,
             security_config,
         }
@@ -193,7 +197,7 @@ pub async fn extract_tenant(
              google_client_id, google_client_secret, github_client_id, github_client_secret, \
              allowed_origins, status, signup_mode, \
              branding_logo_url, branding_primary_color, \
-             branding_app_name, branding_custom_css, \
+             branding_app_name, branding_custom_css, branding_bg_color, branding_card_color, \
              login_redirect_url, \
              plan, trial_ends_at, owner_user_id, \
              COALESCE(security_config, '{}') as security_config \
@@ -268,6 +272,8 @@ mod tests {
             branding_primary_color: "#6366f1".into(),
             branding_app_name: None,
             branding_custom_css: None,
+            branding_bg_color: None,
+            branding_card_color: None,
             login_redirect_url: "/".into(),
             security_config: TenantSecurityConfig::default(),
         }
