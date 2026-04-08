@@ -3487,7 +3487,7 @@
 
 .intent-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
   gap: 12px;
   width: 100%;
   max-width: 700px;
@@ -3501,8 +3501,9 @@
   text-align: left;
   cursor: pointer;
   transition: border-color 0.15s, box-shadow 0.15s;
-  overflow: hidden;
-  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
 }
 
 .intent-card:hover {
@@ -3524,9 +3525,7 @@
 .intent-card-desc {
   font-size: 0.78rem;
   color: var(--text-dim);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  line-height: 1.4;
 }
 
 /* Split pane (Steps 1-2) */
@@ -3547,6 +3546,9 @@
   display: flex;
   flex-direction: column;
   gap: 8px;
+  position: sticky;
+  top: 32px;
+  align-self: start;
 }
 
 .wizard-preview-label {
@@ -3558,11 +3560,13 @@
 
 .wizard-preview-iframe {
   width: 100%;
-  height: 500px;
+  flex: 1;
+  min-height: 480px;
   border: 1px solid var(--border);
   border-radius: 10px;
   background: #0a0a0c;
 }
+
 
 .wizard-field {
   display: flex;
@@ -3673,6 +3677,13 @@
   max-width: 700px;
 }
 
+@media (max-width: 640px) {
+  .mode-grid { grid-template-columns: 1fr; }
+  .wizard-split-pane { grid-template-columns: 1fr; }
+  .wizard-pane-right { order: -1; }
+  .intent-grid { grid-template-columns: 1fr 1fr; }
+}
+
 .mode-card {
   background: var(--surface-raised);
   border: 1px solid var(--border);
@@ -3682,8 +3693,9 @@
   cursor: pointer;
   transition: border-color 0.15s, box-shadow 0.15s;
   position: relative;
-  overflow: hidden;
-  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 
 .mode-card:hover {

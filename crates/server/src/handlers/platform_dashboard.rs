@@ -31,7 +31,7 @@ pub async fn dashboard_page(State(state): State<AppState>) -> impl IntoResponse 
 
     // Add frame-src 'self' to allow the onboarding wizard's live preview iframe
     // of the tenant login page (same origin)
-    let csp = page.csp + "; frame-src 'self'; connect-src 'self'";
+    let csp = page.csp + "; frame-src 'self'";
 
     (
         [
