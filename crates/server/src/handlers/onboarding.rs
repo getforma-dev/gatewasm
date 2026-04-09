@@ -1003,6 +1003,7 @@ pub async fn update_my_tenant(
          onboarding_completed, onboarding_step, preferred_tab, \
          tenant_intent, branding_dark_mode, branding_button_text, \
          branding_bg_color, branding_card_color, branding_custom_css, \
+         COALESCE(signup_mode, 'open') AS signup_mode, \
          created_at, updated_at \
          FROM tenants WHERE id = $1",
     )
@@ -1041,6 +1042,7 @@ pub async fn update_my_tenant(
         "branding_bg_color": row.get::<Option<String>, _>("branding_bg_color"),
         "branding_card_color": row.get::<Option<String>, _>("branding_card_color"),
         "branding_custom_css": row.get::<Option<String>, _>("branding_custom_css"),
+        "signup_mode": row.get::<String, _>("signup_mode"),
         "created_at": row.get::<chrono::DateTime<Utc>, _>("created_at").to_rfc3339(),
         "updated_at": row.get::<chrono::DateTime<Utc>, _>("updated_at").to_rfc3339(),
     })))
