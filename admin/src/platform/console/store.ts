@@ -1,14 +1,15 @@
-import { createSignal, batch } from 'formajs';
-import { createAuth } from '../../core/hooks/createAuth';
-import { createApi } from '../../core/hooks/createApi';
-import { createToast } from '../../core/hooks/createToast';
-import { createSocket } from '../../core/hooks/createSocket';
-import type { IntrospectData } from '../../core/types';
+import { batch, createSignal } from "formajs";
+import { createApi } from "../../core/hooks/createApi";
+import { createAuth } from "../../core/hooks/createAuth";
+import { createSocket } from "../../core/hooks/createSocket";
+import { createToast } from "../../core/hooks/createToast";
+import type { IntrospectData } from "../../core/types";
 
 // ── Module-level singletons (shared across ConsoleApp island) ───────────
 
-export const serverUrl: string = (window as any).__FORMA_SERVER_URL__ || window.location.origin;
-const auth = createAuth({ serverUrl, tenant: 'platform' });
+export const serverUrl: string =
+  (window as any).__FORMA_SERVER_URL__ || window.location.origin;
+const auth = createAuth({ serverUrl, tenant: "platform" });
 const api = createApi(auth);
 export { api };
 export const toast = createToast();
@@ -40,9 +41,11 @@ export interface Tenant {
   allowed_providers?: string[];
   signup_mode?: string;
   management_api_key?: string;
-  access?: 'own' | 'team';
+  access?: "own" | "team";
   team_role?: string; // "admin" | "editor" | "viewer" — only for access === 'team'
   created_at: string;
+  branding_font_family?: string | null;
+  branding_text_color?: string | null;
 }
 
 export interface TenantStats {
@@ -69,7 +72,7 @@ export interface TenantStatsSeriesPoint {
 
 export interface TenantActivityItem {
   id: string;
-  kind: 'user_created' | 'login_succeeded' | 'login_failed' | 'session_started';
+  kind: "user_created" | "login_succeeded" | "login_failed" | "session_started";
   email: string;
   provider: string | null;
   description: string;
@@ -259,58 +262,76 @@ export interface MyPasskey {
 }
 
 export type ConsoleView =
-  | 'overview'
-  | 'integrate'
-  | 'security'
-  | 'members'
-  | 'hosted-page'
-  | 'organizations'
-  | 'roles'
-  | 'audit-log'
-  | 'sessions'
-  | 'passkeys'
-  | 'tokens'
-  | 'activity';
+  | "overview"
+  | "integrate"
+  | "security"
+  | "members"
+  | "hosted-page"
+  | "organizations"
+  | "roles"
+  | "audit-log"
+  | "sessions"
+  | "passkeys"
+  | "tokens"
+  | "activity";
 
 export type TenantWorkspaceView = ConsoleView;
-export type IntegrateSection = 'guide' | 'session-inspector' | 'webhooks';
-export type OverviewWindow = '24h' | '7d' | '30d';
+export type IntegrateSection = "guide" | "session-inspector" | "webhooks";
+export type OverviewWindow = "24h" | "7d" | "30d";
 
-export type Plane = 'operator' | 'organization' | 'enduser';
+export type Plane = "operator" | "organization" | "enduser";
 
-export type AppMode = 'account' | 'workspace';
-export type AccountTab = 'tenants' | 'team' | 'api-keys' | 'account-settings';
+export type AppMode = "account" | "workspace";
+export type AccountTab = "tenants" | "team" | "api-keys" | "account-settings";
 
 // ── URL hash helpers ───────────────────────────────────────────────────
 
-const VALID_ACCOUNT_TABS: readonly string[] = ['tenants', 'team', 'api-keys', 'account-settings'];
+const VALID_ACCOUNT_TABS: readonly string[] = [
+  "tenants",
+  "team",
+  "api-keys",
+  "account-settings",
+];
 const VALID_CONSOLE_VIEWS: readonly string[] = [
-  'overview', 'integrate', 'security', 'members', 'hosted-page',
-  'organizations', 'roles', 'audit-log', 'sessions', 'passkeys', 'tokens', 'activity',
+  "overview",
+  "integrate",
+  "security",
+  "members",
+  "hosted-page",
+  "organizations",
+  "roles",
+  "audit-log",
+  "sessions",
+  "passkeys",
+  "tokens",
+  "activity",
 ];
 
 function readHash(): string {
-  return window.location.hash.replace(/^#/, '');
+  return window.location.hash.replace(/^#/, "");
 }
 
 function writeHash(value: string): void {
-  const currentHash = window.location.hash.replace(/^#/, '');
+  const currentHash = window.location.hash.replace(/^#/, "");
   if (value === currentHash) return;
-  const url = window.location.pathname + window.location.search + (value ? '#' + value : '');
-  history.pushState(null, '', url);
+  const url =
+    window.location.pathname +
+    window.location.search +
+    (value ? "#" + value : "");
+  history.pushState(null, "", url);
 }
 
 export interface TenantAssignment {
   tenant_id: string;
   tenant_name: string;
-  role: 'admin' | 'editor' | 'viewer';
+  role: "admin" | "editor" | "viewer";
 }
 
 export interface PlatformMember {
   id: string;
   user_id: string;
   is_account_owner: boolean;
-  status: 'active' | 'suspended';
+  status: "active" | "suspended";
   invited_by_user_id: string | null;
   email: string;
   name: string | null;
@@ -319,7 +340,7 @@ export interface PlatformMember {
   tenant_assignments: TenantAssignment[];
 }
 
-export type PlatformRole = 'admin' | 'editor' | 'viewer';
+export type PlatformRole = "admin" | "editor" | "viewer";
 
 interface PlaneTab {
   id: string;
@@ -327,32 +348,47 @@ interface PlaneTab {
   shortcut: string;
 }
 
-export const PLANES: { key: Plane; label: string; sector: string; num: number; tabs: PlaneTab[] }[] = [
+export const PLANES: {
+  key: Plane;
+  label: string;
+  sector: string;
+  num: number;
+  tabs: PlaneTab[];
+}[] = [
   {
-    key: 'operator', label: 'Operator', sector: 'SEC-01', num: 1,
+    key: "operator",
+    label: "Operator",
+    sector: "SEC-01",
+    num: 1,
     tabs: [
-      { id: 'overview', label: 'Overview', shortcut: '\u2325\u0031' },
-      { id: 'integrate', label: 'Integrate', shortcut: '\u2325\u0032' },
-      { id: 'security', label: 'Security', shortcut: '\u2325\u0033' },
+      { id: "overview", label: "Overview", shortcut: "\u2325\u0031" },
+      { id: "integrate", label: "Integrate", shortcut: "\u2325\u0032" },
+      { id: "security", label: "Security", shortcut: "\u2325\u0033" },
     ],
   },
   {
-    key: 'organization', label: 'Organization', sector: 'SEC-02', num: 2,
+    key: "organization",
+    label: "Organization",
+    sector: "SEC-02",
+    num: 2,
     tabs: [
-      { id: 'members', label: 'Members', shortcut: '\u2325\u0031' },
-      { id: 'hosted-page', label: 'Hosted Page', shortcut: '\u2325\u0032' },
-      { id: 'organizations', label: 'Organizations', shortcut: '\u2325\u0033' },
-      { id: 'roles', label: 'Roles', shortcut: '\u2325\u0034' },
-      { id: 'audit-log', label: 'Audit Log', shortcut: '\u2325\u0035' },
+      { id: "members", label: "Members", shortcut: "\u2325\u0031" },
+      { id: "hosted-page", label: "Hosted Page", shortcut: "\u2325\u0032" },
+      { id: "organizations", label: "Organizations", shortcut: "\u2325\u0033" },
+      { id: "roles", label: "Roles", shortcut: "\u2325\u0034" },
+      { id: "audit-log", label: "Audit Log", shortcut: "\u2325\u0035" },
     ],
   },
   {
-    key: 'enduser', label: 'End User', sector: 'SEC-03', num: 3,
+    key: "enduser",
+    label: "End User",
+    sector: "SEC-03",
+    num: 3,
     tabs: [
-      { id: 'sessions', label: 'Sessions', shortcut: '\u2325\u0031' },
-      { id: 'passkeys', label: 'Passkeys', shortcut: '\u2325\u0032' },
-      { id: 'tokens', label: 'Tokens', shortcut: '\u2325\u0033' },
-      { id: 'activity', label: 'Activity', shortcut: '\u2325\u0034' },
+      { id: "sessions", label: "Sessions", shortcut: "\u2325\u0031" },
+      { id: "passkeys", label: "Passkeys", shortcut: "\u2325\u0032" },
+      { id: "tokens", label: "Tokens", shortcut: "\u2325\u0033" },
+      { id: "activity", label: "Activity", shortcut: "\u2325\u0034" },
     ],
   },
 ];
@@ -360,12 +396,15 @@ export const PLANES: { key: Plane; label: string; sector: string; num: number; t
 // ── State ───────────────────────────────────────────────────────────────
 
 export const [tenants, setTenants] = createSignal<Tenant[]>([]);
-export const [selectedTenant, setSelectedTenant] = createSignal<Tenant | null>(null);
-const [selectedTenantStats, setSelectedTenantStats] = createSignal<TenantStats | null>(null);
+export const [selectedTenant, setSelectedTenant] = createSignal<Tenant | null>(
+  null,
+);
+const [selectedTenantStats, setSelectedTenantStats] =
+  createSignal<TenantStats | null>(null);
 export { selectedTenantStats };
 const [loading, setLoading] = createSignal(false);
 export { loading };
-const [view, setView] = createSignal<ConsoleView>('overview');
+const [view, setView] = createSignal<ConsoleView>("overview");
 export { view };
 const [users, setUsers] = createSignal<TenantUser[]>([]);
 export { users };
@@ -373,14 +412,16 @@ const [usersLoading, setUsersLoading] = createSignal(false);
 export { usersLoading };
 const [hostedPage, setHostedPage] = createSignal<HostedPageData | null>(null);
 export { hostedPage };
-const [introspectData, setIntrospectData] = createSignal<IntrospectData | null>(null);
+const [introspectData, setIntrospectData] = createSignal<IntrospectData | null>(
+  null,
+);
 export { introspectData };
 const [introspectToken, setIntrospectToken] = createSignal<string | null>(null);
 export { introspectToken };
 const [introspectUnavailable, setIntrospectUnavailable] = createSignal(false);
 export { introspectUnavailable };
 const [userSessions, setUserSessions] = createSignal<UserSession[]>([]);
-export { userSessions, setUserSessions };
+export { setUserSessions, userSessions };
 const [userSessionsLoading, setUserSessionsLoading] = createSignal(false);
 export { userSessionsLoading };
 const [auditLog, setAuditLog] = createSignal<AuditLogEntry[]>([]);
@@ -401,15 +442,17 @@ const [rolesLoading, setRolesLoading] = createSignal(false);
 export { rolesLoading };
 const [jwks, setJwks] = createSignal<any>(null);
 export { jwks };
-const [integrateSection, setIntegrateSectionSignal] = createSignal<IntegrateSection>('guide');
+const [integrateSection, setIntegrateSectionSignal] =
+  createSignal<IntegrateSection>("guide");
 export { integrateSection };
-const [overviewWindow, setOverviewWindowSignal] = createSignal<OverviewWindow>('7d');
+const [overviewWindow, setOverviewWindowSignal] =
+  createSignal<OverviewWindow>("7d");
 export { overviewWindow };
 const [currentUser, setCurrentUser] = createSignal<PlatformUser | null>(null);
 export { currentUser };
-const [plane, setPlaneSignal] = createSignal<Plane>('operator');
+const [plane, setPlaneSignal] = createSignal<Plane>("operator");
 export { plane };
-const [mode, setMode] = createSignal<AppMode>('account');
+const [mode, setMode] = createSignal<AppMode>("account");
 export { mode };
 
 /**
@@ -420,21 +463,23 @@ export function startNewWorkspaceWizard(): void {
   batch(() => {
     setSelectedTenant(null);
     resetTenantScopedState();
-    setMode('workspace');
+    setMode("workspace");
   });
-  history.pushState(null, '', '/platform/console');
+  history.pushState(null, "", "/platform/console");
 }
-const [accountTab, _setAccountTab] = createSignal<AccountTab>('tenants');
+const [accountTab, _setAccountTab] = createSignal<AccountTab>("tenants");
 export { accountTab };
 export function setAccountTab(tab: AccountTab): void {
   _setAccountTab(tab);
-  if (mode() === 'account') writeHash(tab === 'tenants' ? '' : tab);
+  if (mode() === "account") writeHash(tab === "tenants" ? "" : tab);
 }
-const [securityConfig, setSecurityConfig] = createSignal<SecurityConfig | null>(null);
+const [securityConfig, setSecurityConfig] = createSignal<SecurityConfig | null>(
+  null,
+);
 export { securityConfig };
 const [securityConfigLoading, setSecurityConfigLoading] = createSignal(false);
 export { securityConfigLoading };
-const [tenantPlan, setTenantPlan] = createSignal<string>('trial');
+const [tenantPlan, setTenantPlan] = createSignal<string>("trial");
 export { tenantPlan };
 const [invites, setInvites] = createSignal<TenantInvite[]>([]);
 export { invites };
@@ -445,7 +490,7 @@ export { organizations };
 const [organizationsLoading, setOrganizationsLoading] = createSignal(false);
 export { organizationsLoading };
 const [userDetail, setUserDetail] = createSignal<UserDetail | null>(null);
-export { userDetail, setUserDetail };
+export { setUserDetail, userDetail };
 const [myPasskeys, setMyPasskeys] = createSignal<MyPasskey[]>([]);
 export { myPasskeys };
 const [webhooks, setWebhooks] = createSignal<Webhook[]>([]);
@@ -468,12 +513,18 @@ let introspectRequestSeq = 0;
 let sessionRequestSeq = 0;
 let stopOverviewRefresh: (() => void) | null = null;
 
-function withTransientTenantFields(nextTenant: Tenant, existingTenant?: Tenant | null): Tenant {
+function withTransientTenantFields(
+  nextTenant: Tenant,
+  existingTenant?: Tenant | null,
+): Tenant {
   if (nextTenant.management_api_key || !existingTenant?.management_api_key) {
     return nextTenant;
   }
 
-  return { ...nextTenant, management_api_key: existingTenant.management_api_key };
+  return {
+    ...nextTenant,
+    management_api_key: existingTenant.management_api_key,
+  };
 }
 
 function findKnownTenant(id: string): Tenant | null {
@@ -507,7 +558,7 @@ function resetTenantScopedState(): void {
     setJwks(null);
     setSecurityConfig(null);
     setSecurityConfigLoading(false);
-    setTenantPlan('trial');
+    setTenantPlan("trial");
     setInvites([]);
     setInvitesLoading(false);
     setOrganizations([]);
@@ -515,8 +566,8 @@ function resetTenantScopedState(): void {
     setUserDetail(null);
     setWebhooks([]);
     setWebhooksLoading(false);
-    setIntegrateSectionSignal('guide');
-    setOverviewWindowSignal('7d');
+    setIntegrateSectionSignal("guide");
+    setOverviewWindowSignal("7d");
   });
 }
 
@@ -524,7 +575,7 @@ function planeForView(v: ConsoleView): Plane {
   for (const p of PLANES) {
     if (p.tabs.some((t) => t.id === v)) return p.key;
   }
-  return 'operator';
+  return "operator";
 }
 
 export function setPlane(nextPlane: Plane): void {
@@ -542,31 +593,44 @@ export function setPlane(nextPlane: Plane): void {
 export async function loadTenants(): Promise<void> {
   setLoading(true);
   try {
-    const data = await api.get<{ tenants: Tenant[] }>('/platform/self-serve/tenants');
+    const data = await api.get<{ tenants: Tenant[] }>(
+      "/platform/self-serve/tenants",
+    );
     const nextTenants = (data.tenants || []).map((tenant) =>
       withTransientTenantFields(tenant, findKnownTenant(tenant.id)),
     );
     setTenants(nextTenants);
   } catch (e) {
-    toast.show(e instanceof Error ? e.message : 'Failed to load tenants', 'error');
+    toast.show(
+      e instanceof Error ? e.message : "Failed to load tenants",
+      "error",
+    );
   } finally {
     setLoading(false);
   }
 }
 
-export async function rotateTenantKey(tenantId: string): Promise<string | null> {
+export async function rotateTenantKey(
+  tenantId: string,
+): Promise<string | null> {
   try {
     const data = await api.post<{ api_key: string }>(
-      '/platform/self-serve/tenants/' + encodeURIComponent(tenantId) + '/rotate-key', {},
+      "/platform/self-serve/tenants/" +
+        encodeURIComponent(tenantId) +
+        "/rotate-key",
+      {},
     );
-    toast.show('API key rotated', 'success');
+    toast.show("API key rotated", "success");
     const updated = tenants().map((t) =>
       t.id === tenantId ? { ...t, management_api_key: data.api_key } : t,
     );
     setTenants(updated);
     return data.api_key;
   } catch (e) {
-    toast.show(e instanceof Error ? e.message : 'Failed to rotate key', 'error');
+    toast.show(
+      e instanceof Error ? e.message : "Failed to rotate key",
+      "error",
+    );
     return null;
   }
 }
@@ -582,7 +646,13 @@ export { pendingInvites };
 
 async function loadCurrentUser(): Promise<void> {
   try {
-    const data = await api.get<PlatformUser & { is_account_owner?: boolean; platform_role?: PlatformRole; pending_invites?: PendingInvite[] }>('/auth/me');
+    const data = await api.get<
+      PlatformUser & {
+        is_account_owner?: boolean;
+        platform_role?: PlatformRole;
+        pending_invites?: PendingInvite[];
+      }
+    >("/auth/me");
     setCurrentUser(data);
     setAccountOwner(data.is_account_owner ?? false);
     if (data.platform_role) {
@@ -594,35 +664,40 @@ async function loadCurrentUser(): Promise<void> {
   }
 }
 
-export async function acceptInviteFromDashboard(inviteId: string): Promise<boolean> {
+export async function acceptInviteFromDashboard(
+  inviteId: string,
+): Promise<boolean> {
   try {
     const token = auth.accessToken();
-    const res = await fetch(serverUrl + '/platform/admin/invites/accept', {
-      method: 'POST',
+    const res = await fetch(serverUrl + "/platform/admin/invites/accept", {
+      method: "POST",
       headers: {
-        'Content-Type': 'application/json',
-        ...(token ? { Authorization: 'Bearer ' + token } : {}),
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: "Bearer " + token } : {}),
       },
-      credentials: 'include',
+      credentials: "include",
       body: JSON.stringify({ invite_id: inviteId }),
     });
     if (res.ok) {
-      toast.show('Invite accepted!', 'success');
+      toast.show("Invite accepted!", "success");
       await Promise.all([loadTenants(), loadCurrentUser()]);
       return true;
     }
     const data = await res.json().catch(() => ({}));
-    toast.show(data.message || 'Failed to accept invite', 'error');
+    toast.show(data.message || "Failed to accept invite", "error");
     return false;
   } catch (e) {
-    toast.show(e instanceof Error ? e.message : 'Failed to accept invite', 'error');
+    toast.show(
+      e instanceof Error ? e.message : "Failed to accept invite",
+      "error",
+    );
     return false;
   }
 }
 
 export async function loadLoginHistory(): Promise<any[]> {
   try {
-    const data = await api.get<{ history: any[] }>('/auth/login-history');
+    const data = await api.get<{ history: any[] }>("/auth/login-history");
     return data.history || [];
   } catch {
     return [];
@@ -631,7 +706,7 @@ export async function loadLoginHistory(): Promise<any[]> {
 
 export async function loadMfaStatus(): Promise<any> {
   try {
-    return await api.get<any>('/auth/mfa/status');
+    return await api.get<any>("/auth/mfa/status");
   } catch {
     return null;
   }
@@ -639,43 +714,59 @@ export async function loadMfaStatus(): Promise<any> {
 
 export async function loadMyPasskeys(): Promise<void> {
   try {
-    const data = await api.get<{ credentials: MyPasskey[] }>('/auth/webauthn/credentials');
+    const data = await api.get<{ credentials: MyPasskey[] }>(
+      "/auth/webauthn/credentials",
+    );
     setMyPasskeys(data.credentials || []);
-  } catch { setMyPasskeys([]); }
+  } catch {
+    setMyPasskeys([]);
+  }
 }
 
 export async function renameMyPasskey(id: string, name: string): Promise<void> {
   try {
-    await api.request('/auth/webauthn/credentials/' + encodeURIComponent(id), {
-      method: 'PATCH',
+    await api.request("/auth/webauthn/credentials/" + encodeURIComponent(id), {
+      method: "PATCH",
       body: { name },
     });
-    toast.show('Passkey renamed', 'success');
+    toast.show("Passkey renamed", "success");
     await loadMyPasskeys();
   } catch (e) {
-    toast.show(e instanceof Error ? e.message : 'Failed to rename passkey', 'error');
+    toast.show(
+      e instanceof Error ? e.message : "Failed to rename passkey",
+      "error",
+    );
   }
 }
 
 export async function deleteMyPasskey(id: string): Promise<void> {
   try {
-    await api.del('/auth/webauthn/credentials/' + encodeURIComponent(id));
-    toast.show('Passkey deleted', 'success');
+    await api.del("/auth/webauthn/credentials/" + encodeURIComponent(id));
+    toast.show("Passkey deleted", "success");
     await loadMyPasskeys();
   } catch (e) {
-    toast.show(e instanceof Error ? e.message : 'Failed to delete passkey', 'error');
+    toast.show(
+      e instanceof Error ? e.message : "Failed to delete passkey",
+      "error",
+    );
   }
 }
 
-async function loadTenantDetail(id: string, statsWindow: OverviewWindow = overviewWindow()): Promise<void> {
+async function loadTenantDetail(
+  id: string,
+  statsWindow: OverviewWindow = overviewWindow(),
+): Promise<void> {
   if (!id) return;
   const requestSeq = ++tenantDetailRequestSeq;
   setLoading(true);
   try {
     const encodedId = encodeURIComponent(id);
     const [tenant, stats] = await Promise.all([
-      api.get<Tenant>('/platform/self-serve/tenants/' + encodedId),
-      api.get<TenantStats>('/platform/self-serve/tenants/' + encodedId + '/stats', { window: statsWindow }),
+      api.get<Tenant>("/platform/self-serve/tenants/" + encodedId),
+      api.get<TenantStats>(
+        "/platform/self-serve/tenants/" + encodedId + "/stats",
+        { window: statsWindow },
+      ),
     ]);
     if (requestSeq !== tenantDetailRequestSeq || selectedTenant()?.id !== id) {
       return;
@@ -688,21 +779,53 @@ async function loadTenantDetail(id: string, statsWindow: OverviewWindow = overvi
   } catch (e) {
     if (requestSeq === tenantDetailRequestSeq && selectedTenant()?.id === id) {
       setLoading(false);
-      toast.show(e instanceof Error ? e.message : 'Failed to load tenant', 'error');
+      toast.show(
+        e instanceof Error ? e.message : "Failed to load tenant",
+        "error",
+      );
     }
   }
 }
 
 export async function updateTenant(
   id: string,
-  fields: Partial<Pick<Tenant, 'name' | 'slug' | 'primary_color' | 'login_redirect_url' | 'onboarding_completed' | 'onboarding_step' | 'preferred_tab' | 'tenant_intent' | 'branding_dark_mode' | 'branding_button_text' | 'branding_app_name' | 'branding_logo_url' | 'branding_primary_color' | 'branding_bg_color' | 'branding_card_color' | 'branding_custom_css' | 'allowed_providers' | 'signup_mode'>>,
+  fields: Partial<
+    Pick<
+      Tenant,
+      | "name"
+      | "slug"
+      | "primary_color"
+      | "login_redirect_url"
+      | "onboarding_completed"
+      | "onboarding_step"
+      | "preferred_tab"
+      | "tenant_intent"
+      | "branding_dark_mode"
+      | "branding_button_text"
+      | "branding_app_name"
+      | "branding_logo_url"
+      | "branding_primary_color"
+      | "branding_bg_color"
+      | "branding_card_color"
+      | "branding_custom_css"
+      | "allowed_providers"
+      | "signup_mode"
+      | "branding_custom_css"
+      | "branding_font_family"
+      | "branding_text_color"
+      | "allowed_providers"
+    >
+  >,
 ): Promise<Tenant | null> {
   try {
     const updatedTenant = await api.patch<Tenant>(
-      '/platform/self-serve/tenants/' + encodeURIComponent(id),
+      "/platform/self-serve/tenants/" + encodeURIComponent(id),
       fields,
     );
-    const updated = withTransientTenantFields(updatedTenant, findKnownTenant(id));
+    const updated = withTransientTenantFields(
+      updatedTenant,
+      findKnownTenant(id),
+    );
     // Refresh selected tenant if it matches
     const current = selectedTenant();
     if (current && current.id === id) {
@@ -713,15 +836,21 @@ export async function updateTenant(
     setTenants(list.map((t) => (t.id === id ? { ...t, ...updated } : t)));
     return updated;
   } catch (e) {
-    toast.show(e instanceof Error ? e.message : 'Failed to update tenant', 'error');
+    toast.show(
+      e instanceof Error ? e.message : "Failed to update tenant",
+      "error",
+    );
     return null;
   }
 }
 
-export async function createTenant(fields: { name: string; slug: string }): Promise<Tenant | null> {
+export async function createTenant(fields: {
+  name: string;
+  slug: string;
+}): Promise<Tenant | null> {
   try {
     const data = await api.post<{ tenant: Tenant; api_key?: string }>(
-      '/platform/self-serve/tenants',
+      "/platform/self-serve/tenants",
       fields,
     );
     const created = withTransientTenantFields(
@@ -737,28 +866,30 @@ export async function createTenant(fields: { name: string; slug: string }): Prom
     if (!accountOwner()) {
       await loadCurrentUser();
     }
-    toast.show('Tenant created', 'success');
+    toast.show("Tenant created", "success");
     return created;
   } catch (e) {
-    toast.show(e instanceof Error ? e.message : 'Failed to create tenant', 'error');
+    toast.show(
+      e instanceof Error ? e.message : "Failed to create tenant",
+      "error",
+    );
     return null;
   }
 }
 
 export async function checkSlugAvailability(slug: string): Promise<boolean> {
   const data = await api.get<{ available: boolean }>(
-    '/platform/self-serve/check-slug/' + encodeURIComponent(slug),
+    "/platform/self-serve/check-slug/" + encodeURIComponent(slug),
   );
   return data.available;
 }
-
 
 export async function loadUsers(tenantId: string): Promise<void> {
   const requestSeq = ++usersRequestSeq;
   setUsersLoading(true);
   try {
     const data = await api.get<{ users: TenantUser[] }>(
-      '/platform/self-serve/tenants/' + encodeURIComponent(tenantId) + '/users',
+      "/platform/self-serve/tenants/" + encodeURIComponent(tenantId) + "/users",
     );
     if (requestSeq !== usersRequestSeq || selectedTenant()?.id !== tenantId) {
       return;
@@ -766,7 +897,10 @@ export async function loadUsers(tenantId: string): Promise<void> {
     setUsers(data.users || []);
   } catch (e) {
     if (requestSeq === usersRequestSeq && selectedTenant()?.id === tenantId) {
-      toast.show(e instanceof Error ? e.message : 'Failed to load users', 'error');
+      toast.show(
+        e instanceof Error ? e.message : "Failed to load users",
+        "error",
+      );
     }
   } finally {
     if (requestSeq === usersRequestSeq) {
@@ -779,76 +913,152 @@ export async function loadInvites(tenantId: string): Promise<void> {
   setInvitesLoading(true);
   try {
     const data = await api.get<{ invites: TenantInvite[] }>(
-      '/platform/self-serve/tenants/' + encodeURIComponent(tenantId) + '/invites',
+      "/platform/self-serve/tenants/" +
+        encodeURIComponent(tenantId) +
+        "/invites",
     );
     if (selectedTenant()?.id !== tenantId) return;
     setInvites(data.invites || []);
   } catch (e) {
-    toast.show(e instanceof Error ? e.message : 'Failed to load invites', 'error');
+    toast.show(
+      e instanceof Error ? e.message : "Failed to load invites",
+      "error",
+    );
   } finally {
     setInvitesLoading(false);
   }
 }
 
-export async function sendInvite(tenantId: string, email: string, role: string): Promise<boolean> {
+export async function sendInvite(
+  tenantId: string,
+  email: string,
+  role: string,
+): Promise<boolean> {
   try {
-    await api.post('/platform/self-serve/tenants/' + encodeURIComponent(tenantId) + '/invites', { email, role });
-    toast.show('Invite sent to ' + email, 'success');
+    await api.post(
+      "/platform/self-serve/tenants/" +
+        encodeURIComponent(tenantId) +
+        "/invites",
+      { email, role },
+    );
+    toast.show("Invite sent to " + email, "success");
     await loadInvites(tenantId);
     return true;
   } catch (e) {
-    toast.show(e instanceof Error ? e.message : 'Failed to send invite', 'error');
+    toast.show(
+      e instanceof Error ? e.message : "Failed to send invite",
+      "error",
+    );
     return false;
   }
 }
 
-export async function revokeInvite(tenantId: string, inviteId: string): Promise<void> {
+export async function revokeInvite(
+  tenantId: string,
+  inviteId: string,
+): Promise<void> {
   try {
-    await api.post('/platform/self-serve/tenants/' + encodeURIComponent(tenantId) + '/invites/' + encodeURIComponent(inviteId) + '/revoke', {});
-    toast.show('Invite revoked', 'success');
+    await api.post(
+      "/platform/self-serve/tenants/" +
+        encodeURIComponent(tenantId) +
+        "/invites/" +
+        encodeURIComponent(inviteId) +
+        "/revoke",
+      {},
+    );
+    toast.show("Invite revoked", "success");
     await loadInvites(tenantId);
   } catch (e) {
-    toast.show(e instanceof Error ? e.message : 'Failed to revoke invite', 'error');
+    toast.show(
+      e instanceof Error ? e.message : "Failed to revoke invite",
+      "error",
+    );
   }
 }
 
-export async function blockUser(tenantId: string, userId: string): Promise<void> {
+export async function blockUser(
+  tenantId: string,
+  userId: string,
+): Promise<void> {
   try {
-    await api.post('/platform/self-serve/tenants/' + encodeURIComponent(tenantId) + '/users/' + encodeURIComponent(userId) + '/block', {});
-    toast.show('User blocked', 'success');
+    await api.post(
+      "/platform/self-serve/tenants/" +
+        encodeURIComponent(tenantId) +
+        "/users/" +
+        encodeURIComponent(userId) +
+        "/block",
+      {},
+    );
+    toast.show("User blocked", "success");
     await loadUsers(tenantId);
   } catch (e) {
-    toast.show(e instanceof Error ? e.message : 'Failed to block user', 'error');
+    toast.show(
+      e instanceof Error ? e.message : "Failed to block user",
+      "error",
+    );
   }
 }
 
-export async function unblockUser(tenantId: string, userId: string): Promise<void> {
+export async function unblockUser(
+  tenantId: string,
+  userId: string,
+): Promise<void> {
   try {
-    await api.post('/platform/self-serve/tenants/' + encodeURIComponent(tenantId) + '/users/' + encodeURIComponent(userId) + '/unblock', {});
-    toast.show('User unblocked', 'success');
+    await api.post(
+      "/platform/self-serve/tenants/" +
+        encodeURIComponent(tenantId) +
+        "/users/" +
+        encodeURIComponent(userId) +
+        "/unblock",
+      {},
+    );
+    toast.show("User unblocked", "success");
     await loadUsers(tenantId);
   } catch (e) {
-    toast.show(e instanceof Error ? e.message : 'Failed to unblock user', 'error');
+    toast.show(
+      e instanceof Error ? e.message : "Failed to unblock user",
+      "error",
+    );
   }
 }
 
-export async function revokeUserSessions(tenantId: string, userId: string): Promise<void> {
+export async function revokeUserSessions(
+  tenantId: string,
+  userId: string,
+): Promise<void> {
   try {
-    await api.post('/platform/self-serve/tenants/' + encodeURIComponent(tenantId) + '/users/' + encodeURIComponent(userId) + '/revoke-sessions', {});
-    toast.show('Sessions revoked', 'success');
+    await api.post(
+      "/platform/self-serve/tenants/" +
+        encodeURIComponent(tenantId) +
+        "/users/" +
+        encodeURIComponent(userId) +
+        "/revoke-sessions",
+      {},
+    );
+    toast.show("Sessions revoked", "success");
     setUserSessions([]);
     await loadUsers(tenantId);
   } catch (e) {
-    toast.show(e instanceof Error ? e.message : 'Failed to revoke sessions', 'error');
+    toast.show(
+      e instanceof Error ? e.message : "Failed to revoke sessions",
+      "error",
+    );
   }
 }
 
-export async function loadUserSessions(tenantId: string, userId: string): Promise<void> {
+export async function loadUserSessions(
+  tenantId: string,
+  userId: string,
+): Promise<void> {
   const seq = ++sessionRequestSeq;
   setUserSessionsLoading(true);
   try {
     const data = await api.get<{ sessions: UserSession[] }>(
-      '/platform/self-serve/tenants/' + encodeURIComponent(tenantId) + '/users/' + encodeURIComponent(userId) + '/sessions',
+      "/platform/self-serve/tenants/" +
+        encodeURIComponent(tenantId) +
+        "/users/" +
+        encodeURIComponent(userId) +
+        "/sessions",
     );
     if (seq !== sessionRequestSeq || selectedTenant()?.id !== tenantId) {
       return;
@@ -856,7 +1066,10 @@ export async function loadUserSessions(tenantId: string, userId: string): Promis
     setUserSessions(data.sessions || []);
   } catch (e) {
     if (seq === sessionRequestSeq) {
-      toast.show(e instanceof Error ? e.message : 'Failed to load sessions', 'error');
+      toast.show(
+        e instanceof Error ? e.message : "Failed to load sessions",
+        "error",
+      );
     }
   } finally {
     if (seq === sessionRequestSeq) {
@@ -869,12 +1082,17 @@ export async function loadAuditLog(tenantId: string): Promise<void> {
   setAuditLogLoading(true);
   try {
     const data = await api.get<{ audit_log: AuditLogEntry[] }>(
-      '/platform/self-serve/tenants/' + encodeURIComponent(tenantId) + '/audit-log',
+      "/platform/self-serve/tenants/" +
+        encodeURIComponent(tenantId) +
+        "/audit-log",
     );
     if (selectedTenant()?.id !== tenantId) return;
     setAuditLog(data.audit_log || []);
   } catch (e) {
-    toast.show(e instanceof Error ? e.message : 'Failed to load audit log', 'error');
+    toast.show(
+      e instanceof Error ? e.message : "Failed to load audit log",
+      "error",
+    );
   } finally {
     setAuditLogLoading(false);
   }
@@ -884,12 +1102,17 @@ export async function loadAllSessions(tenantId: string): Promise<void> {
   setAllSessionsLoading(true);
   try {
     const data = await api.get<{ sessions: TenantSession[] }>(
-      '/platform/self-serve/tenants/' + encodeURIComponent(tenantId) + '/sessions',
+      "/platform/self-serve/tenants/" +
+        encodeURIComponent(tenantId) +
+        "/sessions",
     );
     if (selectedTenant()?.id !== tenantId) return;
     setAllSessions(data.sessions || []);
   } catch (e) {
-    toast.show(e instanceof Error ? e.message : 'Failed to load sessions', 'error');
+    toast.show(
+      e instanceof Error ? e.message : "Failed to load sessions",
+      "error",
+    );
   } finally {
     setAllSessionsLoading(false);
   }
@@ -899,12 +1122,17 @@ export async function loadPasskeys(tenantId: string): Promise<void> {
   setPasskeysLoading(true);
   try {
     const data = await api.get<{ passkeys: Passkey[] }>(
-      '/platform/self-serve/tenants/' + encodeURIComponent(tenantId) + '/passkeys',
+      "/platform/self-serve/tenants/" +
+        encodeURIComponent(tenantId) +
+        "/passkeys",
     );
     if (selectedTenant()?.id !== tenantId) return;
     setPasskeys(data.passkeys || []);
   } catch (e) {
-    toast.show(e instanceof Error ? e.message : 'Failed to load passkeys', 'error');
+    toast.show(
+      e instanceof Error ? e.message : "Failed to load passkeys",
+      "error",
+    );
   } finally {
     setPasskeysLoading(false);
   }
@@ -914,36 +1142,60 @@ export async function loadRoles(tenantId: string): Promise<void> {
   setRolesLoading(true);
   try {
     const data = await api.get<{ roles: Role[] }>(
-      '/platform/self-serve/tenants/' + encodeURIComponent(tenantId) + '/roles',
+      "/platform/self-serve/tenants/" + encodeURIComponent(tenantId) + "/roles",
     );
     if (selectedTenant()?.id !== tenantId) return;
     setRoles(data.roles || []);
   } catch (e) {
-    toast.show(e instanceof Error ? e.message : 'Failed to load roles', 'error');
+    toast.show(
+      e instanceof Error ? e.message : "Failed to load roles",
+      "error",
+    );
   } finally {
     setRolesLoading(false);
   }
 }
 
-export async function createRole(tenantId: string, name: string, description: string): Promise<boolean> {
+export async function createRole(
+  tenantId: string,
+  name: string,
+  description: string,
+): Promise<boolean> {
   try {
-    await api.post('/platform/self-serve/tenants/' + encodeURIComponent(tenantId) + '/roles', { name, description, permissions: [] });
-    toast.show('Role created', 'success');
+    await api.post(
+      "/platform/self-serve/tenants/" + encodeURIComponent(tenantId) + "/roles",
+      { name, description, permissions: [] },
+    );
+    toast.show("Role created", "success");
     await loadRoles(tenantId);
     return true;
   } catch (e) {
-    toast.show(e instanceof Error ? e.message : 'Failed to create role', 'error');
+    toast.show(
+      e instanceof Error ? e.message : "Failed to create role",
+      "error",
+    );
     return false;
   }
 }
 
-export async function deleteRole(tenantId: string, roleId: string): Promise<void> {
+export async function deleteRole(
+  tenantId: string,
+  roleId: string,
+): Promise<void> {
   try {
-    await api.del('/platform/self-serve/tenants/' + encodeURIComponent(tenantId) + '/roles/' + encodeURIComponent(roleId));
-    toast.show('Role deleted', 'success');
+    await api.del(
+      "/platform/self-serve/tenants/" +
+        encodeURIComponent(tenantId) +
+        "/roles/" +
+        encodeURIComponent(roleId),
+    );
+    toast.show("Role deleted", "success");
     await loadRoles(tenantId);
   } catch (e) {
-    toast.show(e instanceof Error ? e.message : 'Failed to delete role', 'error');
+    toast.show(
+      e instanceof Error ? e.message : "Failed to delete role",
+      "error",
+    );
   }
 }
 
@@ -951,43 +1203,78 @@ export async function loadOrganizations(tenantId: string): Promise<void> {
   setOrganizationsLoading(true);
   try {
     const data = await api.get<{ organizations: Organization[] }>(
-      '/platform/self-serve/tenants/' + encodeURIComponent(tenantId) + '/organizations',
+      "/platform/self-serve/tenants/" +
+        encodeURIComponent(tenantId) +
+        "/organizations",
     );
     if (selectedTenant()?.id !== tenantId) return;
     setOrganizations(data.organizations || []);
   } catch (e) {
-    toast.show(e instanceof Error ? e.message : 'Failed to load organizations', 'error');
+    toast.show(
+      e instanceof Error ? e.message : "Failed to load organizations",
+      "error",
+    );
   } finally {
     setOrganizationsLoading(false);
   }
 }
 
-export async function createOrganization(tenantId: string, name: string, slug: string): Promise<boolean> {
+export async function createOrganization(
+  tenantId: string,
+  name: string,
+  slug: string,
+): Promise<boolean> {
   try {
-    await api.post('/platform/self-serve/tenants/' + encodeURIComponent(tenantId) + '/organizations', { name, slug });
-    toast.show('Organization created', 'success');
+    await api.post(
+      "/platform/self-serve/tenants/" +
+        encodeURIComponent(tenantId) +
+        "/organizations",
+      { name, slug },
+    );
+    toast.show("Organization created", "success");
     await loadOrganizations(tenantId);
     return true;
   } catch (e) {
-    toast.show(e instanceof Error ? e.message : 'Failed to create organization', 'error');
+    toast.show(
+      e instanceof Error ? e.message : "Failed to create organization",
+      "error",
+    );
     return false;
   }
 }
 
-export async function deleteOrganization(tenantId: string, orgId: string): Promise<void> {
+export async function deleteOrganization(
+  tenantId: string,
+  orgId: string,
+): Promise<void> {
   try {
-    await api.del('/platform/self-serve/tenants/' + encodeURIComponent(tenantId) + '/organizations/' + encodeURIComponent(orgId));
-    toast.show('Organization deleted', 'success');
+    await api.del(
+      "/platform/self-serve/tenants/" +
+        encodeURIComponent(tenantId) +
+        "/organizations/" +
+        encodeURIComponent(orgId),
+    );
+    toast.show("Organization deleted", "success");
     await loadOrganizations(tenantId);
   } catch (e) {
-    toast.show(e instanceof Error ? e.message : 'Failed to delete organization', 'error');
+    toast.show(
+      e instanceof Error ? e.message : "Failed to delete organization",
+      "error",
+    );
   }
 }
 
-export async function loadOrgMembers(tenantId: string, orgId: string): Promise<OrgMember[]> {
+export async function loadOrgMembers(
+  tenantId: string,
+  orgId: string,
+): Promise<OrgMember[]> {
   try {
     const data = await api.get<{ members: OrgMember[] }>(
-      '/platform/self-serve/tenants/' + encodeURIComponent(tenantId) + '/organizations/' + encodeURIComponent(orgId) + '/members',
+      "/platform/self-serve/tenants/" +
+        encodeURIComponent(tenantId) +
+        "/organizations/" +
+        encodeURIComponent(orgId) +
+        "/members",
     );
     return data.members || [];
   } catch {
@@ -995,51 +1282,89 @@ export async function loadOrgMembers(tenantId: string, orgId: string): Promise<O
   }
 }
 
-export async function addOrgMember(tenantId: string, orgId: string, userId: string, role: string): Promise<boolean> {
+export async function addOrgMember(
+  tenantId: string,
+  orgId: string,
+  userId: string,
+  role: string,
+): Promise<boolean> {
   try {
     await api.post(
-      '/platform/self-serve/tenants/' + encodeURIComponent(tenantId) + '/organizations/' + encodeURIComponent(orgId) + '/members',
+      "/platform/self-serve/tenants/" +
+        encodeURIComponent(tenantId) +
+        "/organizations/" +
+        encodeURIComponent(orgId) +
+        "/members",
       { user_id: userId, role },
     );
-    toast.show('Member added', 'success');
+    toast.show("Member added", "success");
     return true;
   } catch (e) {
-    toast.show(e instanceof Error ? e.message : 'Failed to add member', 'error');
+    toast.show(
+      e instanceof Error ? e.message : "Failed to add member",
+      "error",
+    );
     return false;
   }
 }
 
-export async function removeOrgMember(tenantId: string, orgId: string, userId: string): Promise<void> {
+export async function removeOrgMember(
+  tenantId: string,
+  orgId: string,
+  userId: string,
+): Promise<void> {
   try {
     await api.del(
-      '/platform/self-serve/tenants/' + encodeURIComponent(tenantId) + '/organizations/' + encodeURIComponent(orgId) + '/members/' + encodeURIComponent(userId),
+      "/platform/self-serve/tenants/" +
+        encodeURIComponent(tenantId) +
+        "/organizations/" +
+        encodeURIComponent(orgId) +
+        "/members/" +
+        encodeURIComponent(userId),
     );
-    toast.show('Member removed', 'success');
+    toast.show("Member removed", "success");
   } catch (e) {
-    toast.show(e instanceof Error ? e.message : 'Failed to remove member', 'error');
+    toast.show(
+      e instanceof Error ? e.message : "Failed to remove member",
+      "error",
+    );
   }
 }
 
-export async function loadUserDetail(tenantId: string, userId: string): Promise<void> {
+export async function loadUserDetail(
+  tenantId: string,
+  userId: string,
+): Promise<void> {
   try {
     const data = await api.get<UserDetail>(
-      '/platform/self-serve/tenants/' + encodeURIComponent(tenantId) + '/users/' + encodeURIComponent(userId) + '/detail',
+      "/platform/self-serve/tenants/" +
+        encodeURIComponent(tenantId) +
+        "/users/" +
+        encodeURIComponent(userId) +
+        "/detail",
     );
     if (selectedTenant()?.id !== tenantId) return;
     setUserDetail(data);
-  } catch { setUserDetail(null); }
+  } catch {
+    setUserDetail(null);
+  }
 }
 
 export async function loadWebhooks(tenantId: string): Promise<void> {
   setWebhooksLoading(true);
   try {
     const data = await api.get<{ webhooks: Webhook[] }>(
-      '/platform/self-serve/tenants/' + encodeURIComponent(tenantId) + '/webhooks',
+      "/platform/self-serve/tenants/" +
+        encodeURIComponent(tenantId) +
+        "/webhooks",
     );
     if (selectedTenant()?.id !== tenantId) return;
     setWebhooks(data.webhooks || []);
   } catch (e) {
-    toast.show(e instanceof Error ? e.message : 'Failed to load webhooks', 'error');
+    toast.show(
+      e instanceof Error ? e.message : "Failed to load webhooks",
+      "error",
+    );
   } finally {
     setWebhooksLoading(false);
   }
@@ -1051,14 +1376,19 @@ export async function createWebhook(
 ): Promise<{ webhook: Webhook & { secret: string } } | null> {
   try {
     const data = await api.post<{ webhook: Webhook & { secret: string } }>(
-      '/platform/self-serve/tenants/' + encodeURIComponent(tenantId) + '/webhooks',
+      "/platform/self-serve/tenants/" +
+        encodeURIComponent(tenantId) +
+        "/webhooks",
       payload,
     );
-    toast.show('Webhook created', 'success');
+    toast.show("Webhook created", "success");
     await loadWebhooks(tenantId);
     return data;
   } catch (e) {
-    toast.show(e instanceof Error ? e.message : 'Failed to create webhook', 'error');
+    toast.show(
+      e instanceof Error ? e.message : "Failed to create webhook",
+      "error",
+    );
     return null;
   }
 }
@@ -1066,31 +1396,51 @@ export async function createWebhook(
 export async function updateWebhook(
   tenantId: string,
   webhookId: string,
-  patch: { url?: string; events?: string[]; active?: boolean; description?: string },
+  patch: {
+    url?: string;
+    events?: string[];
+    active?: boolean;
+    description?: string;
+  },
 ): Promise<boolean> {
   try {
     await api.request(
-      '/platform/self-serve/tenants/' + encodeURIComponent(tenantId) + '/webhooks/' + encodeURIComponent(webhookId),
-      { method: 'PATCH', body: patch },
+      "/platform/self-serve/tenants/" +
+        encodeURIComponent(tenantId) +
+        "/webhooks/" +
+        encodeURIComponent(webhookId),
+      { method: "PATCH", body: patch },
     );
-    toast.show('Webhook updated', 'success');
+    toast.show("Webhook updated", "success");
     await loadWebhooks(tenantId);
     return true;
   } catch (e) {
-    toast.show(e instanceof Error ? e.message : 'Failed to update webhook', 'error');
+    toast.show(
+      e instanceof Error ? e.message : "Failed to update webhook",
+      "error",
+    );
     return false;
   }
 }
 
-export async function deleteWebhook(tenantId: string, webhookId: string): Promise<void> {
+export async function deleteWebhook(
+  tenantId: string,
+  webhookId: string,
+): Promise<void> {
   try {
     await api.del(
-      '/platform/self-serve/tenants/' + encodeURIComponent(tenantId) + '/webhooks/' + encodeURIComponent(webhookId),
+      "/platform/self-serve/tenants/" +
+        encodeURIComponent(tenantId) +
+        "/webhooks/" +
+        encodeURIComponent(webhookId),
     );
-    toast.show('Webhook deleted', 'success');
+    toast.show("Webhook deleted", "success");
     await loadWebhooks(tenantId);
   } catch (e) {
-    toast.show(e instanceof Error ? e.message : 'Failed to delete webhook', 'error');
+    toast.show(
+      e instanceof Error ? e.message : "Failed to delete webhook",
+      "error",
+    );
   }
 }
 
@@ -1100,7 +1450,11 @@ export async function loadWebhookDeliveries(
 ): Promise<WebhookDelivery[]> {
   try {
     const data = await api.get<{ deliveries: WebhookDelivery[] }>(
-      '/platform/self-serve/tenants/' + encodeURIComponent(tenantId) + '/webhooks/' + encodeURIComponent(webhookId) + '/deliveries',
+      "/platform/self-serve/tenants/" +
+        encodeURIComponent(tenantId) +
+        "/webhooks/" +
+        encodeURIComponent(webhookId) +
+        "/deliveries",
     );
     return data.deliveries || [];
   } catch {
@@ -1111,53 +1465,86 @@ export async function loadWebhookDeliveries(
 export async function testWebhook(
   tenantId: string,
   webhookId: string,
-): Promise<{ delivery_id: string; status: string; response_status: number | null } | null> {
+): Promise<{
+  delivery_id: string;
+  status: string;
+  response_status: number | null;
+} | null> {
   try {
-    const data = await api.post<{ delivery_id: string; status: string; response_status: number | null }>(
-      '/platform/self-serve/tenants/' + encodeURIComponent(tenantId) + '/webhooks/' + encodeURIComponent(webhookId) + '/test',
+    const data = await api.post<{
+      delivery_id: string;
+      status: string;
+      response_status: number | null;
+    }>(
+      "/platform/self-serve/tenants/" +
+        encodeURIComponent(tenantId) +
+        "/webhooks/" +
+        encodeURIComponent(webhookId) +
+        "/test",
       {},
     );
-    toast.show(data.status === 'delivered' ? 'Test delivered' : 'Test failed', data.status === 'delivered' ? 'success' : 'error');
+    toast.show(
+      data.status === "delivered" ? "Test delivered" : "Test failed",
+      data.status === "delivered" ? "success" : "error",
+    );
     return data;
   } catch (e) {
-    toast.show(e instanceof Error ? e.message : 'Failed to send test', 'error');
+    toast.show(e instanceof Error ? e.message : "Failed to send test", "error");
     return null;
   }
 }
 
 export async function loadJwks(slug: string): Promise<void> {
   try {
-    const res = await fetch('/t/' + encodeURIComponent(slug) + '/auth/jwks');
+    const res = await fetch("/t/" + encodeURIComponent(slug) + "/auth/jwks");
     if (res.ok) setJwks(await res.json());
-  } catch { /* ignore */ }
+  } catch {
+    /* ignore */
+  }
 }
 
 async function loadHostedPage(tenantId: string): Promise<void> {
   const requestSeq = ++hostedPageRequestSeq;
   try {
     const data = await api.get<HostedPageData>(
-      '/platform/self-serve/tenants/' + encodeURIComponent(tenantId) + '/hosted-page',
+      "/platform/self-serve/tenants/" +
+        encodeURIComponent(tenantId) +
+        "/hosted-page",
     );
-    if (requestSeq !== hostedPageRequestSeq || selectedTenant()?.id !== tenantId) {
+    if (
+      requestSeq !== hostedPageRequestSeq ||
+      selectedTenant()?.id !== tenantId
+    ) {
       return;
     }
     setHostedPage(data);
   } catch (e) {
-    if (requestSeq === hostedPageRequestSeq && selectedTenant()?.id === tenantId) {
-      toast.show(e instanceof Error ? e.message : 'Failed to load hosted page', 'error');
+    if (
+      requestSeq === hostedPageRequestSeq &&
+      selectedTenant()?.id === tenantId
+    ) {
+      toast.show(
+        e instanceof Error ? e.message : "Failed to load hosted page",
+        "error",
+      );
     }
   }
 }
 
-export async function saveHostedPage(tenantId: string, data: Partial<HostedPageData>): Promise<boolean> {
+export async function saveHostedPage(
+  tenantId: string,
+  data: Partial<HostedPageData>,
+): Promise<boolean> {
   try {
     await api.put(
-      '/platform/self-serve/tenants/' + encodeURIComponent(tenantId) + '/hosted-page',
+      "/platform/self-serve/tenants/" +
+        encodeURIComponent(tenantId) +
+        "/hosted-page",
       data,
     );
-    toast.show('Page saved', 'success');
+    toast.show("Page saved", "success");
   } catch (e) {
-    toast.show(e instanceof Error ? e.message : 'Failed to save page', 'error');
+    toast.show(e instanceof Error ? e.message : "Failed to save page", "error");
     return false;
   }
 
@@ -1168,48 +1555,69 @@ export async function saveHostedPage(tenantId: string, data: Partial<HostedPageD
 export async function loadSecurityConfig(tenantId: string): Promise<void> {
   setSecurityConfigLoading(true);
   try {
-    const data = await api.get<{ security_config: SecurityConfig; plan: string }>(
-      '/platform/self-serve/tenants/' + encodeURIComponent(tenantId) + '/security-config',
+    const data = await api.get<{
+      security_config: SecurityConfig;
+      plan: string;
+    }>(
+      "/platform/self-serve/tenants/" +
+        encodeURIComponent(tenantId) +
+        "/security-config",
     );
     if (selectedTenant()?.id !== tenantId) return;
     setSecurityConfig(data.security_config);
     setTenantPlan(data.plan);
   } catch (e) {
-    toast.show(e instanceof Error ? e.message : 'Failed to load security config', 'error');
+    toast.show(
+      e instanceof Error ? e.message : "Failed to load security config",
+      "error",
+    );
   } finally {
     setSecurityConfigLoading(false);
   }
 }
 
-export async function saveSecurityConfig(tenantId: string, patch: Partial<SecurityConfig>): Promise<boolean> {
+export async function saveSecurityConfig(
+  tenantId: string,
+  patch: Partial<SecurityConfig>,
+): Promise<boolean> {
   try {
-    const data = await api.request<{ security_config: SecurityConfig; plan: string }>(
-      '/platform/self-serve/tenants/' + encodeURIComponent(tenantId) + '/security-config',
-      { method: 'PATCH', body: patch },
+    const data = await api.request<{
+      security_config: SecurityConfig;
+      plan: string;
+    }>(
+      "/platform/self-serve/tenants/" +
+        encodeURIComponent(tenantId) +
+        "/security-config",
+      { method: "PATCH", body: patch },
     );
     setSecurityConfig(data.security_config);
     setTenantPlan(data.plan);
-    toast.show('Security config updated', 'success');
+    toast.show("Security config updated", "success");
     return true;
   } catch (e) {
-    toast.show(e instanceof Error ? e.message : 'Failed to update security config', 'error');
+    toast.show(
+      e instanceof Error ? e.message : "Failed to update security config",
+      "error",
+    );
     return false;
   }
 }
-
 
 async function loadIntrospect(slug: string): Promise<void> {
   const requestSeq = ++introspectRequestSeq;
   try {
     // Plane 3 introspect: uses tenant's refresh cookie (same-origin, sent automatically)
-    const res = await fetch('/t/' + encodeURIComponent(slug) + '/auth/token', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      credentials: 'include',
-      body: JSON.stringify({ grant_type: 'refresh_token' }),
+    const res = await fetch("/t/" + encodeURIComponent(slug) + "/auth/token", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ grant_type: "refresh_token" }),
     });
     if (!res.ok) {
-      if (requestSeq === introspectRequestSeq && selectedTenant()?.slug === slug) {
+      if (
+        requestSeq === introspectRequestSeq &&
+        selectedTenant()?.slug === slug
+      ) {
         batch(() => {
           setIntrospectData(null);
           setIntrospectToken(null);
@@ -1221,7 +1629,10 @@ async function loadIntrospect(slug: string): Promise<void> {
     const tokenData = await res.json();
     const accessToken = tokenData.access_token;
     if (!accessToken) {
-      if (requestSeq === introspectRequestSeq && selectedTenant()?.slug === slug) {
+      if (
+        requestSeq === introspectRequestSeq &&
+        selectedTenant()?.slug === slug
+      ) {
         batch(() => {
           setIntrospectData(null);
           setIntrospectToken(null);
@@ -1231,12 +1642,18 @@ async function loadIntrospect(slug: string): Promise<void> {
       return;
     }
 
-    const introspectRes = await fetch('/t/' + encodeURIComponent(slug) + '/auth/introspect', {
-      headers: { 'Authorization': 'Bearer ' + accessToken },
-      credentials: 'include',
-    });
+    const introspectRes = await fetch(
+      "/t/" + encodeURIComponent(slug) + "/auth/introspect",
+      {
+        headers: { Authorization: "Bearer " + accessToken },
+        credentials: "include",
+      },
+    );
     if (!introspectRes.ok) {
-      if (requestSeq === introspectRequestSeq && selectedTenant()?.slug === slug) {
+      if (
+        requestSeq === introspectRequestSeq &&
+        selectedTenant()?.slug === slug
+      ) {
         batch(() => {
           setIntrospectData(null);
           setIntrospectToken(null);
@@ -1247,7 +1664,10 @@ async function loadIntrospect(slug: string): Promise<void> {
     }
 
     const data = await introspectRes.json();
-    if (requestSeq !== introspectRequestSeq || selectedTenant()?.slug !== slug) {
+    if (
+      requestSeq !== introspectRequestSeq ||
+      selectedTenant()?.slug !== slug
+    ) {
       return;
     }
     batch(() => {
@@ -1256,7 +1676,10 @@ async function loadIntrospect(slug: string): Promise<void> {
       setIntrospectUnavailable(false);
     });
   } catch {
-    if (requestSeq === introspectRequestSeq && selectedTenant()?.slug === slug) {
+    if (
+      requestSeq === introspectRequestSeq &&
+      selectedTenant()?.slug === slug
+    ) {
       batch(() => {
         setIntrospectData(null);
         setIntrospectToken(null);
@@ -1268,12 +1691,12 @@ async function loadIntrospect(slug: string): Promise<void> {
 
 function startVisibilityRefresh(slug: string): () => void {
   const handler = () => {
-    if (document.visibilityState === 'visible') {
+    if (document.visibilityState === "visible") {
       loadIntrospect(slug);
     }
   };
-  document.addEventListener('visibilitychange', handler);
-  return () => document.removeEventListener('visibilitychange', handler);
+  document.addEventListener("visibilitychange", handler);
+  return () => document.removeEventListener("visibilitychange", handler);
 }
 
 function clearOverviewRefresh(): void {
@@ -1290,41 +1713,44 @@ function syncIntrospectRefresh(slug: string): void {
 
 function preferredTenantView(tenant: Tenant): TenantWorkspaceView {
   const tab = tenant.preferred_tab;
-  if (tab === 'hosted-page') return 'hosted-page';
-  if (tab === 'integrate') return 'integrate';
-  return 'overview';
+  if (tab === "hosted-page") return "hosted-page";
+  if (tab === "integrate") return "integrate";
+  return "overview";
 }
 
-async function hydrateTenantView(nextView: TenantWorkspaceView, tenant: Tenant): Promise<void> {
+async function hydrateTenantView(
+  nextView: TenantWorkspaceView,
+  tenant: Tenant,
+): Promise<void> {
   const tasks: Promise<void>[] = [];
 
   // Only load tenant detail for overview (stats dashboard) — not every tab switch
-  if (nextView === 'overview') {
+  if (nextView === "overview") {
     tasks.push(loadTenantDetail(tenant.id, overviewWindow()));
   }
 
-  if (nextView === 'integrate') {
+  if (nextView === "integrate") {
     tasks.push(loadIntrospect(tenant.slug));
     tasks.push(loadWebhooks(tenant.id));
     syncIntrospectRefresh(tenant.slug);
-  } else if (nextView === 'members') {
+  } else if (nextView === "members") {
     tasks.push(loadUsers(tenant.id));
     tasks.push(loadInvites(tenant.id));
-  } else if (nextView === 'security') {
+  } else if (nextView === "security") {
     tasks.push(loadSecurityConfig(tenant.id));
-  } else if (nextView === 'hosted-page') {
+  } else if (nextView === "hosted-page") {
     tasks.push(loadHostedPage(tenant.id));
-  } else if (nextView === 'audit-log' || nextView === 'activity') {
+  } else if (nextView === "audit-log" || nextView === "activity") {
     tasks.push(loadAuditLog(tenant.id));
-  } else if (nextView === 'sessions') {
+  } else if (nextView === "sessions") {
     tasks.push(loadAllSessions(tenant.id));
-  } else if (nextView === 'passkeys') {
+  } else if (nextView === "passkeys") {
     tasks.push(loadPasskeys(tenant.id));
-  } else if (nextView === 'organizations') {
+  } else if (nextView === "organizations") {
     tasks.push(loadOrganizations(tenant.id));
-  } else if (nextView === 'roles') {
+  } else if (nextView === "roles") {
     tasks.push(loadRoles(tenant.id));
-  } else if (nextView === 'tokens') {
+  } else if (nextView === "tokens") {
     tasks.push(loadJwks(tenant.slug));
   }
 
@@ -1350,7 +1776,7 @@ export function changeOverviewWindow(nextWindow: OverviewWindow): void {
   setOverviewWindowSignal(nextWindow);
 
   const tenant = selectedTenant();
-  if (!tenant || view() !== 'overview') {
+  if (!tenant || view() !== "overview") {
     return;
   }
 
@@ -1358,25 +1784,24 @@ export function changeOverviewWindow(nextWindow: OverviewWindow): void {
 }
 
 export function openIntegrateGuide(): void {
-  setIntegrateSectionSignal('guide');
+  setIntegrateSectionSignal("guide");
 
-  navigateTenantView('integrate');
+  navigateTenantView("integrate");
 }
 
 export function openSessionInspector(): void {
   const tenant = selectedTenant();
 
-  setIntegrateSectionSignal('session-inspector');
-
+  setIntegrateSectionSignal("session-inspector");
 
   if (!tenant) return;
 
-  if (view() === 'integrate') {
-    void hydrateTenantView('integrate', tenant);
+  if (view() === "integrate") {
+    void hydrateTenantView("integrate", tenant);
     return;
   }
 
-  navigateTenantView('integrate');
+  navigateTenantView("integrate");
 }
 
 export function setIntegrateSection(nextSection: IntegrateSection): void {
@@ -1386,15 +1811,14 @@ export function setIntegrateSection(nextSection: IntegrateSection): void {
 
   setIntegrateSectionSignal(nextSection);
 
-
   const tenant = selectedTenant();
-  if (!tenant || view() !== 'integrate') {
+  if (!tenant || view() !== "integrate") {
     return;
   }
 
-  if (nextSection === 'session-inspector') {
-    void hydrateTenantView('integrate', tenant);
-  } else if (nextSection === 'webhooks') {
+  if (nextSection === "session-inspector") {
+    void hydrateTenantView("integrate", tenant);
+  } else if (nextSection === "webhooks") {
     void loadWebhooks(tenant.id);
   }
 }
@@ -1403,7 +1827,7 @@ export async function refreshCurrentView(): Promise<void> {
   const currentView = view();
   const tenant = selectedTenant();
 
-  if (mode() === 'account' || !tenant) {
+  if (mode() === "account" || !tenant) {
     await Promise.all([loadTenants(), loadCurrentUser()]);
     return;
   }
@@ -1418,14 +1842,17 @@ export async function refreshCurrentView(): Promise<void> {
 // ── Navigation ──────────────────────────────────────────────────────────
 
 // Internal: switch to workspace mode without pushing history
-function switchToWorkspaceInternal(tenant: Tenant, hashView?: ConsoleView): void {
+function switchToWorkspaceInternal(
+  tenant: Tenant,
+  hashView?: ConsoleView,
+): void {
   const nextView = hashView ?? preferredTenantView(tenant);
   batch(() => {
     setSelectedTenant(tenant);
     resetTenantScopedState();
     setView(nextView);
     setPlaneSignal(planeForView(nextView));
-    setMode('workspace');
+    setMode("workspace");
   });
   void hydrateTenantView(nextView, tenant);
 }
@@ -1433,7 +1860,7 @@ function switchToWorkspaceInternal(tenant: Tenant, hashView?: ConsoleView): void
 // Internal: switch to account mode without pushing history
 function switchToAccountInternal(hashTab?: AccountTab): void {
   clearOverviewRefresh();
-  const nextTab = hashTab ?? 'tenants';
+  const nextTab = hashTab ?? "tenants";
   batch(() => {
     tenantDetailRequestSeq += 1;
     usersRequestSeq += 1;
@@ -1443,7 +1870,7 @@ function switchToAccountInternal(hashTab?: AccountTab): void {
     setLoading(false);
     setSelectedTenant(null);
     resetTenantScopedState();
-    setMode('account');
+    setMode("account");
     _setAccountTab(nextTab);
   });
 }
@@ -1451,7 +1878,11 @@ function switchToAccountInternal(hashTab?: AccountTab): void {
 export function selectTenant(tenant: Tenant): void {
   switchToWorkspaceInternal(tenant);
   const v = view();
-  history.pushState({ slug: tenant.slug }, '', '/platform/console/' + tenant.slug + '#' + v);
+  history.pushState(
+    { slug: tenant.slug },
+    "",
+    "/platform/console/" + tenant.slug + "#" + v,
+  );
 }
 
 /**
@@ -1466,23 +1897,29 @@ export function completeOnboarding(tenant: Tenant): void {
     setView(nextView);
     setPlaneSignal(planeForView(nextView));
   });
-  history.pushState({ slug: tenant.slug }, '', '/platform/console/' + tenant.slug + '#' + nextView);
+  history.pushState(
+    { slug: tenant.slug },
+    "",
+    "/platform/console/" + tenant.slug + "#" + nextView,
+  );
   void hydrateTenantView(nextView, tenant);
 }
 
 export function backToTenants(tab?: AccountTab): void {
   switchToAccountInternal(tab);
-  const hashSuffix = tab && tab !== 'tenants' ? '#' + tab : '';
-  history.pushState(null, '', '/platform/console' + hashSuffix);
+  const hashSuffix = tab && tab !== "tenants" ? "#" + tab : "";
+  history.pushState(null, "", "/platform/console" + hashSuffix);
 }
 
 export function initRouting(): void {
   // Guard: popstate fires before hashchange on back/forward — prevent double handling
   let popstateHandled = false;
 
-  window.addEventListener('popstate', () => {
+  window.addEventListener("popstate", () => {
     popstateHandled = true;
-    queueMicrotask(() => { popstateHandled = false; });
+    queueMicrotask(() => {
+      popstateHandled = false;
+    });
 
     const path = window.location.pathname;
     const hash = readHash();
@@ -1493,15 +1930,15 @@ export function initRouting(): void {
       const tenant = tenants().find((t) => t.slug === slug);
       if (!tenant) {
         switchToAccountInternal();
-        history.replaceState(null, '', '/platform/console');
+        history.replaceState(null, "", "/platform/console");
         return;
       }
 
       // Same tenant, hash-only change — update view without full state reset
-      if (mode() === 'workspace' && selectedTenant()?.slug === slug) {
+      if (mode() === "workspace" && selectedTenant()?.slug === slug) {
         const nextView = VALID_CONSOLE_VIEWS.includes(hash)
           ? (hash as ConsoleView)
-          : 'overview';
+          : "overview";
         setView(nextView);
         setPlaneSignal(planeForView(nextView));
         void hydrateTenantView(nextView, tenant);
@@ -1509,21 +1946,25 @@ export function initRouting(): void {
       }
 
       // Different tenant or mode switch — full reset
-      const hashView = VALID_CONSOLE_VIEWS.includes(hash) ? (hash as ConsoleView) : undefined;
+      const hashView = VALID_CONSOLE_VIEWS.includes(hash)
+        ? (hash as ConsoleView)
+        : undefined;
       switchToWorkspaceInternal(tenant, hashView);
     } else {
-      const hashTab = VALID_ACCOUNT_TABS.includes(hash) ? (hash as AccountTab) : undefined;
+      const hashTab = VALID_ACCOUNT_TABS.includes(hash)
+        ? (hash as AccountTab)
+        : undefined;
       switchToAccountInternal(hashTab);
     }
   });
 
   // Handle manual URL editing in address bar (skipped when popstate already handled it)
-  window.addEventListener('hashchange', () => {
+  window.addEventListener("hashchange", () => {
     if (popstateHandled) return;
     const h = readHash();
-    if (mode() === 'account' && VALID_ACCOUNT_TABS.includes(h)) {
+    if (mode() === "account" && VALID_ACCOUNT_TABS.includes(h)) {
       _setAccountTab(h as AccountTab);
-    } else if (mode() === 'workspace' && VALID_CONSOLE_VIEWS.includes(h)) {
+    } else if (mode() === "workspace" && VALID_CONSOLE_VIEWS.includes(h)) {
       const tenant = selectedTenant();
       if (tenant) {
         setView(h as ConsoleView);
@@ -1536,30 +1977,30 @@ export function initRouting(): void {
 
 // ── WebSocket invalidation subscriptions ────────────────────────────────
 
-socket.subscribe('team:changed', () => {
+socket.subscribe("team:changed", () => {
   loadTeamMembers();
   loadTeamInvites();
 });
 
-socket.subscribe('metrics:updated', () => {
+socket.subscribe("metrics:updated", () => {
   const t = selectedTenant();
-  if (t && view() === 'overview') {
+  if (t && view() === "overview") {
     loadTenantDetail(t.id);
   }
 });
 
-socket.subscribe('tenant:activity', () => {
+socket.subscribe("tenant:activity", () => {
   const t = selectedTenant();
   if (!t) return;
-  if (view() === 'audit-log') {
+  if (view() === "audit-log") {
     loadAuditLog(t.id);
   }
-  if (view() === 'sessions') {
+  if (view() === "sessions") {
     loadAllSessions(t.id);
   }
 });
 
-socket.subscribe('account:updated', () => {
+socket.subscribe("account:updated", () => {
   loadCurrentUser();
 });
 
@@ -1573,61 +2014,68 @@ export async function init(): Promise<void> {
     // Handle query params (invite acceptance, verified toast)
     const initParams = new URLSearchParams(window.location.search);
 
-    const inviteParam = initParams.get('owner_invite');
+    const inviteParam = initParams.get("owner_invite");
     if (inviteParam) {
       try {
         // Use direct fetch (not api.post) because the accept endpoint is NOT
         // tenant-scoped — it lives at /platform/admin/invites/accept, not under /t/{slug}/
         const token = auth.accessToken();
-        const res = await fetch(serverUrl + '/platform/admin/invites/accept', {
-          method: 'POST',
+        const res = await fetch(serverUrl + "/platform/admin/invites/accept", {
+          method: "POST",
           headers: {
-            'Content-Type': 'application/json',
-            ...(token ? { Authorization: 'Bearer ' + token } : {}),
+            "Content-Type": "application/json",
+            ...(token ? { Authorization: "Bearer " + token } : {}),
           },
-          credentials: 'include',
+          credentials: "include",
           body: JSON.stringify({ token: inviteParam }),
         });
         if (res.ok) {
-          toast.show('Invite accepted! Welcome to the team.', 'success');
+          toast.show("Invite accepted! Welcome to the team.", "success");
         } else {
           const data = await res.json().catch(() => ({}));
-          toast.show(data.message || 'Failed to accept invite', 'error');
+          toast.show(data.message || "Failed to accept invite", "error");
         }
       } catch (e) {
-        const msg = e instanceof Error ? e.message : 'Failed to accept invite';
-        toast.show(msg, 'error');
+        const msg = e instanceof Error ? e.message : "Failed to accept invite";
+        toast.show(msg, "error");
       }
-      initParams.delete('owner_invite');
+      initParams.delete("owner_invite");
       await Promise.all([loadTenants(), loadCurrentUser()]);
     }
 
-    if (initParams.get('verified') === 'true') {
-      toast.show('Email verified successfully', 'success');
-      initParams.delete('verified');
+    if (initParams.get("verified") === "true") {
+      toast.show("Email verified successfully", "success");
+      initParams.delete("verified");
     }
 
     // Clean query params if any were consumed
-    if (inviteParam || initParams.get('verified') === null) {
-      const cleanPath = window.location.pathname + (initParams.toString() ? '?' + initParams.toString() : '') + window.location.hash;
-      history.replaceState(null, '', cleanPath);
+    if (inviteParam || initParams.get("verified") === null) {
+      const cleanPath =
+        window.location.pathname +
+        (initParams.toString() ? "?" + initParams.toString() : "") +
+        window.location.hash;
+      history.replaceState(null, "", cleanPath);
     }
 
     // URL determines mode — no localStorage override
-    const urlMatch = window.location.pathname.match(/^\/platform\/console\/([^/]+)/);
+    const urlMatch = window.location.pathname.match(
+      /^\/platform\/console\/([^/]+)/,
+    );
     if (urlMatch) {
       const slug = urlMatch[1];
       const tenant = tenants().find((t) => t.slug === slug);
       if (tenant) {
         const initHash = readHash();
-        const initView = VALID_CONSOLE_VIEWS.includes(initHash) ? (initHash as ConsoleView) : undefined;
+        const initView = VALID_CONSOLE_VIEWS.includes(initHash)
+          ? (initHash as ConsoleView)
+          : undefined;
         switchToWorkspaceInternal(tenant, initView);
         auth.startAutoRefresh();
-        socket.connect(serverUrl + '/ws/ticket');
+        socket.connect(serverUrl + "/ws/ticket");
         return;
       }
       // Slug not found — clean up the URL, stay in account mode
-      history.replaceState(null, '', '/platform/console');
+      history.replaceState(null, "", "/platform/console");
     }
 
     // /platform/console (no slug) = account mode, always
@@ -1638,10 +2086,10 @@ export async function init(): Promise<void> {
     }
 
     auth.startAutoRefresh();
-    socket.connect(serverUrl + '/ws/ticket');
+    socket.connect(serverUrl + "/ws/ticket");
   } catch {
-    window.location.href = '/platform/login';
-    throw new Error('auth_redirect');
+    window.location.href = "/platform/login";
+    throw new Error("auth_redirect");
   }
 }
 
@@ -1651,7 +2099,7 @@ export async function signout(): Promise<void> {
   auth.stopAutoRefresh();
   setCurrentUser(null);
   await auth.logout();
-  window.location.href = '/platform/login';
+  window.location.href = "/platform/login";
 }
 
 // ── Team API Functions ──────────────────────────────────────────────────
@@ -1659,7 +2107,9 @@ export async function signout(): Promise<void> {
 export async function loadTeamMembers(): Promise<void> {
   setTeamLoading(true);
   try {
-    const data = await api.get<{ members: PlatformMember[] }>('/platform/admin/team');
+    const data = await api.get<{ members: PlatformMember[] }>(
+      "/platform/admin/team",
+    );
     setTeamMembers(data.members);
   } catch {
     setTeamMembers([]);
@@ -1668,9 +2118,13 @@ export async function loadTeamMembers(): Promise<void> {
   }
 }
 
-export async function loadTeamMemberDetail(memberId: string): Promise<PlatformMember | null> {
+export async function loadTeamMemberDetail(
+  memberId: string,
+): Promise<PlatformMember | null> {
   try {
-    const data = await api.get<{ member: PlatformMember }>('/platform/admin/team/' + encodeURIComponent(memberId));
+    const data = await api.get<{ member: PlatformMember }>(
+      "/platform/admin/team/" + encodeURIComponent(memberId),
+    );
     return data.member;
   } catch {
     return null;
@@ -1679,47 +2133,68 @@ export async function loadTeamMemberDetail(memberId: string): Promise<PlatformMe
 
 export async function updateTeamMember(
   memberId: string,
-  fields: { status?: string; tenant_assignments?: { tenant_id: string; role: string }[] },
+  fields: {
+    status?: string;
+    tenant_assignments?: { tenant_id: string; role: string }[];
+  },
 ): Promise<boolean> {
   try {
-    await api.request('/platform/admin/team/' + encodeURIComponent(memberId), { method: 'PATCH', body: fields });
-    toast.show('Member updated', 'success');
+    await api.request("/platform/admin/team/" + encodeURIComponent(memberId), {
+      method: "PATCH",
+      body: fields,
+    });
+    toast.show("Member updated", "success");
     await loadTeamMembers();
     return true;
   } catch (e) {
-    toast.show(e instanceof Error ? e.message : 'Failed to update member', 'error');
+    toast.show(
+      e instanceof Error ? e.message : "Failed to update member",
+      "error",
+    );
     return false;
   }
 }
 
 export async function removeTeamMember(memberId: string): Promise<boolean> {
   try {
-    await api.del('/platform/admin/team/' + encodeURIComponent(memberId));
-    toast.show('Member removed', 'success');
+    await api.del("/platform/admin/team/" + encodeURIComponent(memberId));
+    toast.show("Member removed", "success");
     await loadTeamMembers();
     return true;
   } catch (e) {
-    toast.show(e instanceof Error ? e.message : 'Failed to remove member', 'error');
+    toast.show(
+      e instanceof Error ? e.message : "Failed to remove member",
+      "error",
+    );
     return false;
   }
 }
 
 const RESEND_COOLDOWN_SEC = 60;
 const MAX_RESEND_ATTEMPTS = 5;
-const RESEND_STORAGE_KEY = 'forma:resend-verification';
+const RESEND_STORAGE_KEY = "forma:resend-verification";
 
-interface ResendStorage { sentAt: number; attempts: number; }
+interface ResendStorage {
+  sentAt: number;
+  attempts: number;
+}
 
 function loadResendState(): ResendStorage {
   try {
     const raw = sessionStorage.getItem(RESEND_STORAGE_KEY);
     if (raw) return JSON.parse(raw);
-  } catch { /* ignore */ }
+  } catch {
+    /* ignore */
+  }
   return { sentAt: 0, attempts: 0 };
 }
 
 function saveResendState(state: ResendStorage): void {
-  try { sessionStorage.setItem(RESEND_STORAGE_KEY, JSON.stringify(state)); } catch { /* ignore */ }
+  try {
+    sessionStorage.setItem(RESEND_STORAGE_KEY, JSON.stringify(state));
+  } catch {
+    /* ignore */
+  }
 }
 
 const [resendCooldown, setResendCooldown] = createSignal(0);
@@ -1762,56 +2237,85 @@ export async function resendVerification(): Promise<boolean> {
   if (resendCooldown() !== 0 || resendMaxed()) return false;
   setResendCooldown(-1); // -1 = sending in progress
   try {
-    await api.post('/auth/resend-verification', {});
+    await api.post("/auth/resend-verification", {});
     const nextAttempts = resendAttempts() + 1;
     setResendAttempts(nextAttempts);
     saveResendState({ sentAt: Date.now(), attempts: nextAttempts });
     if (nextAttempts >= MAX_RESEND_ATTEMPTS) {
       setResendCooldown(0);
-      toast.show('Verification email sent — you\u2019ve reached the maximum resend limit', 'success');
+      toast.show(
+        "Verification email sent — you\u2019ve reached the maximum resend limit",
+        "success",
+      );
     } else {
       setResendCooldown(RESEND_COOLDOWN_SEC);
       startCooldownTimer();
-      toast.show('Verification email sent — check your inbox or spam folder', 'success');
+      toast.show(
+        "Verification email sent — check your inbox or spam folder",
+        "success",
+      );
     }
     return true;
   } catch (e) {
     setResendCooldown(0);
-    toast.show(e instanceof Error ? e.message : 'Failed to send verification email', 'error');
+    toast.show(
+      e instanceof Error ? e.message : "Failed to send verification email",
+      "error",
+    );
     return false;
   }
 }
 
-export async function sendTeamInvite(email: string, role: string, tenantIds: string[]): Promise<{ invite_url: string } | null> {
+export async function sendTeamInvite(
+  email: string,
+  role: string,
+  tenantIds: string[],
+): Promise<{ invite_url: string } | null> {
   try {
-    const data = await api.post<{ invite_url: string }>('/platform/admin/team/invites', {
-      email,
-      role,
-      tenant_ids: tenantIds,
-    });
-    toast.show('Invite sent to ' + email, 'success');
+    const data = await api.post<{ invite_url: string }>(
+      "/platform/admin/team/invites",
+      {
+        email,
+        role,
+        tenant_ids: tenantIds,
+      },
+    );
+    toast.show("Invite sent to " + email, "success");
     await loadTeamMembers();
     return data;
   } catch (e) {
-    toast.show(e instanceof Error ? e.message : 'Failed to send invite', 'error');
+    toast.show(
+      e instanceof Error ? e.message : "Failed to send invite",
+      "error",
+    );
     return null;
   }
 }
 
 export async function revokeTeamInvite(inviteId: string): Promise<boolean> {
   try {
-    await api.post('/platform/admin/team/invites/' + encodeURIComponent(inviteId) + '/revoke', {});
-    toast.show('Invite revoked', 'success');
+    await api.post(
+      "/platform/admin/team/invites/" +
+        encodeURIComponent(inviteId) +
+        "/revoke",
+      {},
+    );
+    toast.show("Invite revoked", "success");
     return true;
   } catch (e) {
-    toast.show(e instanceof Error ? e.message : 'Failed to revoke invite', 'error');
+    toast.show(
+      e instanceof Error ? e.message : "Failed to revoke invite",
+      "error",
+    );
     return false;
   }
 }
 
 export async function loadTeamInvites(): Promise<any[]> {
   try {
-    const data = await api.get<{ invites: any[] }>('/platform/admin/team/invites');
+    const data = await api.get<{ invites: any[] }>(
+      "/platform/admin/team/invites",
+    );
     return data.invites;
   } catch {
     return [];
@@ -1823,7 +2327,7 @@ export function canEdit(): boolean {
   const role = platformRole();
   // Only viewers are explicitly read-only. New users (no role yet) and
   // admin/editor can edit — new users need to create their first workspace.
-  if (role === 'viewer') return false;
+  if (role === "viewer") return false;
   return true;
 }
 
