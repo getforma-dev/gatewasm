@@ -3770,7 +3770,8 @@
 }
 
 .wizard-access-segmented-option {
-  flex: 1;
+  flex: 1 1 0;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   gap: 4px;
@@ -3782,7 +3783,7 @@
   font: inherit;
   text-align: left;
   cursor: pointer;
-  transition: border-color 0.15s, background 0.15s;
+  transition: border-color 0.15s, background 0.15s, box-shadow 0.15s;
 }
 
 .wizard-access-segmented-option:hover {
@@ -3792,6 +3793,7 @@
 .wizard-access-segmented-option.active {
   border-color: var(--accent);
   background: var(--surface-raised);
+  box-shadow: 0 0 0 1px var(--accent);
 }
 
 .wizard-access-segmented-option-label {
@@ -3802,6 +3804,28 @@
 .wizard-access-segmented-option-subtitle {
   font-size: 0.75rem;
   color: var(--text-muted);
+  white-space: normal;
+  overflow-wrap: anywhere;
+  line-height: 1.35;
+}
+
+.wizard-invite-only-note {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 14px;
+  margin-bottom: 20px;
+  line-height: 1.45;
+}
+
+/* Reactive visibility helper used by wizard sections that hide based on
+   signup_mode (e.g. Credentials/Social/Pro hidden when invite_only,
+   the invite_only note hidden when open). Class is toggled via the
+   reactive class: () => ... binding in StepAuthMethods. */
+.wizard-pane-left .is-hidden {
+  display: none;
 }
 
 /* Mode selection (Step 3) */

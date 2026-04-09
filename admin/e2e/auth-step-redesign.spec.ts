@@ -30,17 +30,32 @@ test.describe('Auth step redesign', () => {
     tenantId = created.id || created.tenant?.id;
     if (!tenantId) throw new Error('No tenant id from create');
 
-    // 3. PATCH tenant into the auth step with intent=internal + signup_mode=invite_only
+    // 3. PATCH tenant into the auth step. Default signup_mode is 'open' so the
+    //    Credentials/Social/Pro sections are visible to tests that need them;
+    //    individual tests that exercise invite_only behavior PATCH to invite_only
+    //    inside their own body before opening the wizard.
     const patch = await patchWithRetry(request, BASE + '/platform/self-serve/tenants/' + tenantId, {
       headers: { 'Authorization': 'Bearer ' + platformToken, 'Content-Type': 'application/json' },
       data: {
-        tenant_intent: 'internal',
-        signup_mode: 'invite_only',
+        tenant_intent: 'saas',
+        signup_mode: 'open',
         onboarding_step: 3,
       },
     });
     if (!patch.ok()) throw new Error('Tenant PATCH failed: ' + await patch.text());
   });
+
+  /** Helper for tests that need to start in invite_only state. */
+  async function setSignupMode(
+    request: import('@playwright/test').APIRequestContext,
+    mode: 'open' | 'invite_only',
+  ): Promise<void> {
+    const res = await patchWithRetry(request, BASE + '/platform/self-serve/tenants/' + tenantId, {
+      headers: { 'Authorization': 'Bearer ' + platformToken, 'Content-Type': 'application/json' },
+      data: { signup_mode: mode },
+    });
+    if (!res.ok()) throw new Error('setSignupMode(' + mode + ') failed: ' + await res.text());
+  }
 
   test.afterAll(async ({ request }) => {
     if (!tenantId) return;
@@ -135,7 +150,11 @@ test.describe('Auth step redesign', () => {
     }
   });
 
-  test('Access provider-group renders first with segmented control pre-filled from signup_mode @regression', async ({ browser }) => {
+  test('Access provider-group renders first with segmented control pre-filled from signup_mode @regression', async ({ browser, request }) => {
+    // Pre-fill assertion is meaningful only when the tenant starts in invite_only,
+    // so each path is exercised: this test PATCHes to invite_only before opening.
+    await setSignupMode(request, 'invite_only');
+
     const { page, close } = await openWizardAtAuthStep(browser);
     try {
       // The Access group must be the FIRST wizard-provider-group inside the left pane
@@ -151,23 +170,44 @@ test.describe('Auth step redesign', () => {
       await expect(firstGroup).toContainText('Anyone can create an account.');
       await expect(firstGroup).toContainText("Only people you invite can sign up. You'll manage invites from the dashboard.");
 
-      // Pre-fill: tenant was created with signup_mode=invite_only, so Invite-only is active
+      // Pre-fill: tenant was just patched to signup_mode=invite_only, so Invite-only is active
       await expect(inviteOption).toHaveClass(/active/);
       await expect(openOption).not.toHaveClass(/active/);
 
-      // Click Open and verify the active class moves
+      // In invite_only the Credentials/Social/Pro sections are visually hidden
+      // (they remain in the DOM, hidden via the .is-hidden display:none class)
+      // and the invite_only note is shown.
+      const note = page.locator('.wizard-pane-left .wizard-invite-only-note');
+      const credentialsGroup = page.locator('.wizard-pane-left .wizard-provider-group').filter({ hasText: 'Credentials' });
+      const socialGroup = page.locator('.wizard-pane-left .wizard-provider-group').filter({ hasText: 'Social Providers' });
+      const proSection = page.locator('.wizard-pane-left .wizard-pro-section');
+
+      await expect(note).toBeVisible();
+      await expect(note).not.toHaveClass(/is-hidden/);
+      await expect(credentialsGroup).toHaveClass(/is-hidden/);
+      await expect(socialGroup).toHaveClass(/is-hidden/);
+      await expect(proSection).toHaveClass(/is-hidden/);
+
+      // Click Open and verify the active class moves AND the hidden sections reappear.
       await openOption.click();
       await expect(openOption).toHaveClass(/active/);
       await expect(inviteOption).not.toHaveClass(/active/);
+      await expect(note).toHaveClass(/is-hidden/);
+      await expect(credentialsGroup).toBeVisible();
+      await expect(credentialsGroup).not.toHaveClass(/is-hidden/);
+      await expect(socialGroup).toBeVisible();
+      await expect(proSection).toBeVisible();
     } finally {
       await close();
     }
   });
 
   test('clicking Open then Continue persists signup_mode=open to the tenant @regression', async ({ browser, request }) => {
+    // Start in invite_only so the Continue click actually transitions the value.
+    await setSignupMode(request, 'invite_only');
+
     const { page, close } = await openWizardAtAuthStep(browser);
     try {
-      // Tenant starts at signup_mode=invite_only (set in beforeAll). Switch to Open.
       const firstGroup = page.locator('.wizard-pane-left .wizard-provider-group').first();
       await firstGroup.locator('.wizard-access-segmented-option').filter({ hasText: 'Open' }).click();
 
@@ -192,14 +232,14 @@ test.describe('Auth step redesign', () => {
   });
 
   test.afterEach(async ({ request }) => {
-    // Reset signup_mode + onboarding_step so each test starts from the known state
-    // set in beforeAll. Without this, the persistence test (which advances
-    // onboarding_step beyond the auth step) would break openWizardAtAuthStep
-    // for any test that runs after it.
+    // Reset signup_mode + onboarding_step so each test starts from the known
+    // open + step-3 state set in beforeAll. Without this, the persistence test
+    // (which advances onboarding_step) and tests that mutate signup_mode would
+    // break openWizardAtAuthStep for any test that runs after them.
     if (!tenantId) return;
     const reset = await patchWithRetry(request, BASE + '/platform/self-serve/tenants/' + tenantId, {
       headers: { 'Authorization': 'Bearer ' + platformToken, 'Content-Type': 'application/json' },
-      data: { signup_mode: 'invite_only', onboarding_step: 3 },
+      data: { signup_mode: 'open', onboarding_step: 3 },
     });
     if (!reset.ok()) {
       throw new Error('afterEach reset failed (' + reset.status() + '): ' + await reset.text());

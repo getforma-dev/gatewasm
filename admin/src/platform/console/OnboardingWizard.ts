@@ -703,21 +703,47 @@ function StepAuthMethods(): ReturnType<typeof h> {
 
       h(
         "div",
-        { class: "wizard-provider-group" },
+        {
+          class: () =>
+            "wizard-invite-only-note" +
+            (signupMode() === "invite_only" ? "" : " is-hidden"),
+        },
+        "Invited users sign in via the link in their invite email \u2014 no additional setup needed. Switch to Open to enable public sign-up methods.",
+      ),
+
+      h(
+        "div",
+        {
+          class: () =>
+            "wizard-provider-group" +
+            (signupMode() === "open" ? "" : " is-hidden"),
+        },
         h("div", { class: "wizard-provider-group-label" }, "Credentials"),
         ...CREDENTIAL_PROVIDERS.map((p) => ProviderToggle(p)),
       ),
 
       h(
         "div",
-        { class: "wizard-provider-group" },
-        h("div", { class: "wizard-provider-group-label" }, "Social Providers"),
+        {
+          class: () =>
+            "wizard-provider-group" +
+            (signupMode() === "open" ? "" : " is-hidden"),
+        },
+        h(
+          "div",
+          { class: "wizard-provider-group-label" },
+          "Social Providers",
+        ),
         ...SOCIAL_PROVIDERS.map((p) => ProviderToggle(p)),
       ),
 
       h(
         "div",
-        { class: "wizard-pro-section" },
+        {
+          class: () =>
+            "wizard-pro-section" +
+            (signupMode() === "open" ? "" : " is-hidden"),
+        },
         h(
           "div",
           { class: "wizard-pro-header" },
