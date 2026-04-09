@@ -29,8 +29,8 @@ test('authenticated: console loads with account shell and workspaces view @smoke
 
   // Account mode: renders .account-shell with tabs
   await expect(authedPage.locator(Account.shell)).toBeVisible({ timeout: 8000 });
-  await expect(authedPage.locator(Account.tabs).getByRole('button', { name: 'Tenants' })).toBeVisible();
-  await expect(authedPage.getByText('Your Workspaces')).toBeVisible();
+  await expect(authedPage.locator(Account.tabs).getByRole('button', { name: 'Applications' })).toBeVisible();
+  await expect(authedPage.getByText('Your Applications')).toBeVisible();
 
   // Avatar button visible in account shell
   await expect(authedPage.locator(`${Account.shell} ${Workspace.avatar}`)).toBeVisible();
@@ -47,7 +47,7 @@ test('authenticated: tenant create modal shows current required fields @smoke @r
   await expect(authedPage.locator(Account.shell)).toBeVisible({ timeout: 8000 });
 
   // Open the create workspace modal
-  await authedPage.getByRole('button', { name: '+ New Workspace' }).click();
+  await authedPage.getByRole('button', { name: '+ New Application' }).click();
   const modal = authedPage.locator(Modal.content);
   await expect(modal).toBeVisible({ timeout: 5000 });
 
@@ -61,7 +61,7 @@ test('authenticated: tenant slug preview updates from the current form fields @s
   await expect(authedPage.locator(Account.shell)).toBeVisible({ timeout: 8000 });
 
   // Open the create workspace modal
-  await authedPage.getByRole('button', { name: '+ New Workspace' }).click();
+  await authedPage.getByRole('button', { name: '+ New Application' }).click();
   const modal = authedPage.locator(Modal.content);
   await expect(modal).toBeVisible({ timeout: 5000 });
 

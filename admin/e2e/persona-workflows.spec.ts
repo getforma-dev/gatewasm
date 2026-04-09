@@ -230,7 +230,7 @@ test.describe('Persona: Agency Multi-Tenant', () => {
       await page.waitForTimeout(1000);
 
       // Should see tenant keys section
-      await expect(page.getByText('Your Workspaces')).toBeVisible();
+      await expect(page.getByText('Your Applications')).toBeVisible();
 
       // ── Select first tenant ──────────────────────────────────────
       await page.locator(Account.tabs).getByRole('button', { name: 'Tenants' }).click();
@@ -313,7 +313,7 @@ test.describe('Navigation Completeness', () => {
       // Click API Keys tab
       await accountTabs.getByRole('button', { name: 'API Keys' }).click();
       await page.waitForTimeout(500);
-      await expect(page.getByText('Your Workspaces')).toBeVisible();
+      await expect(page.getByText('Your Applications')).toBeVisible();
 
       // Click Settings tab
       await accountTabs.getByRole('button', { name: 'Settings' }).click();

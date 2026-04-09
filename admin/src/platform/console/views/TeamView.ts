@@ -184,7 +184,7 @@ export function TeamView() {
               )
             : h('div', null,
                 h('div', { class: 'card-label' }, 'No Team Members Yet'),
-                h('p', { class: 'card-copy' }, 'Invite colleagues to help manage your workspaces. They\'ll get per-tenant roles (Admin, Editor, or Viewer).'),
+                h('p', { class: 'card-copy' }, 'Invite colleagues to help manage your applications. They\'ll get per-application roles (Admin, Editor, or Viewer).'),
                 accountOwner()
                   ? h('button', {
                       type: 'button',
@@ -419,16 +419,16 @@ function InviteModal(onClose: () => void, onInvitesUpdate: (inv: any[]) => void)
             h('p', { class: 'text-muted', style: 'font-size:0.78rem;margin:4px 0 16px;' },
               () => {
                 const r = role();
-                if (r === 'admin') return 'Can manage settings, users, and roles on assigned workspaces.';
-                if (r === 'editor') return 'Can edit settings on assigned workspaces. Cannot manage users.';
-                return 'Read-only access to assigned workspaces.';
+                if (r === 'admin') return 'Can manage settings, users, and roles on assigned applications.';
+                if (r === 'editor') return 'Can edit settings on assigned applications. Cannot manage users.';
+                return 'Read-only access to assigned applications.';
               },
             ),
 
             // Tenant access
             h('div', { style: 'margin-bottom:16px;' },
               h('div', { style: 'display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;' },
-                h('label', { class: 'field-label', style: 'margin:0;' }, 'Workspace Access'),
+                h('label', { class: 'field-label', style: 'margin:0;' }, 'Application Access'),
                 createShow(
                   () => ownTenants().length > 1,
                   () => h('button', {
@@ -441,7 +441,7 @@ function InviteModal(onClose: () => void, onInvitesUpdate: (inv: any[]) => void)
               ),
               createShow(
                 () => ownTenants().length === 0,
-                () => h('p', { class: 'text-muted', style: 'font-size:0.82rem;' }, 'Create a workspace first to invite members.'),
+                () => h('p', { class: 'text-muted', style: 'font-size:0.82rem;' }, 'Create an application first to invite members.'),
               ),
               // Search (show when 4+ tenants)
               createShow(
@@ -449,7 +449,7 @@ function InviteModal(onClose: () => void, onInvitesUpdate: (inv: any[]) => void)
                 () => h('input', {
                   type: 'text',
                   class: 'input invite-tenant-search',
-                  placeholder: 'Search workspaces...',
+                  placeholder: 'Search applications...',
                   value: tenantSearch,
                   onInput: (e: Event) => setTenantSearch((e.target as HTMLInputElement).value),
                 }),
@@ -471,14 +471,14 @@ function InviteModal(onClose: () => void, onInvitesUpdate: (inv: any[]) => void)
                 // No results
                 createShow(
                   () => ownTenants().length > 0 && filteredTenants().length === 0,
-                  () => h('div', { class: 'invite-tenant-empty' }, 'No workspaces match "' + tenantSearch() + '"'),
+                  () => h('div', { class: 'invite-tenant-empty' }, 'No applications match "' + tenantSearch() + '"'),
                 ),
               ),
               // Selection count
               createShow(
                 () => selectedTenantIds().length > 0,
                 () => h('p', { class: 'text-muted', style: 'font-size:0.75rem;margin:6px 0 0;' },
-                  () => selectedTenantIds().length + ' workspace' + (selectedTenantIds().length !== 1 ? 's' : '') + ' selected'),
+                  () => selectedTenantIds().length + ' application' + (selectedTenantIds().length !== 1 ? 's' : '') + ' selected'),
               ),
             ),
 

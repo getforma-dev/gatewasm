@@ -18,7 +18,7 @@ test('console shows validation feedback for invalid tenant slug @regression', as
   await authedPage.locator(Account.shell).waitFor({ timeout: 10000 });
 
   // Open create modal
-  await authedPage.getByRole('button', { name: '+ New Workspace' }).click();
+  await authedPage.getByRole('button', { name: '+ New Application' }).click();
   await expect(authedPage.locator(Modal.content)).toBeVisible();
 
   // Enter an invalid slug — the form should show validation status
@@ -55,7 +55,7 @@ test('two tabs can view the console simultaneously @regression', async ({ browse
     await expect(page2.locator(Account.shell)).toBeVisible({ timeout: 10000 });
 
     // Action in tab 1 doesn't crash tab 2
-    await page1.getByRole('button', { name: '+ New Workspace' }).click();
+    await page1.getByRole('button', { name: '+ New Application' }).click();
     await expect(page1.locator(Modal.content)).toBeVisible();
 
     // Tab 2 still responsive
@@ -119,7 +119,7 @@ test('deleting a tenant removes it from the workspace list @regression', async (
 test('deep link to /platform/console loads when authenticated @regression', async ({ authedPage }) => {
   await authedPage.goto('/platform/console');
   await expect(authedPage.locator(Account.shell)).toBeVisible({ timeout: 10000 });
-  await expect(authedPage.getByText('Your Workspaces')).toBeVisible();
+  await expect(authedPage.getByText('Your Applications')).toBeVisible();
 });
 
 test('deep link to /platform/console redirects to login when unauthenticated @regression', async ({ page }) => {

@@ -150,11 +150,36 @@ const RESERVED_SLUGS = [
 const [wizardStep, setWizardStep] = createSignal(0);
 const [saving, setSaving] = createSignal(false);
 
+// ── Hash navigation ────────────────────────────────────────────────────
+//
+// The wizard uses URL hash fragments (#create, #intent, #auth, #branding,
+// #mode, #test, #launch) for in-session step navigation. Fragments don't
+// trigger page loads or re-fetches — they just keep the wizard's single
+// component mounted while letting the browser back/forward and refresh
+// behave naturally. The onboarding_step field still persists to the server
+// for cross-session resume; the hash is purely client-side.
+
+function stepFromHash(): number {
+  if (typeof window === "undefined") return -1;
+  const hash = window.location.hash.slice(1).toLowerCase();
+  if (!hash) return -1;
+  return STEP_LABELS.findIndex((l) => l.toLowerCase() === hash);
+}
+
+function setStepHash(step: number): void {
+  if (typeof window === "undefined") return;
+  const label = STEP_LABELS[step]?.toLowerCase();
+  if (label && window.location.hash.slice(1) !== label) {
+    window.location.hash = label;
+  }
+}
+
 // ── Navigation ─────────────────────────────────────────────────────────
 
 function advanceStep(): void {
   const next = Math.min(wizardStep() + 1, 6);
   setWizardStep(next);
+  setStepHash(next);
   const tenant = selectedTenant();
   if (tenant) {
     void updateTenant(tenant.id, { onboarding_step: next + 1 });
@@ -164,7 +189,9 @@ function advanceStep(): void {
 function prevStep(): void {
   // Don't allow going back to the Create step (0) once tenant exists
   const min = selectedTenant() ? 1 : 0;
-  setWizardStep(Math.max(wizardStep() - 1, min));
+  const next = Math.max(wizardStep() - 1, min);
+  setWizardStep(next);
+  setStepHash(next);
 }
 
 async function skipWizard(): Promise<void> {
@@ -188,11 +215,11 @@ async function skipWizard(): Promise<void> {
     onboarding_completed: true,
     onboarding_step: 7,
   });
-  toast.show("Your workspace is ready", "success");
+  toast.show("Your application is ready", "success");
   if (updated) completeOnboarding(updated);
 }
 
-// ── Step 0: Create Workspace ──────────────────────────────────────────
+// ── Step 0: Create Application ────────────────────────────────────────
 
 function StepCreate(onCreated: (tenant: Tenant) => void): ReturnType<typeof h> {
   const [name, setName] = createSignal("");
@@ -325,7 +352,7 @@ function StepCreate(onCreated: (tenant: Tenant) => void): ReturnType<typeof h> {
   return h(
     "div",
     { class: "wizard-step wizard-step-centered" },
-    h("h1", { class: "wizard-headline" }, "Create your workspace"),
+    h("h1", { class: "wizard-headline" }, "Create your application"),
     h(
       "p",
       { class: "wizard-subtitle" },
@@ -342,7 +369,7 @@ function StepCreate(onCreated: (tenant: Tenant) => void): ReturnType<typeof h> {
         h("input", {
           type: "text",
           class: "input",
-          placeholder: "Acme Workspace",
+          placeholder: "Acme App",
           value: name(),
           onInput: (e: Event) =>
             handleNameChange((e.target as HTMLInputElement).value),
@@ -350,7 +377,7 @@ function StepCreate(onCreated: (tenant: Tenant) => void): ReturnType<typeof h> {
         h(
           "span",
           { class: "wizard-field-hint" },
-          "This appears in the console and the hosted tenant experience.",
+          "This appears in the console and on your hosted sign-in page.",
         ),
       ),
 
@@ -361,7 +388,7 @@ function StepCreate(onCreated: (tenant: Tenant) => void): ReturnType<typeof h> {
         h("input", {
           type: "text",
           class: "input",
-          placeholder: "acme-workspace",
+          placeholder: "acme-app",
           value: slug,
           onInput: handleSlugInput,
         }),
@@ -1560,7 +1587,7 @@ function StepLaunch(): ReturnType<typeof h> {
       onboarding_step: 7,
     });
     setSaving(false);
-    toast.show("Your workspace is ready", "success");
+    toast.show("Your application is ready", "success");
     if (updated) completeOnboarding(updated);
   }
 
@@ -1765,13 +1792,37 @@ function StepLaunch(): ReturnType<typeof h> {
 export function OnboardingWizard(): ReturnType<typeof h> {
   // Always reset signals on mount — prevents stale state when switching tenants
   const tenant = selectedTenant();
-  // If no tenant exists yet (fresh create flow), start at step 0
-  // Otherwise resume from where they left off (step 1+)
-  const step = tenant
-    ? Math.min(Math.max(tenant.onboarding_step - 1, 1), 6)
-    : 0;
+
+  // Determine initial step. URL hash takes precedence (deep-linkable / refresh-
+  // safe), otherwise fall back to the persisted onboarding_step. If no tenant
+  // exists yet (fresh create flow), start at step 0.
+  const minStep = tenant ? 1 : 0;
+  const hashStep = stepFromHash();
+  const step =
+    hashStep >= 0
+      ? Math.min(Math.max(hashStep, minStep), 6)
+      : tenant
+        ? Math.min(Math.max(tenant.onboarding_step - 1, 1), 6)
+        : 0;
   setWizardStep(step);
   setSaving(false);
+
+  // Browser back/forward syncs the wizard step from the new hash.
+  const onHashChange = (): void => {
+    const idx = stepFromHash();
+    if (idx < 0) return;
+    const m = selectedTenant() ? 1 : 0;
+    const clamped = Math.min(Math.max(idx, m), 6);
+    if (clamped !== wizardStep()) {
+      setWizardStep(clamped);
+    }
+  };
+  if (typeof window !== "undefined") {
+    window.addEventListener("hashchange", onHashChange);
+    onCleanup(() => {
+      window.removeEventListener("hashchange", onHashChange);
+    });
+  }
 
   function handleTenantCreated(created: Tenant): void {
     // Set the tenant in the store so subsequent wizard steps can access it

@@ -140,7 +140,7 @@ export function PlaneNav(props: PlaneNavProps) {
           type: 'button',
           class: 'plane-tenant-menu-item plane-tenant-menu-back hv',
           onClick: () => { setTenantMenuOpen(false); props.onBackToAccount(); },
-        }, '\u2190 All Tenants'),
+        }, '\u2190 All Applications'),
         h('div', { class: 'plane-avatar-menu-divider' }),
         () => props.tenants().map((t) =>
           h('button', {

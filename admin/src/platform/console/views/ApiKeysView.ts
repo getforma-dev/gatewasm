@@ -15,25 +15,25 @@ export function ApiKeysView() {
       ),
     ),
 
-    // No tenants at all
+    // No applications at all
     createShow(
       () => tenants().length === 0,
       () => h('div', { class: 'console-card' },
         h('div', { class: 'list-empty-state' },
-          h('div', { class: 'card-label' }, 'No Tenants'),
-          h('p', { class: 'card-copy' }, 'Create a tenant first to get a management API key.'),
+          h('div', { class: 'card-label' }, 'No Applications'),
+          h('p', { class: 'card-copy' }, 'Create an application first to get a management API key.'),
         ),
       ),
     ),
 
-    // Your Workspaces section
+    // Your Applications section
     createShow(
       () => ownTenants().length > 0,
       () => h('div', { class: 'console-card list-shell' },
         h('div', { class: 'list-shell-head' },
           h('div', { class: 'section-copy' },
-            h('div', { class: 'card-label' }, 'Your Workspaces'),
-            h('p', { class: 'card-copy' }, () => ownTenants().length + ' tenant' + (ownTenants().length !== 1 ? 's' : '')),
+            h('div', { class: 'card-label' }, 'Your Applications'),
+            h('p', { class: 'card-copy' }, () => ownTenants().length + ' application' + (ownTenants().length !== 1 ? 's' : '')),
           ),
         ),
         h('div', { class: 'user-list user-list-shell' },
@@ -42,14 +42,14 @@ export function ApiKeysView() {
       ),
     ),
 
-    // Team Workspaces section
+    // Team Applications section
     createShow(
       () => teamTenants().length > 0,
       () => h('div', { class: 'console-card list-shell' },
         h('div', { class: 'list-shell-head' },
           h('div', { class: 'section-copy' },
-            h('div', { class: 'card-label' }, 'Team Workspaces'),
-            h('p', { class: 'card-copy' }, () => teamTenants().length + ' tenant' + (teamTenants().length !== 1 ? 's' : '') + ' shared with you'),
+            h('div', { class: 'card-label' }, 'Team Applications'),
+            h('p', { class: 'card-copy' }, () => teamTenants().length + ' application' + (teamTenants().length !== 1 ? 's' : '') + ' shared with you'),
           ),
         ),
         h('div', { class: 'user-list user-list-shell' },

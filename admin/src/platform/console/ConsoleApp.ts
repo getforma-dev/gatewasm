@@ -44,9 +44,9 @@ function TenantsList() {
   const tenantCountLabel = () => {
     const own = ownTenants().length;
     const team = teamTenants().length;
-    if (own === 0 && team === 0) return 'Create your first workspace to get started';
+    if (own === 0 && team === 0) return 'Create your first application to get started';
     const parts: string[] = [];
-    if (own > 0) parts.push(own === 1 ? '1 workspace' : own + ' workspaces');
+    if (own > 0) parts.push(own === 1 ? '1 application' : own + ' applications');
     if (team > 0) parts.push(team === 1 ? '1 shared' : team + ' shared');
     return parts.join(' · ');
   };
@@ -77,9 +77,9 @@ function TenantsList() {
         TenantMeta('Status', tenant.status),
         isTeam
           ? TenantMeta('Access', teamRole || 'member')
-          : TenantMeta('Surface', tenant.onboarding_completed ? 'Workspace' : 'Setup'),
+          : TenantMeta('Surface', tenant.onboarding_completed ? 'Application' : 'Setup'),
       ),
-      h('div', { class: 'tenant-card-footer' }, isTeam ? 'Open shared workspace' : 'Open workspace'),
+      h('div', { class: 'tenant-card-footer' }, isTeam ? 'Open shared application' : 'Open application'),
     );
   }
 
@@ -87,7 +87,7 @@ function TenantsList() {
     h('div', { class: 'view-header view-header-split' },
       h('div', { class: 'view-header-body' },
         h('div', { class: 'view-eyebrow' }, 'Account'),
-        h('h2', { class: 'view-title' }, 'Your Workspaces'),
+        h('h2', { class: 'view-title' }, 'Your Applications'),
         h('p', { class: 'view-subtitle text-muted' }, tenantCountLabel),
       ),
       h('div', { class: 'view-header-actions' },
@@ -96,19 +96,19 @@ function TenantsList() {
           class: 'clip-btn',
           disabled: () => !canEdit(),
           onClick: () => startNewWorkspaceWizard(),
-        }, '+ New Workspace'),
+        }, '+ New Application'),
       ),
     ),
 
-    // Empty state (no workspaces at all)
+    // Empty state (no applications at all)
     createShow(
       () => tenants().length === 0,
       () => h('div', { class: 'console-card tenant-empty-hero' },
         h('div', { class: 'tenant-empty-content' },
-          h('div', { class: 'diamond-label' }, 'No Workspaces Yet'),
-          h('h3', { class: 'section-title' }, 'Create a workspace to get started'),
+          h('div', { class: 'diamond-label' }, 'No Applications Yet'),
+          h('h3', { class: 'section-title' }, 'Create an application to get started'),
           h('p', { class: 'card-copy' },
-            'Each workspace is a tenant with its own users, login page, roles, and security settings. You need at least one to start authenticating people.',
+            'Each application has its own users, login page, roles, and security settings. You need at least one to start authenticating people.',
           ),
           h('div', { class: 'tenant-empty-actions' },
             h('button', {
@@ -116,7 +116,7 @@ function TenantsList() {
               class: 'clip-btn',
               disabled: () => !canEdit(),
               onClick: () => startNewWorkspaceWizard(),
-            }, '+ Create Workspace'),
+            }, '+ Create Application'),
           ),
         ),
       ),
@@ -259,7 +259,7 @@ export function ConsoleApp() {
           h('span', null,
             (inv.inviter_email || 'A team member') + ' invited you as ' +
             inv.role.charAt(0).toUpperCase() + inv.role.slice(1) +
-            ' on ' + inv.tenant_count + ' workspace' + (inv.tenant_count !== 1 ? 's' : ''),
+            ' on ' + inv.tenant_count + ' application' + (inv.tenant_count !== 1 ? 's' : ''),
           ),
           h('button', {
             type: 'button',
@@ -269,7 +269,7 @@ export function ConsoleApp() {
         ),
       ),
       h('div', { class: 'account-tabs' },
-        AccountTabBtn('tenants', 'Tenants'),
+        AccountTabBtn('tenants', 'Applications'),
         AccountTabBtn('team', 'Members'),
         AccountTabBtn('api-keys', 'API Keys'),
         AccountTabBtn('account-settings', 'Settings'),
@@ -311,17 +311,17 @@ export function ConsoleApp() {
         items: [
           {
             id: 'palette-all-tenants',
-            title: 'All Tenants',
-            subtitle: 'Return to the account view and tenant list.',
-            keywords: ['console tenants workspace list account'],
+            title: 'All Applications',
+            subtitle: 'Return to the account view and application list.',
+            keywords: ['console tenants applications workspace list account'],
             onSelect: openConsoleHome,
           },
           {
             id: 'palette-reload',
             title: 'Reload Data',
             subtitle: currentTenant
-              ? 'Refresh the current workspace data without leaving the page.'
-              : 'Refresh the tenant list and latest console state.',
+              ? 'Refresh the current application data without leaving the page.'
+              : 'Refresh the application list and latest console state.',
             keywords: ['refresh reload sync data'],
             onSelect: () => { void refreshCurrentView(); },
           },
@@ -334,7 +334,7 @@ export function ConsoleApp() {
         {
           id: 'palette-overview',
           title: 'Overview',
-          subtitle: 'Return to the workspace dashboard for ' + currentTenantPath,
+          subtitle: 'Return to the application dashboard for ' + currentTenantPath,
           meta: currentView === 'overview' ? 'Current page' : undefined,
           keywords: ['dashboard overview tenant summary'],
           onSelect: () => navigateTenantView('overview'),

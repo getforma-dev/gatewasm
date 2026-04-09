@@ -108,7 +108,7 @@ export function OnboardingPage() {
         h(
           "p",
           { class: "card-subtitle" },
-          "Start building in minutes. You will choose your first workspace name and tenant URL right after signing in.",
+          "Start building in minutes. You will choose your first application name and URL right after signing in.",
         ),
 
         // Island: RegistrationForm (alerts + OAuth + form)
