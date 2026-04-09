@@ -109,6 +109,7 @@ test.describe('Auth step redesign', () => {
   test('Pro section renders SMS OTP, SAML/SSO, and Custom OIDC as upgrade-locked items @regression', async ({ browser }) => {
     const { page, close } = await openWizardAtAuthStep(browser);
     try {
+      // Scope to wizard-pane-left to stay robust if step rendering strategy changes.
       const proSection = page.locator('.wizard-pane-left .wizard-pro-section');
       await expect(proSection).toBeVisible();
 
