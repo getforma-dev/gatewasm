@@ -5,10 +5,8 @@ import type { Tenant } from "./store";
 import {
   api,
   checkSlugAvailability,
-  completeOnboarding,
   createTenant,
   currentUser,
-  loadTenants,
   saveSecurityConfig,
   selectedTenant,
   serverUrl,
@@ -269,8 +267,30 @@ async function skipWizard(): Promise<void> {
     onboarding_completed: true,
     onboarding_step: 7,
   });
+  if (!updated) return;
   toast.show("Your application is ready", "success");
-  if (updated) completeOnboarding(updated);
+  navigateToWorkspace(updated);
+}
+
+/**
+ * Hard-navigate from the wizard into the launched workspace. The in-session
+ * createShow transition from wizard → workspace shell can race with hydrate
+ * and leave the workspace mounted with stale view-data signals (the operator
+ * sees an empty pane until they refresh manually). Doing the navigation as a
+ * full page load via window.location.href guarantees init() runs and the
+ * workspace shell mounts cleanly with the correct view + plane + hydrated
+ * data — exactly what the operator's manual refresh would have achieved.
+ */
+function navigateToWorkspace(tenant: Tenant): void {
+  if (typeof window === "undefined") return;
+  const targetView =
+    tenant.preferred_tab === "hosted-page"
+      ? "hosted-page"
+      : tenant.preferred_tab === "integrate"
+        ? "integrate"
+        : "overview";
+  window.location.href =
+    "/platform/console/" + tenant.slug + "#" + targetView;
 }
 
 // ── Step 0: Create Application ────────────────────────────────────────
@@ -634,7 +654,16 @@ function StepAuthMethods(): ReturnType<typeof h> {
     if (list.includes(p)) {
       // Always require at least one provider — invited users still need an
       // auth method to log in after accepting their invite.
-      if (list.length === 1) return;
+      if (list.length === 1) {
+        // The browser already optimistically flipped the checkbox visual when
+        // the click handler ran. We're refusing the change, so we need to
+        // force a re-render to put the visual back in sync with the (unchanged)
+        // signal value. Setting the signal to a new array reference with the
+        // same contents triggers reactive bindings to re-evaluate, which makes
+        // the input's reactive `checked` attribute restore the correct state.
+        setProviders([...list]);
+        return;
+      }
       setProviders(list.filter((x) => x !== p));
     } else {
       setProviders([...list, p]);
@@ -1660,16 +1689,12 @@ function StepLaunch(): ReturnType<typeof h> {
       onboarding_completed: true,
       onboarding_step: 7,
     });
-    setSaving(false);
-    if (!updated) return;
+    if (!updated) {
+      setSaving(false);
+      return;
+    }
     toast.show("Your application is ready", "success");
-
-    // Refresh the tenants list before completing so the workspace shell
-    // mounts with fresh server data, not the locally-cached wizard tenant.
-    // Without this, the workspace shell can mount with stale signals and
-    // OverviewView/IntegrateView render empty until the operator refreshes.
-    await loadTenants();
-    completeOnboarding(updated);
+    navigateToWorkspace(updated);
   }
 
   const SNIPPETS: Record<string, string> = {
