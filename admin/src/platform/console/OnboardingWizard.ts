@@ -576,6 +576,18 @@ function StepAuthMethods(): ReturnType<typeof h> {
       label: "Magic Link",
       subtitle: "Passwordless sign-in via email",
     },
+    {
+      key: "email_otp",
+      label: "Email OTP",
+      subtitle: "6-digit code sent to email",
+      available: false,
+    },
+    {
+      key: "passkey",
+      label: "Passkey",
+      subtitle: "Sign in with Face ID, fingerprint, or device PIN",
+      available: false,
+    },
   ];
 
   const SOCIAL_PROVIDERS = [
