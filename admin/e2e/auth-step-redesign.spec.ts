@@ -1,5 +1,5 @@
-import { test, expect, Page } from '@playwright/test';
-import { BASE, postWithRetry } from './helpers';
+import { test, expect, Browser, Page } from '@playwright/test';
+import { BASE, patchWithRetry, postWithRetry } from './helpers';
 
 test.describe('Auth step redesign', () => {
   let platformToken: string;
@@ -31,7 +31,7 @@ test.describe('Auth step redesign', () => {
     if (!tenantId) throw new Error('No tenant id from create');
 
     // 3. PATCH tenant into the auth step with intent=internal + signup_mode=invite_only
-    const patch = await request.patch(BASE + '/platform/self-serve/tenants/' + tenantId, {
+    const patch = await patchWithRetry(request, BASE + '/platform/self-serve/tenants/' + tenantId, {
       headers: { 'Authorization': 'Bearer ' + platformToken, 'Content-Type': 'application/json' },
       data: {
         tenant_intent: 'internal',
@@ -55,15 +55,19 @@ test.describe('Auth step redesign', () => {
    * console, opens the test tenant's wizard, and returns the page positioned
    * at the auth step (step 3).
    */
-  async function openWizardAtAuthStep(browser: any): Promise<{ page: Page; close: () => Promise<void> }> {
+  async function openWizardAtAuthStep(browser: Browser): Promise<{ page: Page; close: () => Promise<void> }> {
     const context = await browser.newContext();
     const page = await context.newPage();
 
     // Browser login (sets refresh cookie)
-    await context.request.post(BASE + '/auth/login', {
+    const loginRes = await context.request.post(BASE + '/auth/login', {
       headers: { 'X-Tenant-Slug': 'platform', 'Content-Type': 'application/json' },
       data: { email: platformEmail, password: platformPassword },
     });
+    if (!loginRes.ok()) {
+      await context.close();
+      throw new Error('Browser login failed: ' + await loginRes.text());
+    }
 
     await page.goto(BASE + '/platform/console');
     // Click into the test tenant card
@@ -81,23 +85,24 @@ test.describe('Auth step redesign', () => {
 
   test('credentials group renders Email OTP and Passkey rows with Coming soon badges @regression', async ({ browser }) => {
     const { page, close } = await openWizardAtAuthStep(browser);
+    try {
+      const credentialsGroup = page.locator('.wizard-provider-group').filter({ hasText: 'Credentials' });
 
-    const credentialsGroup = page.locator('.wizard-provider-group').filter({ hasText: 'Credentials' });
+      // Email OTP row
+      const emailOtpRow = credentialsGroup.locator('.wizard-provider-toggle').filter({ hasText: 'Email OTP' });
+      await expect(emailOtpRow).toBeVisible();
+      await expect(emailOtpRow.locator('.wizard-provider-subtitle')).toHaveText('6-digit code sent to email');
+      await expect(emailOtpRow.locator('.wizard-provider-badge')).toHaveText('Coming soon');
+      await expect(emailOtpRow.locator('input[type="checkbox"]')).toBeDisabled();
 
-    // Email OTP row
-    const emailOtpRow = credentialsGroup.locator('.wizard-provider-toggle').filter({ hasText: 'Email OTP' });
-    await expect(emailOtpRow).toBeVisible();
-    await expect(emailOtpRow.locator('.wizard-provider-subtitle')).toHaveText('6-digit code sent to email');
-    await expect(emailOtpRow.locator('.wizard-provider-badge')).toHaveText('Coming soon');
-    await expect(emailOtpRow.locator('input[type="checkbox"]')).toBeDisabled();
-
-    // Passkey row
-    const passkeyRow = credentialsGroup.locator('.wizard-provider-toggle').filter({ hasText: 'Passkey' });
-    await expect(passkeyRow).toBeVisible();
-    await expect(passkeyRow.locator('.wizard-provider-subtitle')).toHaveText('Sign in with Face ID, fingerprint, or device PIN');
-    await expect(passkeyRow.locator('.wizard-provider-badge')).toHaveText('Coming soon');
-    await expect(passkeyRow.locator('input[type="checkbox"]')).toBeDisabled();
-
-    await close();
+      // Passkey row
+      const passkeyRow = credentialsGroup.locator('.wizard-provider-toggle').filter({ hasText: 'Passkey' });
+      await expect(passkeyRow).toBeVisible();
+      await expect(passkeyRow.locator('.wizard-provider-subtitle')).toHaveText('Sign in with Face ID, fingerprint, or device PIN');
+      await expect(passkeyRow.locator('.wizard-provider-badge')).toHaveText('Coming soon');
+      await expect(passkeyRow.locator('input[type="checkbox"]')).toBeDisabled();
+    } finally {
+      await close();
+    }
   });
 });

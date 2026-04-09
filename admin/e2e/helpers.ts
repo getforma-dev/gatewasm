@@ -24,6 +24,27 @@ export async function postWithRetry(
 }
 
 /**
+ * PATCH with automatic 429 retry and exponential backoff.
+ * Mirrors postWithRetry for tests that need to update existing resources
+ * during setup (e.g. seeding tenant state).
+ */
+export async function patchWithRetry(
+  request: APIRequestContext,
+  url: string,
+  options: { headers?: Record<string, string>; data?: unknown },
+  attempts = 6,
+): Promise<any> {
+  let response: any;
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    response = await request.patch(url, options);
+    if (response.status() !== 429) return response;
+    const retryAfter = Number(response.headers()['retry-after'] || '2');
+    await new Promise(r => setTimeout(r, Math.max(1000, retryAfter * 1000 + 500)));
+  }
+  return response;
+}
+
+/**
  * Exchange the refresh cookie for a short-lived access token.
  * Retries on 429 and tries multiple token paths for compatibility.
  */
