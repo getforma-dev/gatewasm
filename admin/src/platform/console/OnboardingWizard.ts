@@ -665,6 +665,50 @@ function StepAuthMethods(): ReturnType<typeof h> {
 
       h(
         "div",
+        { class: "wizard-pro-section" },
+        h(
+          "div",
+          { class: "wizard-pro-header" },
+          h("span", { class: "wizard-provider-badge" }, "Pro"),
+          h("span", { class: "wizard-pro-label" }, "Upgrade to unlock"),
+        ),
+        h(
+          "div",
+          { class: "wizard-pro-item" },
+          h("span", null, "SMS OTP"),
+          h(
+            "label",
+            { class: "wizard-toggle" },
+            h("input", { type: "checkbox", disabled: true }),
+            h("span", { class: "wizard-toggle-track" }),
+          ),
+        ),
+        h(
+          "div",
+          { class: "wizard-pro-item" },
+          h("span", null, "SAML / SSO"),
+          h(
+            "label",
+            { class: "wizard-toggle" },
+            h("input", { type: "checkbox", disabled: true }),
+            h("span", { class: "wizard-toggle-track" }),
+          ),
+        ),
+        h(
+          "div",
+          { class: "wizard-pro-item" },
+          h("span", null, "Custom OIDC"),
+          h(
+            "label",
+            { class: "wizard-toggle" },
+            h("input", { type: "checkbox", disabled: true }),
+            h("span", { class: "wizard-toggle-track" }),
+          ),
+        ),
+      ),
+
+      h(
+        "div",
         { class: "wizard-actions" },
         h(
           "button",

@@ -105,4 +105,32 @@ test.describe('Auth step redesign', () => {
       await close();
     }
   });
+
+  test('Pro section renders SMS OTP, SAML/SSO, and Custom OIDC as upgrade-locked items @regression', async ({ browser }) => {
+    const { page, close } = await openWizardAtAuthStep(browser);
+    try {
+      const proSection = page.locator('.wizard-pane-left .wizard-pro-section');
+      await expect(proSection).toBeVisible();
+
+      // Header
+      await expect(proSection.locator('.wizard-pro-header .wizard-provider-badge')).toHaveText('Pro');
+      await expect(proSection.locator('.wizard-pro-header .wizard-pro-label')).toHaveText('Upgrade to unlock');
+
+      // Three rows in order: SMS OTP, SAML / SSO, Custom OIDC
+      const items = proSection.locator('.wizard-pro-item');
+      await expect(items).toHaveCount(3);
+      await expect(items.nth(0)).toContainText('SMS OTP');
+      await expect(items.nth(1)).toContainText('SAML / SSO');
+      await expect(items.nth(2)).toContainText('Custom OIDC');
+
+      // All checkboxes disabled
+      const checkboxes = proSection.locator('input[type="checkbox"]');
+      await expect(checkboxes).toHaveCount(3);
+      for (let i = 0; i < 3; i++) {
+        await expect(checkboxes.nth(i)).toBeDisabled();
+      }
+    } finally {
+      await close();
+    }
+  });
 });
