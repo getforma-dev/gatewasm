@@ -15,7 +15,7 @@
     "test:headed": "playwright test --headed",
     "test:debug": "playwright test --debug",
     "test:dev": "playwright test --config=playwright-dev.config.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit && tsc --noEmit -p e2e/tsconfig.json"
   },
   "dependencies": {
     "@getforma/core": "^1.0.8"
@@ -26,6 +26,7 @@
     "@getforma/compiler": "^0.1.2",
     "@playwright/test": "^1.50.0",
     "@tailwindcss/cli": "^4.1.0",
+    "@types/node": "^25.5.2",
     "esbuild": "^0.25.0",
     "tsx": "^4.0.0",
     "typescript": "^5.7.0"

@@ -5,9 +5,9 @@ import type { Tenant } from "./store";
 import {
   api,
   checkSlugAvailability,
+  completeOnboarding,
   createTenant,
   currentUser,
-  preferredTenantView,
   saveSecurityConfig,
   selectedTenant,
   serverUrl,
@@ -273,49 +273,25 @@ async function skipWizard(): Promise<void> {
 }
 
 /**
- * Hard-navigate from the wizard into the launched workspace. The in-session
- * createShow transition from wizard → workspace shell can race with hydrate
- * and leave the workspace mounted with stale view-data signals (the operator
- * sees an empty pane until they refresh manually). Doing the navigation as a
- * full page load guarantees init() runs and the workspace shell mounts
- * cleanly with the correct view + plane + hydrated data — exactly what the
- * operator's manual refresh would have achieved.
+ * Transition from the wizard into the launched workspace. Uses the in-session
+ * `completeOnboarding` path (setView + setPlane + pushState + hydrateTenantView)
+ * so the workspace shell mounts cleanly without a full page reload. This
+ * relies on every reachable workspace view rendering without throwing — the
+ * `complete wizard walkthrough` test in this file is the regression guard
+ * for that contract.
  *
- * Implementation note: same-path navigation (which is what we need —
- * the wizard URL is already /platform/console/{slug}#wizard-X and the
- * destination is /platform/console/{slug}#{view}) does NOT trigger a full
- * page load via window.location.href, history.replaceState, or even reload()
- * reliably across browsers — they all collapse into a soft hash change.
- * We force a real navigation by adding a one-shot `?launched={ts}` query
- * param which makes the destination URL distinct from the current URL, so
- * the browser does a full document load. init() ignores the query param.
- *
- * The welcome toast is persisted to sessionStorage so it survives the page
- * reload and gets displayed by init() after the workspace shell mounts; an
- * in-memory toast.show() before navigation would be destroyed by the unload.
+ * Earlier versions of this function used a hard `window.location.assign()`
+ * with a `?launched={ts}` query param to force a full reload, working around
+ * what looked like a hydrate race. The actual cause turned out to be a
+ * `ReferenceError` in `OverviewView.ts` (missing CopyButton import) that
+ * bubbled up through the reactive effect chain into `updateTenant`'s
+ * try/catch and silently failed the launch flow. With that import fixed,
+ * the in-session transition is reliable and we no longer need the page
+ * reload or the sessionStorage welcome-toast workaround.
  */
 function navigateToWorkspace(tenant: Tenant): void {
-  if (typeof window === "undefined") return;
-  try {
-    sessionStorage.setItem("forma:welcome-toast", "Your application is ready");
-  } catch {
-    // sessionStorage unavailable (private browsing) — toast just won't show.
-  }
-  const targetView = preferredTenantView(tenant);
-  // Same-path navigation (the wizard URL is /platform/console/{slug}#wizard-X
-  // and the destination is /platform/console/{slug}#{view}) does NOT trigger
-  // a full page load via window.location.href — browsers collapse it into a
-  // soft hash change. Add a one-shot `?launched={ts}` query param to force a
-  // distinct URL so window.location.assign actually does a full document
-  // load. init() ignores the query param.
-  const targetUrl =
-    "/platform/console/" +
-    encodeURIComponent(tenant.slug) +
-    "?launched=" +
-    Date.now() +
-    "#" +
-    targetView;
-  window.location.assign(targetUrl);
+  toast.show("Your application is ready", "success");
+  completeOnboarding(tenant);
 }
 
 // ── Step 0: Create Application ────────────────────────────────────────
@@ -1720,14 +1696,8 @@ function StepLaunch(): ReturnType<typeof h> {
       onboarding_completed: true,
       onboarding_step: 7,
     });
-    if (!updated) {
-      setSaving(false);
-      return;
-    }
-    // Note: setSaving is intentionally NOT cleared on the happy path — the
-    // navigateToWorkspace call below triggers a full page reload, so the
-    // current saving signal will be discarded along with the rest of the
-    // module state. Clearing it would just flicker the button label.
+    setSaving(false);
+    if (!updated) return;
     navigateToWorkspace(updated);
   }
 

@@ -37,6 +37,7 @@ export async function createTestTenant(
   request: APIRequestContext,
   token: string,
   name: string,
+  options: { skipOnboarding?: boolean } = {},
 ): Promise<{ id: string; slug: string }> {
   const slug = `e2e-${name.toLowerCase().replace(/\s+/g, '-')}-${Date.now().toString(36)}`;
 
@@ -56,6 +57,24 @@ export async function createTestTenant(
   const id: string = data.id || data.tenant?.id;
   if (!id) {
     throw new Error(`createTestTenant(${name}): no id in ${JSON.stringify(data)}`);
+  }
+
+  // Bypass onboarding by default. Tests that exercise the workspace shell
+  // (members, sessions, integrate, etc.) click directly into the tenant card
+  // and would otherwise land in the wizard because the console gates the
+  // workspace shell on `onboarding_completed` (commit ae14675). Tests that
+  // specifically want to exercise the wizard can pass `skipOnboarding: false`.
+  if (options.skipOnboarding !== false) {
+    const patch = await request.patch(BASE + '/platform/self-serve/tenants/' + id, {
+      headers: {
+        Authorization: 'Bearer ' + token,
+        'Content-Type': 'application/json',
+      },
+      data: { onboarding_completed: true, onboarding_step: 7 },
+    });
+    if (!patch.ok()) {
+      throw new Error(`createTestTenant(${name}): onboarding bypass failed: ${await patch.text()}`);
+    }
   }
 
   return { id, slug };

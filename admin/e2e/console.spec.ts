@@ -42,38 +42,39 @@ test('authenticated: no console errors @smoke @regression', async ({ authedPage 
   expectNoConsoleErrors(errors);
 });
 
-test('authenticated: tenant create modal shows current required fields @smoke @regression', async ({ authedPage }) => {
+test('authenticated: + New Application opens the wizard create step with required fields @smoke @regression', async ({ authedPage }) => {
   await authedPage.goto('/platform/console');
   await expect(authedPage.locator(Account.shell)).toBeVisible({ timeout: 8000 });
 
-  // Open the create workspace modal
+  // + New Application opens the onboarding wizard at the Create step (no longer
+  // a modal — the wizard is a full-page flow as of the auth-step-redesign work).
   await authedPage.getByRole('button', { name: '+ New Application' }).click();
-  const modal = authedPage.locator(Modal.content);
-  await expect(modal).toBeVisible({ timeout: 5000 });
+  await expect(authedPage.locator('h1.wizard-headline').filter({ hasText: 'Create your application' })).toBeVisible({ timeout: 5000 });
 
   await expect(authedPage.getByLabel('App Name')).toBeVisible();
   await expect(authedPage.locator('label').filter({ hasText: 'Tenant Slug' })).toBeVisible();
-  await expect(modal.getByRole('button', { name: 'Create Workspace' })).toBeVisible();
+  await expect(authedPage.getByRole('button', { name: /Create & Continue/ })).toBeVisible();
 });
 
-test('authenticated: tenant slug preview updates from the current form fields @smoke @regression', async ({ authedPage }) => {
+test('authenticated: wizard create step slug preview updates from the form fields @smoke @regression', async ({ authedPage }) => {
   await authedPage.goto('/platform/console');
   await expect(authedPage.locator(Account.shell)).toBeVisible({ timeout: 8000 });
 
-  // Open the create workspace modal
   await authedPage.getByRole('button', { name: '+ New Application' }).click();
-  const modal = authedPage.locator(Modal.content);
-  await expect(modal).toBeVisible({ timeout: 5000 });
+  await expect(authedPage.locator('h1.wizard-headline').filter({ hasText: 'Create your application' })).toBeVisible({ timeout: 5000 });
 
   await authedPage.getByLabel('App Name').fill('Console Smoke Tenant');
+  // Slug auto-derives from name; the preview shows /t/{slug}.
   await expect(authedPage.getByText('/t/console-smoke-tenant')).toBeVisible();
 
-  await authedPage.locator('#field-tenant-slug').fill('custom-slug');
+  // Override the slug manually via the Tenant Slug input.
+  await authedPage.locator('input[placeholder="acme-app"]').fill('custom-slug');
   await expect(authedPage.getByText('/t/custom-slug')).toBeVisible();
-  // Wait for slug availability check to resolve (debounced 500ms + network)
-  await expect(modal.locator(`${Modal.slugAvailable}, ${Modal.slugTaken}, ${Modal.slugInvalid}`)).toBeVisible({ timeout: 5000 });
-  // Verify the submit button is visible inside the modal
-  await expect(modal.getByRole('button', { name: 'Create Workspace' })).toBeVisible();
+  // Wait for slug availability check to resolve (debounced 500ms + network).
+  await expect(
+    authedPage.locator('.slug-status-available, .slug-status-taken, .slug-status-invalid'),
+  ).toBeVisible({ timeout: 5000 });
+  await expect(authedPage.getByRole('button', { name: /Create & Continue/ })).toBeVisible();
 });
 
 test('authenticated: sign out redirects to login @smoke @regression', async ({ authedPage }) => {

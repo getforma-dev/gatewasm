@@ -1885,6 +1885,28 @@ export function selectTenant(tenant: Tenant): void {
   );
 }
 
+/**
+ * Transition from the onboarding wizard to the dashboard for the current tenant.
+ * Unlike selectTenant, this does NOT reset tenant-scoped state — it simply
+ * sets the view, plane, and URL, then hydrates the target view. Used by the
+ * wizard's launch + skip-with-defaults paths to land the operator in the
+ * workspace shell with fresh data without a full page reload.
+ */
+export function completeOnboarding(tenant: Tenant): void {
+  const nextView = preferredTenantView(tenant);
+  batch(() => {
+    setSelectedTenant(tenant);
+    setView(nextView);
+    setPlaneSignal(planeForView(nextView));
+  });
+  history.pushState(
+    { slug: tenant.slug },
+    "",
+    "/platform/console/" + tenant.slug + "#" + nextView,
+  );
+  void hydrateTenantView(nextView, tenant);
+}
+
 export function backToTenants(tab?: AccountTab): void {
   switchToAccountInternal(tab);
   const hashSuffix = tab && tab !== "tenants" ? "#" + tab : "";
@@ -2052,18 +2074,6 @@ export async function init(): Promise<void> {
         switchToWorkspaceInternal(tenant, initView);
         auth.startAutoRefresh();
         socket.connect(serverUrl + "/ws/ticket");
-        // One-shot welcome toast set by the wizard's hard-nav launch path.
-        // Drained here so the operator sees the confirmation after the page
-        // reload completes.
-        try {
-          const welcome = sessionStorage.getItem("forma:welcome-toast");
-          if (welcome) {
-            sessionStorage.removeItem("forma:welcome-toast");
-            toast.show(welcome, "success");
-          }
-        } catch {
-          // sessionStorage may be unavailable in private browsing — ignore.
-        }
         return;
       }
       // Slug not found — clean up the URL, stay in account mode

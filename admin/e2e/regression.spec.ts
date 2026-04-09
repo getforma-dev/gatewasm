@@ -13,31 +13,29 @@ import { Account, Modal } from './selectors';
 
 // ── 1. Error state recovery: API failure during tenant creation ──────
 
-test('console shows validation feedback for invalid tenant slug @regression', async ({ authedPage }) => {
+test('wizard create step shows validation feedback for invalid tenant slug @regression', async ({ authedPage }) => {
   await authedPage.goto('/platform/console');
   await authedPage.locator(Account.shell).waitFor({ timeout: 10000 });
 
-  // Open create modal
+  // + New Application opens the wizard at the Create step (full-page, not a modal).
   await authedPage.getByRole('button', { name: '+ New Application' }).click();
-  await expect(authedPage.locator(Modal.content)).toBeVisible();
-
-  // Enter an invalid slug — the form should show validation status
-  await authedPage.getByLabel('App Name').fill('Test App');
-  await authedPage.locator('#field-tenant-slug').fill('x');
-
-  // Slug validation should show invalid/taken status (button stays disabled)
   await expect(
-    authedPage.locator(`${Modal.slugInvalid}, ${Modal.slugTaken}`)
+    authedPage.locator('h1.wizard-headline').filter({ hasText: 'Create your application' }),
   ).toBeVisible({ timeout: 5000 });
 
-  // The submit button should be disabled with an invalid slug
-  await expect(
-    authedPage.locator(Modal.content).getByRole('button', { name: 'Create Workspace' })
-  ).toBeDisabled();
+  // Enter an invalid slug — the form should show validation status.
+  await authedPage.getByLabel('App Name').fill('Test App');
+  await authedPage.locator('input[placeholder="acme-app"]').fill('x');
 
-  // Console should still be functional after closing modal
-  await authedPage.keyboard.press('Escape');
-  await expect(authedPage.locator(Account.shell)).toBeVisible();
+  // Slug validation should show invalid status (single-character slug fails).
+  await expect(
+    authedPage.locator('.slug-status-invalid, .slug-status-taken'),
+  ).toBeVisible({ timeout: 5000 });
+
+  // The submit button should be disabled with an invalid slug.
+  await expect(
+    authedPage.getByRole('button', { name: /Create & Continue/ }),
+  ).toBeDisabled();
 });
 
 // ── 2. Concurrent sessions: two tabs same console ────────────────────
@@ -54,11 +52,13 @@ test('two tabs can view the console simultaneously @regression', async ({ browse
     await expect(page1.locator(Account.shell)).toBeVisible({ timeout: 10000 });
     await expect(page2.locator(Account.shell)).toBeVisible({ timeout: 10000 });
 
-    // Action in tab 1 doesn't crash tab 2
+    // Action in tab 1 (open the wizard) doesn't crash tab 2.
     await page1.getByRole('button', { name: '+ New Application' }).click();
-    await expect(page1.locator(Modal.content)).toBeVisible();
+    await expect(
+      page1.locator('h1.wizard-headline').filter({ hasText: 'Create your application' }),
+    ).toBeVisible({ timeout: 5000 });
 
-    // Tab 2 still responsive
+    // Tab 2 still responsive — still in the account shell.
     await expect(page2.locator(Account.shell)).toBeVisible();
 
     await page2.close();
