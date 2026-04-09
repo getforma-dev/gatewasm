@@ -33,6 +33,18 @@ export const test = base.extend<AuthedFixture & TenantFixture>({
     const json = await res.json();
     const id = String(json.tenant?.id || json.id);
 
+    // Bypass onboarding so tests that click the tenant card land in the
+    // workspace shell instead of the wizard. The console gates the workspace
+    // on `onboarding_completed` (commit ae14675).
+    const patchRes = await authedContext.request.patch(
+      BASE + '/platform/self-serve/tenants/' + id,
+      {
+        headers: { Authorization: 'Bearer ' + token },
+        data: { onboarding_completed: true, onboarding_step: 7 },
+      },
+    );
+    expect(patchRes.ok()).toBeTruthy();
+
     await use({ id, slug, name });
 
     try {
