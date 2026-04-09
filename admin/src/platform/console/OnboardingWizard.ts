@@ -8,6 +8,7 @@ import {
   completeOnboarding,
   createTenant,
   currentUser,
+  loadTenants,
   saveSecurityConfig,
   selectedTenant,
   serverUrl,
@@ -167,6 +168,13 @@ const [saving, setSaving] = createSignal(false);
 
 const WIZARD_HASH_PREFIX = "wizard-";
 
+// When the wizard writes to the hash itself (advanceStep / prevStep / mount /
+// handleTenantCreated), the resulting hashchange event MUST be ignored by the
+// listener. Otherwise the listener fires synchronously with stale tenant state
+// (the underlying updateTenant call is fire-and-forget), reads a stale
+// maxReachedStep, and bounces the user back to the previous step.
+let wizardWroteHash = false;
+
 function stepFromHash(): number {
   if (typeof window === "undefined") return -1;
   const raw = window.location.hash.slice(1).toLowerCase();
@@ -176,12 +184,21 @@ function stepFromHash(): number {
   return STEP_LABELS.findIndex((l) => l.toLowerCase() === label);
 }
 
-function setStepHash(step: number): void {
+function setStepHash(step: number, opts: { replace?: boolean } = {}): void {
   if (typeof window === "undefined") return;
   const label = STEP_LABELS[step]?.toLowerCase();
   if (!label) return;
   const target = WIZARD_HASH_PREFIX + label;
-  if (window.location.hash.slice(1) !== target) {
+  if (window.location.hash.slice(1) === target) return;
+  wizardWroteHash = true;
+  if (opts.replace) {
+    // Same path/search, new hash — replaceState avoids piling onto history.
+    history.replaceState(
+      history.state,
+      "",
+      window.location.pathname + window.location.search + "#" + target,
+    );
+  } else {
     window.location.hash = target;
   }
 }
@@ -677,12 +694,25 @@ function StepAuthMethods(): ReturnType<typeof h> {
     available?: boolean;
   }): ReturnType<typeof h> {
     const disabled = opt.available === false;
+    // Outer is a <div>, NOT a <label>. The wizard-toggle inside is already a
+    // <label> wrapping the <input>, so the click hits exactly one form-control
+    // association. A nested-label structure here causes the input's change
+    // event to fire twice — once via each label — which silently undoes the
+    // toggle and made the social provider toggles appear to "flip back."
     return h(
-      "label",
+      "div",
       {
         class: () =>
           "wizard-provider-toggle" +
           (disabled ? " wizard-provider-disabled" : ""),
+        onClick: (e: Event) => {
+          if (disabled) return;
+          // Only react when the click landed OUTSIDE the toggle label — clicks
+          // inside the toggle label are handled by the input's native change.
+          const target = e.target as HTMLElement;
+          if (target.closest(".wizard-toggle")) return;
+          toggleProvider(opt.key);
+        },
       },
       h(
         "div",
@@ -1631,8 +1661,15 @@ function StepLaunch(): ReturnType<typeof h> {
       onboarding_step: 7,
     });
     setSaving(false);
+    if (!updated) return;
     toast.show("Your application is ready", "success");
-    if (updated) completeOnboarding(updated);
+
+    // Refresh the tenants list before completing so the workspace shell
+    // mounts with fresh server data, not the locally-cached wizard tenant.
+    // Without this, the workspace shell can mount with stale signals and
+    // OverviewView/IntegrateView render empty until the operator refreshes.
+    await loadTenants();
+    completeOnboarding(updated);
   }
 
   const SNIPPETS: Record<string, string> = {
@@ -1854,6 +1891,12 @@ export function OnboardingWizard(): ReturnType<typeof h> {
   setWizardStep(step);
   setSaving(false);
 
+  // Sync the URL hash to the resolved step on first mount, using replaceState
+  // so we don't add a history entry. This makes the create step also have a
+  // visible #wizard-create hash and keeps the address bar consistent across
+  // the wizard's lifetime.
+  setStepHash(step, { replace: true });
+
   // Skip-with-defaults confirmation modal state. Local to the wizard mount.
   const [skipModalOpen, setSkipModalOpen] = createSignal(false);
 
@@ -1864,8 +1907,14 @@ export function OnboardingWizard(): ReturnType<typeof h> {
 
   // Browser back/forward syncs the wizard step from the new hash. Clamped to
   // the persisted onboarding_step so forward jumps via the URL bar can't skip
-  // validation.
+  // validation. Programmatic hash writes from the wizard itself are ignored
+  // via the wizardWroteHash sentinel — without that, this listener races with
+  // the in-flight updateTenant call and reads a stale onboarding_step.
   const onHashChange = (): void => {
+    if (wizardWroteHash) {
+      wizardWroteHash = false;
+      return;
+    }
     const idx = stepFromHash();
     if (idx < 0) return;
     const m = selectedTenant() ? 1 : 0;
@@ -1925,8 +1974,15 @@ export function OnboardingWizard(): ReturnType<typeof h> {
             ),
         ),
       ),
+      // Skip is only meaningful for steps where defaults can do the work for
+      // the operator: Intent (1), Auth (2), Branding (3). Create (0) needs a
+      // name + slug, Mode (4) needs an explicit choice, Test (5) has its own
+      // inline "Skip this step" UI, and Launch (6) IS the launch action.
       createShow(
-        () => selectedTenant() !== null,
+        () => {
+          const s = wizardStep();
+          return selectedTenant() !== null && s >= 1 && s <= 3;
+        },
         () =>
           h(
             "button",
