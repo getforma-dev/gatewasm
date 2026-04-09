@@ -174,15 +174,18 @@ test.describe('Auth step redesign', () => {
       // Click the step's Continue button
       await page.locator('.wizard-pane-left .btn.btn-accent').filter({ hasText: /Continue/ }).click();
 
-      // Verify the persisted value via the management API
+      // Verify the persisted value via the management API.
+      // Use a sentinel for missing/null so the assertion fails fast with a
+      // readable diff instead of timing out silently if the field disappears
+      // from the response shape.
       await expect.poll(async () => {
         const res = await request.get(BASE + '/platform/self-serve/tenants/' + tenantId, {
           headers: { 'Authorization': 'Bearer ' + platformToken },
         });
-        if (!res.ok()) return null;
+        if (!res.ok()) return '__http_' + res.status() + '__';
         const body = await res.json();
-        return body.signup_mode;
-      }, { timeout: 5000 }).toBe('open');
+        return body.signup_mode ?? '__missing__';
+      }, { timeout: 5000, message: 'signup_mode should be "open" after Continue' }).toBe('open');
     } finally {
       await close();
     }
@@ -194,9 +197,12 @@ test.describe('Auth step redesign', () => {
     // onboarding_step beyond the auth step) would break openWizardAtAuthStep
     // for any test that runs after it.
     if (!tenantId) return;
-    await patchWithRetry(request, BASE + '/platform/self-serve/tenants/' + tenantId, {
+    const reset = await patchWithRetry(request, BASE + '/platform/self-serve/tenants/' + tenantId, {
       headers: { 'Authorization': 'Bearer ' + platformToken, 'Content-Type': 'application/json' },
       data: { signup_mode: 'invite_only', onboarding_step: 3 },
     });
+    if (!reset.ok()) {
+      throw new Error('afterEach reset failed (' + reset.status() + '): ' + await reset.text());
+    }
   });
 });
