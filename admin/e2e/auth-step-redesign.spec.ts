@@ -261,6 +261,51 @@ test.describe('Auth step redesign', () => {
     }
   });
 
+  test('cannot remove the last sign-in method via the toggle (preventDefault guard) @regression', async ({ browser, request }) => {
+    // Seed exactly one provider so the guard path is exercised on the next click.
+    await setSignupMode(request, 'open');
+    const seed = await patchWithRetry(request, BASE + '/platform/self-serve/tenants/' + tenantId, {
+      headers: { 'Authorization': 'Bearer ' + platformToken, 'Content-Type': 'application/json' },
+      data: { allowed_providers: ['email'] },
+    });
+    if (!seed.ok()) throw new Error('seed failed: ' + await seed.text());
+
+    const { page, close } = await openWizardAtAuthStep(browser);
+    try {
+      const emailRow = page.locator('.wizard-pane-left .wizard-provider-toggle').filter({ hasText: 'Email / Password' });
+      // The input element is visually hidden — clicking it directly via
+      // Playwright would time out waiting for visibility. Click the
+      // .wizard-toggle label instead (the visible target the operator
+      // actually interacts with), which fires the input's click event via
+      // implicit form-control association.
+      const emailLabel = emailRow.locator('label.wizard-toggle');
+      const emailCheckbox = emailRow.locator('input[type="checkbox"]');
+
+      // Email is the only provider — initial state checked.
+      await expect(emailCheckbox).toBeChecked();
+
+      // Click the toggle. The input's onClick handler should call
+      // preventDefault when this would empty the providers list, the browser
+      // should NOT flip the checkbox state, and the checkbox should remain
+      // checked. Regression test for the toggle visual desync bug — without
+      // preventDefault, the browser optimistically flips the visual while
+      // the signal stays the same, leaving the toggle and the live preview
+      // out of sync.
+      await emailLabel.click();
+      await expect(emailCheckbox).toBeChecked();
+
+      // The continue button should remain enabled — providers is still ["email"].
+      const continueBtn = page.locator('.wizard-pane-left .btn.btn-accent').filter({ hasText: /Continue/ });
+      await expect(continueBtn).toBeEnabled();
+
+      // The warning should NOT be visible — providers is non-empty.
+      const warning = page.locator('.wizard-pane-left .wizard-form-warning');
+      await expect(warning).toHaveClass(/wizard-form-warning-hidden/);
+    } finally {
+      await close();
+    }
+  });
+
   test('switching to invite_only and back to open preserves allowed_providers @regression', async ({ browser, request }) => {
     // Seed a non-default allowed_providers list so we can verify it round-trips intact.
     const seeded = ['email', 'magic_link', 'google', 'github'];

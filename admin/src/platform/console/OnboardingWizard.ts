@@ -7,6 +7,7 @@ import {
   checkSlugAvailability,
   createTenant,
   currentUser,
+  preferredTenantView,
   saveSecurityConfig,
   selectedTenant,
   serverUrl,
@@ -268,7 +269,6 @@ async function skipWizard(): Promise<void> {
     onboarding_step: 7,
   });
   if (!updated) return;
-  toast.show("Your application is ready", "success");
   navigateToWorkspace(updated);
 }
 
@@ -280,17 +280,21 @@ async function skipWizard(): Promise<void> {
  * full page load via window.location.href guarantees init() runs and the
  * workspace shell mounts cleanly with the correct view + plane + hydrated
  * data — exactly what the operator's manual refresh would have achieved.
+ *
+ * The welcome toast is persisted to sessionStorage so it survives the page
+ * reload and gets displayed by init() after the workspace shell mounts; an
+ * in-memory toast.show() before navigation would be destroyed by the unload.
  */
 function navigateToWorkspace(tenant: Tenant): void {
   if (typeof window === "undefined") return;
-  const targetView =
-    tenant.preferred_tab === "hosted-page"
-      ? "hosted-page"
-      : tenant.preferred_tab === "integrate"
-        ? "integrate"
-        : "overview";
+  try {
+    sessionStorage.setItem("forma:welcome-toast", "Your application is ready");
+  } catch {
+    // sessionStorage unavailable (private browsing) — toast just won't show.
+  }
+  const targetView = preferredTenantView(tenant);
   window.location.href =
-    "/platform/console/" + tenant.slug + "#" + targetView;
+    "/platform/console/" + encodeURIComponent(tenant.slug) + "#" + targetView;
 }
 
 // ── Step 0: Create Application ────────────────────────────────────────
@@ -653,17 +657,11 @@ function StepAuthMethods(): ReturnType<typeof h> {
     const list = providers();
     if (list.includes(p)) {
       // Always require at least one provider — invited users still need an
-      // auth method to log in after accepting their invite.
-      if (list.length === 1) {
-        // The browser already optimistically flipped the checkbox visual when
-        // the click handler ran. We're refusing the change, so we need to
-        // force a re-render to put the visual back in sync with the (unchanged)
-        // signal value. Setting the signal to a new array reference with the
-        // same contents triggers reactive bindings to re-evaluate, which makes
-        // the input's reactive `checked` attribute restore the correct state.
-        setProviders([...list]);
-        return;
-      }
+      // auth method to log in after accepting their invite. The visual
+      // rejection happens at the click handler via preventDefault (see the
+      // input below); this is a defense-in-depth so anything else that calls
+      // toggleProvider also can't reach the empty state.
+      if (list.length === 1) return;
       setProviders(list.filter((x) => x !== p));
     } else {
       setProviders([...list, p]);
@@ -761,6 +759,18 @@ function StepAuthMethods(): ReturnType<typeof h> {
           type: "checkbox",
           checked: () => providers().includes(opt.key),
           disabled: disabled,
+          // preventDefault on click cancels the browser's optimistic visual
+          // flip BEFORE it happens, so the at-least-one-provider guard can
+          // refuse the change without leaving the visual desynced from the
+          // signal. Reactive boolean attribute bindings in formajs cache the
+          // last applied value and won't re-write the DOM when the signal
+          // hasn't changed, so we can't repair the desync after the fact.
+          onClick: (e: Event) => {
+            const list = providers();
+            if (list.length === 1 && list.includes(opt.key)) {
+              e.preventDefault();
+            }
+          },
           onChange: () => toggleProvider(opt.key),
         }),
         h("span", { class: "wizard-toggle-track" }),
@@ -1693,7 +1703,10 @@ function StepLaunch(): ReturnType<typeof h> {
       setSaving(false);
       return;
     }
-    toast.show("Your application is ready", "success");
+    // Note: setSaving is intentionally NOT cleared on the happy path — the
+    // navigateToWorkspace call below triggers a full page reload, so the
+    // current saving signal will be discarded along with the rest of the
+    // module state. Clearing it would just flicker the button label.
     navigateToWorkspace(updated);
   }
 
