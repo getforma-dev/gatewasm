@@ -152,26 +152,48 @@ const [saving, setSaving] = createSignal(false);
 
 // ── Hash navigation ────────────────────────────────────────────────────
 //
-// The wizard uses URL hash fragments (#create, #intent, #auth, #branding,
-// #mode, #test, #launch) for in-session step navigation. Fragments don't
-// trigger page loads or re-fetches — they just keep the wizard's single
-// component mounted while letting the browser back/forward and refresh
-// behave naturally. The onboarding_step field still persists to the server
-// for cross-session resume; the hash is purely client-side.
+// The wizard uses prefixed URL hash fragments (#wizard-create, #wizard-intent,
+// #wizard-auth, #wizard-branding, #wizard-mode, #wizard-test, #wizard-launch)
+// for in-session step navigation. The prefix avoids collision with the
+// console's view-based hash routing (#overview, #integrate, etc.) and tab
+// routing (#tenants, #team, etc.) — bare wizard step names like "auth" or
+// "launch" could otherwise be mis-interpreted by the console's hashchange
+// listener after the wizard unmounts.
+//
+// Forward navigation through the wizard is gated on the persisted
+// onboarding_step — typing #wizard-launch in the URL won't let a user jump
+// past auth validation. Backward navigation to any previously-reached step
+// works normally.
+
+const WIZARD_HASH_PREFIX = "wizard-";
 
 function stepFromHash(): number {
   if (typeof window === "undefined") return -1;
-  const hash = window.location.hash.slice(1).toLowerCase();
-  if (!hash) return -1;
-  return STEP_LABELS.findIndex((l) => l.toLowerCase() === hash);
+  const raw = window.location.hash.slice(1).toLowerCase();
+  if (!raw.startsWith(WIZARD_HASH_PREFIX)) return -1;
+  const label = raw.slice(WIZARD_HASH_PREFIX.length);
+  if (!label) return -1;
+  return STEP_LABELS.findIndex((l) => l.toLowerCase() === label);
 }
 
 function setStepHash(step: number): void {
   if (typeof window === "undefined") return;
   const label = STEP_LABELS[step]?.toLowerCase();
-  if (label && window.location.hash.slice(1) !== label) {
-    window.location.hash = label;
+  if (!label) return;
+  const target = WIZARD_HASH_PREFIX + label;
+  if (window.location.hash.slice(1) !== target) {
+    window.location.hash = target;
   }
+}
+
+/** Highest step index the operator has actually reached, given the persisted onboarding_step. */
+function maxReachedStep(): number {
+  const t = selectedTenant();
+  if (!t) return 0;
+  // onboarding_step is 1-indexed and points at the NEXT step to reach. The
+  // highest step the user has unlocked is therefore onboarding_step - 1,
+  // capped at the last index (6).
+  return Math.min(Math.max(t.onboarding_step - 1, 1), 6);
 }
 
 // ── Navigation ─────────────────────────────────────────────────────────
@@ -1590,6 +1612,20 @@ function StepLaunch(): ReturnType<typeof h> {
 
   async function handleLaunch(): Promise<void> {
     setSaving(true);
+    // Defensive backfill: if the operator somehow reached Launch with empty
+    // providers (e.g. legacy data, manual API patch), restore the intent
+    // defaults so the launched tenant always has at least one usable sign-in
+    // method. The wizard's normal flow can't reach this state, but Launch is
+    // the last gate before a tenant goes live so we belt-and-suspender it.
+    const currentProviders =
+      (tenant.allowed_providers as string[] | undefined) || [];
+    if (currentProviders.length === 0) {
+      const intent = (tenant.tenant_intent as TenantIntent) || "saas";
+      const intentDefaults = INTENT_DEFAULTS[intent] || INTENT_DEFAULTS.saas;
+      await updateTenant(tenant.id, {
+        allowed_providers: intentDefaults.allowed_providers,
+      });
+    }
     const updated = await updateTenant(tenant.id, {
       onboarding_completed: true,
       onboarding_step: 7,
@@ -1802,13 +1838,16 @@ export function OnboardingWizard(): ReturnType<typeof h> {
   const tenant = selectedTenant();
 
   // Determine initial step. URL hash takes precedence (deep-linkable / refresh-
-  // safe), otherwise fall back to the persisted onboarding_step. If no tenant
-  // exists yet (fresh create flow), start at step 0.
+  // safe), but is clamped to the highest step the operator has actually reached
+  // so #wizard-launch in the URL can't bypass earlier validation. Falls back to
+  // the persisted onboarding_step. If no tenant exists yet (fresh create flow),
+  // start at step 0.
   const minStep = tenant ? 1 : 0;
+  const ceiling = tenant ? maxReachedStep() : 0;
   const hashStep = stepFromHash();
   const step =
     hashStep >= 0
-      ? Math.min(Math.max(hashStep, minStep), 6)
+      ? Math.min(Math.max(hashStep, minStep), ceiling)
       : tenant
         ? Math.min(Math.max(tenant.onboarding_step - 1, 1), 6)
         : 0;
@@ -1823,14 +1862,22 @@ export function OnboardingWizard(): ReturnType<typeof h> {
     await skipWizard();
   }
 
-  // Browser back/forward syncs the wizard step from the new hash.
+  // Browser back/forward syncs the wizard step from the new hash. Clamped to
+  // the persisted onboarding_step so forward jumps via the URL bar can't skip
+  // validation.
   const onHashChange = (): void => {
     const idx = stepFromHash();
     if (idx < 0) return;
     const m = selectedTenant() ? 1 : 0;
-    const clamped = Math.min(Math.max(idx, m), 6);
+    const max = maxReachedStep();
+    const clamped = Math.min(Math.max(idx, m), max);
     if (clamped !== wizardStep()) {
       setWizardStep(clamped);
+    }
+    // If the URL hash was higher than the user could actually reach, rewrite
+    // the hash to match the clamped step so the address bar stays honest.
+    if (idx !== clamped) {
+      setStepHash(clamped);
     }
   };
   if (typeof window !== "undefined") {
@@ -1844,7 +1891,17 @@ export function OnboardingWizard(): ReturnType<typeof h> {
     // Set the tenant in the store so subsequent wizard steps can access it
     setSelectedTenant(created);
     setWizardStep(1);
-    setStepHash(1);
+    // Push the URL with the slug AND the wizard hash so it matches the
+    // console's path convention (/platform/console/{slug}#...). Without the
+    // slug in the path, refresh-resume bounces the operator to the account
+    // view because init() can't match the tenant from the URL.
+    if (typeof window !== "undefined") {
+      history.pushState(
+        null,
+        "",
+        "/platform/console/" + created.slug + "#" + WIZARD_HASH_PREFIX + "intent",
+      );
+    }
     void updateTenant(created.id, { onboarding_step: 2 });
   }
 
