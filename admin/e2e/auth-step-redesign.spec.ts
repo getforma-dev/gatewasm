@@ -174,29 +174,26 @@ test.describe('Auth step redesign', () => {
       await expect(inviteOption).toHaveClass(/active/);
       await expect(openOption).not.toHaveClass(/active/);
 
-      // In invite_only the Credentials/Social/Pro sections are visually hidden
-      // (they remain in the DOM, hidden via the .is-hidden display:none class)
-      // and the invite_only note is shown.
-      const note = page.locator('.wizard-pane-left .wizard-invite-only-note');
+      // Credentials/Social/Pro sections stay visible regardless of signup_mode —
+      // invited users still need configurable auth methods to log in.
       const credentialsGroup = page.locator('.wizard-pane-left .wizard-provider-group').filter({ hasText: 'Credentials' });
       const socialGroup = page.locator('.wizard-pane-left .wizard-provider-group').filter({ hasText: 'Social Providers' });
       const proSection = page.locator('.wizard-pane-left .wizard-pro-section');
+      await expect(credentialsGroup).toBeVisible();
+      await expect(socialGroup).toBeVisible();
+      await expect(proSection).toBeVisible();
 
-      await expect(note).toBeVisible();
-      await expect(note).not.toHaveClass(/wizard-section-hidden/);
-      await expect(credentialsGroup).toHaveClass(/wizard-section-hidden/);
-      await expect(socialGroup).toHaveClass(/wizard-section-hidden/);
-      await expect(proSection).toHaveClass(/wizard-section-hidden/);
+      // The right-pane Live Preview reflects signup_mode by hiding the
+      // "Don't have an account? Sign up" link in invite_only.
+      const previewSignupLink = page.locator('.wizard-pane-right .lp-toggle');
+      await expect(previewSignupLink).toHaveCount(0);
 
-      // Click Open and verify the active class moves AND the hidden sections reappear.
+      // Click Open and verify the active class moves AND the preview signup link reappears.
       await openOption.click();
       await expect(openOption).toHaveClass(/active/);
       await expect(inviteOption).not.toHaveClass(/active/);
-      await expect(note).toHaveClass(/wizard-section-hidden/);
-      await expect(credentialsGroup).toBeVisible();
-      await expect(credentialsGroup).not.toHaveClass(/wizard-section-hidden/);
-      await expect(socialGroup).toBeVisible();
-      await expect(proSection).toBeVisible();
+      await expect(previewSignupLink).toBeVisible();
+      await expect(previewSignupLink).toContainText('Sign up');
     } finally {
       await close();
     }

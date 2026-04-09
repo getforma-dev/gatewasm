@@ -3809,26 +3809,6 @@
   line-height: 1.35;
 }
 
-.wizard-invite-only-note {
-  font-size: 0.78rem;
-  color: var(--text-muted);
-  background: var(--surface-raised);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 10px 14px;
-  margin-bottom: 20px;
-  line-height: 1.45;
-}
-
-/* Reactive visibility helper used by wizard sections that hide based on
-   signup_mode (e.g. Credentials/Social/Pro hidden when invite_only,
-   the invite_only note hidden when open). Class is toggled via the
-   reactive class: () => ... binding in StepAuthMethods. Scoped to a
-   wizard-specific name to avoid collisions with any future descendant
-   class anywhere on the page. */
-.wizard-section-hidden {
-  display: none;
-}
 
 /* Mode selection (Step 3) */
 

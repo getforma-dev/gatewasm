@@ -730,32 +730,14 @@ function StepAuthMethods(): ReturnType<typeof h> {
 
       h(
         "div",
-        {
-          class: () =>
-            "wizard-invite-only-note" +
-            (signupMode() === "invite_only" ? "" : " wizard-section-hidden"),
-        },
-        "Invited users sign in via the link in their invite email \u2014 no additional setup needed. Switch to Open to enable public sign-up methods.",
-      ),
-
-      h(
-        "div",
-        {
-          class: () =>
-            "wizard-provider-group" +
-            (signupMode() === "open" ? "" : " wizard-section-hidden"),
-        },
+        { class: "wizard-provider-group" },
         h("div", { class: "wizard-provider-group-label" }, "Credentials"),
         ...CREDENTIAL_PROVIDERS.map((p) => ProviderToggle(p)),
       ),
 
       h(
         "div",
-        {
-          class: () =>
-            "wizard-provider-group" +
-            (signupMode() === "open" ? "" : " wizard-section-hidden"),
-        },
+        { class: "wizard-provider-group" },
         h(
           "div",
           { class: "wizard-provider-group-label" },
@@ -766,11 +748,7 @@ function StepAuthMethods(): ReturnType<typeof h> {
 
       h(
         "div",
-        {
-          class: () =>
-            "wizard-pro-section" +
-            (signupMode() === "open" ? "" : " wizard-section-hidden"),
-        },
+        { class: "wizard-pro-section" },
         h(
           "div",
           { class: "wizard-pro-header" },
@@ -840,6 +818,7 @@ function StepAuthMethods(): ReturnType<typeof h> {
         buttonText: previewButtonText,
         providers,
         slug: () => tenant.slug,
+        signupMode,
       }),
     ),
   );
@@ -1249,6 +1228,7 @@ function StepBranding(): ReturnType<typeof h> {
         customCSS: () => "",
         fontFamily,
         textColor,
+        signupMode: () => (tenant.signup_mode as string | undefined) || "open",
       }),
     ),
   );

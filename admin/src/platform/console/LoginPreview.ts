@@ -23,6 +23,13 @@ interface LoginPreviewProps {
   customCSS?: () => string;
   fontFamily?: () => string;
   textColor?: () => string;
+  /**
+   * Controls whether the "Don't have an account? Sign up" link renders.
+   * "open" → link visible (anyone can sign up).
+   * "invite_only" → link hidden (only invited users can sign in).
+   * Optional; defaults to "open" so existing call sites are unchanged.
+   */
+  signupMode?: () => string;
 }
 
 // Token-accurate defaults from tokens.css
@@ -238,11 +245,15 @@ export function LoginPreview(props: LoginPreviewProps) {
           ),
         ),
 
-        h(
-          "div",
-          { class: "lp-toggle" },
-          "Don\u2019t have an account? ",
-          h("span", { class: "lp-toggle-link" }, "Sign up"),
+        createShow(
+          () => (props.signupMode ? props.signupMode() : "open") !== "invite_only",
+          () =>
+            h(
+              "div",
+              { class: "lp-toggle" },
+              "Don\u2019t have an account? ",
+              h("span", { class: "lp-toggle-link" }, "Sign up"),
+            ),
         ),
 
         h(
