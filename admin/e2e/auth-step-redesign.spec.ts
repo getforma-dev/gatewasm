@@ -239,9 +239,9 @@ test.describe('Auth step redesign', () => {
     const { page, close } = await openWizardAtAuthStep(browser);
     try {
       // Inline warning is in the DOM and NOT hidden when providers is empty.
-      // Using class-based assertions instead of toBeVisible() because the
-      // warning sits below a long pane and Playwright's viewport-relative
-      // visibility check is unreliable when content scrolls.
+      // Asserting explicit class state to make the visibility contract
+      // (`.wizard-form-warning-hidden` toggles `display: none`) load-bearing,
+      // so any future CSS regression on the hidden helper would surface here.
       const warning = page.locator('.wizard-pane-left .wizard-form-warning');
       await expect(warning).toHaveCount(1);
       await expect(warning).toContainText('at least one sign-in method');
@@ -305,7 +305,7 @@ test.describe('Auth step redesign', () => {
     if (!tenantId) return;
     const reset = await patchWithRetry(request, BASE + '/platform/self-serve/tenants/' + tenantId, {
       headers: { 'Authorization': 'Bearer ' + platformToken, 'Content-Type': 'application/json' },
-      data: { signup_mode: 'open', onboarding_step: 3 },
+      data: { signup_mode: 'open', onboarding_step: 3, allowed_providers: ['email', 'google'] },
     });
     if (!reset.ok()) {
       throw new Error('afterEach reset failed (' + reset.status() + '): ' + await reset.text());

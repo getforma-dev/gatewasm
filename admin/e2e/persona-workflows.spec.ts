@@ -233,7 +233,7 @@ test.describe('Persona: Agency Multi-Tenant', () => {
       await expect(page.getByText('Your Applications')).toBeVisible();
 
       // ── Select first tenant ──────────────────────────────────────
-      await page.locator(Account.tabs).getByRole('button', { name: 'Tenants' }).click();
+      await page.locator(Account.tabs).getByRole('button', { name: 'Applications' }).click();
       await page.waitForTimeout(500);
 
       await page.locator('.tenant-card').filter({ hasText: 'Client Alpha' }).first().click();
@@ -306,7 +306,7 @@ test.describe('Navigation Completeness', () => {
 
       // ── Account Mode: 3 tabs ─────────────────────────────────────
       const accountTabs = page.locator(Account.tabs);
-      await expect(accountTabs.getByRole('button', { name: 'Tenants' })).toBeVisible();
+      await expect(accountTabs.getByRole('button', { name: 'Applications' })).toBeVisible();
       await expect(accountTabs.getByRole('button', { name: 'API Keys' })).toBeVisible();
       await expect(accountTabs.getByRole('button', { name: 'Settings' })).toBeVisible();
 
@@ -321,7 +321,7 @@ test.describe('Navigation Completeness', () => {
       await expect(page.getByText('Profile', { exact: true })).toBeVisible();
 
       // Go back to Tenants and select one
-      await accountTabs.getByRole('button', { name: 'Tenants' }).click();
+      await accountTabs.getByRole('button', { name: 'Applications' }).click();
       await page.waitForTimeout(500);
       await page.locator('.tenant-card').filter({ hasText: 'Nav Test' }).first().click();
       await page.waitForTimeout(1000);

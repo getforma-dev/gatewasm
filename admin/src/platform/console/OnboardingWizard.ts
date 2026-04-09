@@ -213,11 +213,17 @@ async function skipWizard(): Promise<void> {
   } else {
     // Tenant already has an intent set, but allowed_providers may have been
     // emptied while the operator was navigating the wizard. Defensive backfill
-    // so the launched tenant always has at least one usable sign-in method.
+    // with the intent's defaults — this matches what the skip modal preview
+    // shows the operator they'll get, so the modal can't lie about providers.
     const currentProviders =
       (tenant.allowed_providers as string[] | undefined) || [];
     if (currentProviders.length === 0) {
-      await updateTenant(tenant.id, { allowed_providers: ["email"] });
+      const intent = (tenant.tenant_intent as TenantIntent) || "saas";
+      const intentDefaults =
+        INTENT_DEFAULTS[intent] || INTENT_DEFAULTS.saas;
+      await updateTenant(tenant.id, {
+        allowed_providers: intentDefaults.allowed_providers,
+      });
     }
   }
   const updated = await updateTenant(tenant.id, {
@@ -1838,6 +1844,7 @@ export function OnboardingWizard(): ReturnType<typeof h> {
     // Set the tenant in the store so subsequent wizard steps can access it
     setSelectedTenant(created);
     setWizardStep(1);
+    setStepHash(1);
     void updateTenant(created.id, { onboarding_step: 2 });
   }
 
@@ -1963,7 +1970,7 @@ export function OnboardingWizard(): ReturnType<typeof h> {
             h(
               "p",
               { class: "wizard-modal-body" },
-              "Here\u2019s how your sign-in page will look with our defaults. Anything you\u2019ve already configured will be preserved.",
+              "Here\u2019s how your sign-in page will look. We\u2019ll fill in sensible defaults for anything you haven\u2019t configured yet.",
             ),
 
             h(
