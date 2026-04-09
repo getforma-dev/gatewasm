@@ -2,7 +2,7 @@
 
 **Date:** 2026-04-09
 **Status:** Approved
-**Scope:** Onboarding wizard, auth step (`StepAuth` in `admin/src/platform/console/OnboardingWizard.ts`) — UI redesign + access-mode wire-up. No new backend providers.
+**Scope:** Onboarding wizard, auth step (`StepAuthMethods` in `admin/src/platform/console/OnboardingWizard.ts:538`) — UI redesign + access-mode wire-up. No new backend providers.
 
 ---
 
@@ -16,7 +16,7 @@ A second, smaller problem: the credential and social groups are missing slots fo
 
 ## Solution
 
-Restructure `StepAuth` into a three-layer model that mirrors how identity platforms describe themselves:
+Restructure `StepAuthMethods` into a three-layer model that mirrors how identity platforms describe themselves:
 
 1. **Access** — *who* can sign up. New segmented control wired to `signup_mode`, pre-filled from intent defaults.
 2. **Credentials & Social** — *how* users prove identity. Existing groups, expanded with slots for Email OTP, Passkey, Microsoft, and Apple as "Coming soon."
@@ -101,8 +101,8 @@ No schema changes. Two existing fields are involved:
 
 | Field | Where it lives today | What changes |
 |---|---|---|
-| `tenants.signup_mode` (TEXT, default `'open'`) | Migration `020_tenant_signup_mode_and_invites.sql` (archived). Field exists in `Tenant` type and `INTENT_DEFAULTS`. | Now persisted from `StepAuth` via `updateTenant` instead of only being set indirectly at step 2. |
-| `tenants.allowed_providers` (TEXT[]) | Already wired through `StepAuth` | Unchanged. |
+| `tenants.signup_mode` (TEXT, default `'open'`) | Migration `020_tenant_signup_mode_and_invites.sql` (archived). Field exists in `Tenant` type and `INTENT_DEFAULTS`. | Now persisted from `StepAuthMethods` via `updateTenant` instead of only being set indirectly at step 2. |
+| `tenants.allowed_providers` (TEXT[]) | Already wired through `StepAuthMethods` | Unchanged. |
 
 `INTENT_DEFAULTS[intent].signup_mode` already provides the pre-fill values:
 
@@ -118,7 +118,7 @@ No schema changes. Two existing fields are involved:
 
 ## 4. Component Changes
 
-All changes are inside `StepAuth` in `admin/src/platform/console/OnboardingWizard.ts`. No new files.
+All changes are inside `StepAuthMethods` in `admin/src/platform/console/OnboardingWizard.ts`. No new files.
 
 ### 4.1 New `signupMode` signal
 
@@ -241,7 +241,7 @@ This is an implementation-time concern and does not affect the design.
 
 ## 8. Files Touched
 
-- `admin/src/platform/console/OnboardingWizard.ts` — `StepAuth` only. No changes outside this function except possibly a small CSS addition for the segmented control if no existing primitive applies.
+- `admin/src/platform/console/OnboardingWizard.ts` — `StepAuthMethods` only. No changes outside this function except possibly a small CSS addition for the segmented control if no existing primitive applies.
 - `admin/src/styles/...` — possibly one new class for the segmented control. Defer until implementation reads the existing CSS.
 
 No backend changes, no migrations, no new types, no new files.
