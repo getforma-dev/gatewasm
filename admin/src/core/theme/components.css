@@ -3809,6 +3809,118 @@
   line-height: 1.35;
 }
 
+/* Inline form warning (e.g. "pick at least one method to continue") */
+
+.wizard-form-warning {
+  font-size: 0.82rem;
+  color: var(--danger);
+  background: var(--danger-dim);
+  border: 1px solid var(--danger-border);
+  border-radius: 8px;
+  padding: 10px 14px;
+  margin-bottom: 12px;
+  line-height: 1.45;
+}
+
+.wizard-form-warning-hidden {
+  display: none;
+}
+
+/* Skip-with-defaults confirmation modal */
+
+.wizard-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 20px;
+  backdrop-filter: blur(4px);
+}
+
+.wizard-modal {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 28px 32px;
+  max-width: 520px;
+  width: 100%;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.5);
+  max-height: 90vh;
+  overflow-y: auto;
+}
+
+.wizard-skip-modal {
+  max-width: 560px;
+}
+
+.wizard-modal-title {
+  font-size: 1.25rem;
+  margin: 0 0 8px;
+  color: var(--text);
+}
+
+.wizard-modal-body {
+  font-size: 0.9rem;
+  color: var(--text-dim);
+  margin: 0 0 16px;
+  line-height: 1.5;
+}
+
+.wizard-skip-modal-preview {
+  margin: 0 0 16px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+  /* Constrain the LoginPreview height inside the modal so the whole thing
+     fits on a typical viewport. The preview is responsive within. */
+  max-height: 320px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--surface-raised);
+}
+
+.wizard-skip-modal-preview > * {
+  transform: scale(0.85);
+  transform-origin: center;
+}
+
+.wizard-modal-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 14px 16px;
+  margin-bottom: 14px;
+}
+
+.wizard-modal-list-item {
+  font-size: 0.85rem;
+  color: var(--text);
+  line-height: 1.4;
+}
+
+.wizard-modal-list-item strong {
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.wizard-modal-hint {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  margin: 0 0 20px;
+}
+
+.wizard-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+}
 
 /* Mode selection (Step 3) */
 

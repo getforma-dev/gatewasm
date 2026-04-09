@@ -210,6 +210,15 @@ async function skipWizard(): Promise<void> {
       max_sessions_per_user: defaults.max_sessions_per_user,
       mfa_policy: defaults.mfa_policy,
     });
+  } else {
+    // Tenant already has an intent set, but allowed_providers may have been
+    // emptied while the operator was navigating the wizard. Defensive backfill
+    // so the launched tenant always has at least one usable sign-in method.
+    const currentProviders =
+      (tenant.allowed_providers as string[] | undefined) || [];
+    if (currentProviders.length === 0) {
+      await updateTenant(tenant.id, { allowed_providers: ["email"] });
+    }
   }
   const updated = await updateTenant(tenant.id, {
     onboarding_completed: true,
@@ -578,7 +587,9 @@ function StepAuthMethods(): ReturnType<typeof h> {
   function toggleProvider(p: string): void {
     const list = providers();
     if (list.includes(p)) {
-      if (p === "email" && list.length === 1) return;
+      // Always require at least one provider — invited users still need an
+      // auth method to log in after accepting their invite.
+      if (list.length === 1) return;
       setProviders(list.filter((x) => x !== p));
     } else {
       setProviders([...list, p]);
@@ -586,6 +597,7 @@ function StepAuthMethods(): ReturnType<typeof h> {
   }
 
   async function handleContinue(): Promise<void> {
+    if (providers().length === 0) return; // defensive: button is also disabled
     setSaving(true);
     await updateTenant(tenant.id, {
       allowed_providers: providers(),
@@ -792,13 +804,23 @@ function StepAuthMethods(): ReturnType<typeof h> {
 
       h(
         "div",
+        {
+          class: () =>
+            "wizard-form-warning" +
+            (providers().length === 0 ? "" : " wizard-form-warning-hidden"),
+        },
+        "Pick at least one sign-in method to continue. Invited users still need a way to sign in after they accept their invite.",
+      ),
+
+      h(
+        "div",
         { class: "wizard-actions" },
         h(
           "button",
           {
             type: "button",
             class: "btn btn-accent",
-            disabled: () => saving(),
+            disabled: () => saving() || providers().length === 0,
             onClick: () => void handleContinue(),
           },
           () => (saving() ? "Saving\u2026" : "Continue \u2192"),
@@ -1787,6 +1809,14 @@ export function OnboardingWizard(): ReturnType<typeof h> {
   setWizardStep(step);
   setSaving(false);
 
+  // Skip-with-defaults confirmation modal state. Local to the wizard mount.
+  const [skipModalOpen, setSkipModalOpen] = createSignal(false);
+
+  async function handleAcceptDefaults(): Promise<void> {
+    setSkipModalOpen(false);
+    await skipWizard();
+  }
+
   // Browser back/forward syncs the wizard step from the new hash.
   const onHashChange = (): void => {
     const idx = stepFromHash();
@@ -1839,7 +1869,7 @@ export function OnboardingWizard(): ReturnType<typeof h> {
             {
               type: "button",
               class: "wizard-skip",
-              onClick: () => void skipWizard(),
+              onClick: () => setSkipModalOpen(true),
             },
             "Skip setup \u2192",
           ),
@@ -1890,6 +1920,126 @@ export function OnboardingWizard(): ReturnType<typeof h> {
             "\u2190 Back",
           ),
         ),
+    ),
+
+    // Skip-with-defaults confirmation modal. Renders the live preview of
+    // the default sign-in page so the operator can see what they're getting.
+    createShow(
+      skipModalOpen,
+      () => {
+        const t = selectedTenant();
+        const intent =
+          ((t?.tenant_intent as TenantIntent | null) || "saas") as TenantIntent;
+        const defaults = INTENT_DEFAULTS[intent];
+        const previewName = () => t?.branding_app_name || t?.name || "Your App";
+        const previewSlug = () => t?.slug || "your-app";
+        const previewProviders = () =>
+          ((t?.allowed_providers as string[] | undefined) ?? []).length > 0
+            ? (t!.allowed_providers as string[])
+            : defaults.allowed_providers;
+        const previewSignupMode = () =>
+          (t?.signup_mode as string | undefined) || defaults.signup_mode;
+        const surfaceLabel =
+          defaults.preferred_tab === "hosted-page"
+            ? "Hosted login page"
+            : "SDK / Bridge integration";
+
+        return h(
+          "div",
+          {
+            class: "wizard-modal-overlay",
+            onClick: (e: Event) => {
+              if (e.target === e.currentTarget) setSkipModalOpen(false);
+            },
+          },
+          h(
+            "div",
+            { class: "wizard-modal wizard-skip-modal" },
+            h(
+              "h2",
+              { class: "wizard-modal-title" },
+              "Skip setup with defaults?",
+            ),
+            h(
+              "p",
+              { class: "wizard-modal-body" },
+              "Here\u2019s how your sign-in page will look with our defaults. Anything you\u2019ve already configured will be preserved.",
+            ),
+
+            h(
+              "div",
+              { class: "wizard-skip-modal-preview" },
+              LoginPreview({
+                appName: previewName,
+                logoUrl: () => t?.branding_logo_url || "",
+                primaryColor: () =>
+                  t?.branding_primary_color || "#6366f1",
+                darkMode: () => t?.branding_dark_mode ?? true,
+                buttonText: () => t?.branding_button_text || "Sign in",
+                providers: previewProviders,
+                slug: previewSlug,
+                signupMode: previewSignupMode,
+              }),
+            ),
+
+            h(
+              "div",
+              { class: "wizard-modal-list" },
+              h(
+                "div",
+                { class: "wizard-modal-list-item" },
+                h("strong", null, "Sign-in: "),
+                () => previewProviders().join(", "),
+              ),
+              h(
+                "div",
+                { class: "wizard-modal-list-item" },
+                h("strong", null, "Access: "),
+                () =>
+                  previewSignupMode() === "invite_only"
+                    ? "Invite-only"
+                    : "Open \u2014 anyone can sign up",
+              ),
+              h(
+                "div",
+                { class: "wizard-modal-list-item" },
+                h("strong", null, "Surface: "),
+                surfaceLabel,
+              ),
+            ),
+
+            h(
+              "p",
+              { class: "wizard-modal-hint" },
+              "You can change all of these later from Settings.",
+            ),
+
+            h(
+              "div",
+              { class: "wizard-modal-actions" },
+              h(
+                "button",
+                {
+                  type: "button",
+                  class: "btn btn-ghost",
+                  onClick: () => setSkipModalOpen(false),
+                },
+                "Customize instead",
+              ),
+              h(
+                "button",
+                {
+                  type: "button",
+                  class: "btn btn-accent",
+                  disabled: () => saving(),
+                  onClick: () => void handleAcceptDefaults(),
+                },
+                () => (saving() ? "Saving\u2026" : "Accept defaults \u2192"),
+              ),
+            ),
+          ),
+        );
+      },
     ),
   );
 }

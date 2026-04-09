@@ -228,6 +228,39 @@ test.describe('Auth step redesign', () => {
     }
   });
 
+  test('Continue button is disabled and warning shows when allowed_providers is empty @regression', async ({ browser, request }) => {
+    // Force the tenant into the broken empty state, then open the wizard.
+    const empty = await patchWithRetry(request, BASE + '/platform/self-serve/tenants/' + tenantId, {
+      headers: { 'Authorization': 'Bearer ' + platformToken, 'Content-Type': 'application/json' },
+      data: { allowed_providers: [] },
+    });
+    if (!empty.ok()) throw new Error('seed empty providers failed: ' + await empty.text());
+
+    const { page, close } = await openWizardAtAuthStep(browser);
+    try {
+      // Inline warning is in the DOM and NOT hidden when providers is empty.
+      // Using class-based assertions instead of toBeVisible() because the
+      // warning sits below a long pane and Playwright's viewport-relative
+      // visibility check is unreliable when content scrolls.
+      const warning = page.locator('.wizard-pane-left .wizard-form-warning');
+      await expect(warning).toHaveCount(1);
+      await expect(warning).toContainText('at least one sign-in method');
+      await expect(warning).not.toHaveClass(/wizard-form-warning-hidden/);
+
+      // Continue button is disabled
+      const continueBtn = page.locator('.wizard-pane-left .btn.btn-accent').filter({ hasText: /Continue/ });
+      await expect(continueBtn).toBeDisabled();
+
+      // Toggle email on — warning hides, button enables
+      const emailRow = page.locator('.wizard-pane-left .wizard-provider-toggle').filter({ hasText: 'Email / Password' });
+      await emailRow.click();
+      await expect(warning).toHaveClass(/wizard-form-warning-hidden/);
+      await expect(continueBtn).toBeEnabled();
+    } finally {
+      await close();
+    }
+  });
+
   test('switching to invite_only and back to open preserves allowed_providers @regression', async ({ browser, request }) => {
     // Seed a non-default allowed_providers list so we can verify it round-trips intact.
     const seeded = ['email', 'magic_link', 'google', 'github'];
