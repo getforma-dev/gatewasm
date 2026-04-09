@@ -342,6 +342,215 @@ test.describe('Auth step redesign', () => {
     }
   });
 
+  test('complete wizard walkthrough from + New Application to Launch Dashboard @regression', async ({ browser, request }) => {
+    // Walks the entire onboarding wizard end-to-end as a real operator would,
+    // verifying URL hash transitions, single-click Continue advancement, the
+    // last-provider guard, the skip-button visibility per step, and the final
+    // launch hard-navigation. Catches regressions in the integration of every
+    // step's Continue handler with the hash-navigation race fix.
+
+    const walkthroughSlug = 'walkthrough-' + Date.now().toString(36);
+    const walkthroughName = 'Walkthrough App ' + Date.now();
+    let walkthroughTenantId: string | null = null;
+
+    const context = await browser.newContext();
+    const page = await context.newPage();
+
+    // Capture page errors so any thrown ReferenceError / TypeError surfaces in
+    // the failure output. Without this, an exception thrown during a render
+    // can bubble into a parent try/catch (e.g. inside updateTenant) and look
+    // like a generic API failure with no clue what's actually wrong.
+    const pageErrors: string[] = [];
+    page.on('pageerror', (err) => {
+      pageErrors.push(err.message);
+    });
+    page.on('console', (msg) => {
+      if (msg.type() === 'error') {
+        pageErrors.push('console.error: ' + msg.text());
+      }
+    });
+    page.on('pageerror', (err) => {
+      consoleErrors.push('PAGEERROR: ' + err.message);
+    });
+
+    try {
+      // Browser-context login (creates the refresh cookie).
+      const loginRes = await context.request.post(BASE + '/auth/login', {
+        headers: { 'X-Tenant-Slug': 'platform', 'Content-Type': 'application/json' },
+        data: { email: platformEmail, password: platformPassword },
+      });
+      if (!loginRes.ok()) throw new Error('Walkthrough login failed: ' + await loginRes.text());
+
+      // Land on the console account view.
+      await page.goto(BASE + '/platform/console');
+      await expect(page.getByRole('button', { name: '+ New Application' })).toBeVisible({ timeout: 10000 });
+
+      // ── Step 0: Create ────────────────────────────────────────────────
+      await page.getByRole('button', { name: '+ New Application' }).click();
+      await expect(page.locator('h1.wizard-headline').filter({ hasText: 'Create your application' })).toBeVisible();
+
+      // Skip Setup button is HIDDEN on Create (per per-step visibility rule).
+      await expect(page.locator('.wizard-skip')).toHaveCount(0);
+
+      // Fill name → slug auto-derives → manually overwrite slug for predictability.
+      await page.getByLabel('App Name').fill(walkthroughName);
+      // The slug input doesn't have an accessible label; use the placeholder.
+      const slugInput = page.locator('input[placeholder="acme-app"]');
+      await slugInput.fill(walkthroughSlug);
+
+      // Wait for slug availability check (debounced 500ms).
+      await expect(page.locator('.slug-status-available')).toBeVisible({ timeout: 8000 });
+
+      // Single-click advance.
+      await page.getByRole('button', { name: /Create & Continue/ }).click();
+
+      // Capture tenant id for cleanup. Wait for the wizard to advance first.
+      await expect(page.locator('h1.wizard-headline').filter({ hasText: 'What are you building' })).toBeVisible({ timeout: 8000 });
+      expect(new URL(page.url()).hash).toBe('#wizard-intent');
+      expect(new URL(page.url()).pathname).toContain(walkthroughSlug);
+
+      // Look up the tenant id by slug for cleanup.
+      const listRes = await request.get(BASE + '/platform/self-serve/tenants', {
+        headers: { 'Authorization': 'Bearer ' + platformToken },
+      });
+      const listBody = await listRes.json();
+      const found = (listBody.tenants || []).find((t: { slug: string; id: string }) => t.slug === walkthroughSlug);
+      if (found) walkthroughTenantId = found.id;
+
+      // Skip Setup button is VISIBLE on Intent.
+      await expect(page.locator('.wizard-skip')).toHaveCount(1);
+
+      // ── Step 1: Intent ────────────────────────────────────────────────
+      // Pick "Internal Tool" so the persisted preferred_tab is "integrate"
+      // (the SaaS default also resolves to integrate, but Internal is the
+      // most explicit "no public signup" intent).
+      await page.locator('.intent-card').filter({ hasText: 'Internal Tool' }).click();
+      await expect(page.locator('.intent-card.intent-card-selected').filter({ hasText: 'Internal Tool' })).toBeVisible();
+
+      // Single-click Continue advances to Auth (regression for the hash race).
+      await page.locator('.btn.btn-accent').filter({ hasText: /Continue/ }).first().click();
+      await expect(page.locator('h1.wizard-headline').filter({ hasText: 'How will users sign in' })).toBeVisible({ timeout: 8000 });
+      expect(new URL(page.url()).hash).toBe('#wizard-auth');
+
+      // Skip Setup button is VISIBLE on Auth.
+      await expect(page.locator('.wizard-skip')).toHaveCount(1);
+
+      // ── Step 2: Auth ──────────────────────────────────────────────────
+      // The Internal intent default is ["email", "google"], so Continue is
+      // already enabled and the warning is hidden.
+      const continueAuth = page.locator('.wizard-pane-left .btn.btn-accent').filter({ hasText: /Continue/ });
+      await expect(continueAuth).toBeEnabled();
+      const warning = page.locator('.wizard-pane-left .wizard-form-warning');
+      await expect(warning).toHaveClass(/wizard-form-warning-hidden/);
+
+      // Toggle Google off — providers should drop to ["email"], Continue still enabled.
+      const googleRow = page.locator('.wizard-pane-left .wizard-provider-toggle').filter({ hasText: 'Google' });
+      await googleRow.locator('label.wizard-toggle').click();
+      // Now ["email"] only — try to remove email, the preventDefault guard
+      // should keep it checked.
+      const emailRow = page.locator('.wizard-pane-left .wizard-provider-toggle').filter({ hasText: 'Email / Password' });
+      const emailCheckbox = emailRow.locator('input[type="checkbox"]');
+      await expect(emailCheckbox).toBeChecked();
+      await emailRow.locator('label.wizard-toggle').click();
+      await expect(emailCheckbox).toBeChecked();
+
+      // Continue advances to Branding.
+      await continueAuth.click();
+      await expect(page.locator('h1.wizard-headline').filter({ hasText: 'Style your sign-in card' })).toBeVisible({ timeout: 8000 });
+      expect(new URL(page.url()).hash).toBe('#wizard-branding');
+
+      // Skip Setup is VISIBLE on Branding.
+      await expect(page.locator('.wizard-skip')).toHaveCount(1);
+
+      // ── Step 3: Branding ──────────────────────────────────────────────
+      // Accept defaults — single-click Continue advances to Mode.
+      await page.locator('.wizard-pane-left .btn.btn-accent').filter({ hasText: /Continue/ }).click();
+      await expect(page.locator('h1.wizard-headline').filter({ hasText: 'How do you want to use authentication' })).toBeVisible({ timeout: 8000 });
+      expect(new URL(page.url()).hash).toBe('#wizard-mode');
+
+      // Skip Setup is HIDDEN on Mode (per the per-step visibility rule).
+      await expect(page.locator('.wizard-skip')).toHaveCount(0);
+
+      // ── Step 4: Mode ──────────────────────────────────────────────────
+      // Pick "Integrate into your app" → preferred_tab=integrate.
+      await page.locator('.mode-card').filter({ hasText: 'Integrate into your app' }).click();
+      await expect(page.locator('.mode-card.mode-card-selected').filter({ hasText: 'Integrate into your app' })).toBeVisible();
+
+      await page.locator('.btn.btn-accent').filter({ hasText: /Continue/ }).first().click();
+      // Test step has a different headline — "Try signing in as an end user".
+      await expect(page.locator('h1.wizard-headline').filter({ hasText: 'Try signing in' })).toBeVisible({ timeout: 8000 });
+      expect(new URL(page.url()).hash).toBe('#wizard-test');
+
+      // Skip Setup (header) is HIDDEN on Test.
+      await expect(page.locator('.wizard-skip')).toHaveCount(0);
+
+      // ── Step 5: Test ──────────────────────────────────────────────────
+      // Click the inline "Skip this step" button to advance.
+      await page.getByRole('button', { name: 'Skip this step' }).click();
+      await expect(page.locator('h1.wizard-headline').filter({ hasText: /Add authentication to your app|Your hosted page is live/ })).toBeVisible({ timeout: 8000 });
+      expect(new URL(page.url()).hash).toBe('#wizard-launch');
+
+      // Skip Setup (header) is HIDDEN on Launch.
+      await expect(page.locator('.wizard-skip')).toHaveCount(0);
+
+      // ── Step 6: Launch ────────────────────────────────────────────────
+      // The button is rendered twice in StepLaunch (one for hosted-page mode,
+      // one for integrate mode); only the matching variant is in the DOM at
+      // any time, so .first() is safe.
+      const launchBtn = page.getByRole('button', { name: /Launch Dashboard/ }).first();
+      await expect(launchBtn).toBeVisible();
+      await expect(launchBtn).toBeEnabled();
+      await launchBtn.click();
+
+      // Wait for the hard navigation to actually complete.
+      await page.waitForURL(
+        (url) => {
+          const u = new URL(url.toString());
+          return (
+            u.pathname.includes(walkthroughSlug) && !u.hash.includes('wizard-')
+          );
+        },
+        { timeout: 20000 },
+      );
+
+      // The destination URL hash should be a valid console view, not a wizard step.
+      const finalHash = new URL(page.url()).hash;
+      // Internal intent → integrate.
+      expect(finalHash).toBe('#integrate');
+
+      // Workspace shell should be visible (account-shell would be wrong).
+      await expect(page.locator('.shell')).toBeVisible({ timeout: 15000 });
+      // The wizard should NOT be in the DOM anymore.
+      await expect(page.locator('.wizard-root')).toHaveCount(0);
+
+      // The welcome toast should appear after the page reload (drained from
+      // sessionStorage by init()).
+      await expect(page.getByText('Your application is ready')).toBeVisible({ timeout: 10000 });
+
+      // No JS errors should have leaked into the console during the entire
+      // walkthrough. The CopyButton import bug (the root cause of the launch
+      // empty-screen issue) would surface here as a ReferenceError because
+      // OverviewView throws during the wizard → workspace shell transition.
+      const seriousErrors = pageErrors.filter(
+        (e) =>
+          // 400s on stats endpoints can happen on the first hydrate of a
+          // brand-new tenant before any data exists — those are functional,
+          // not regression markers.
+          !e.includes('Failed to load resource') &&
+          !e.includes('400 (Bad Request)'),
+      );
+      expect(seriousErrors).toEqual([]);
+    } finally {
+      if (walkthroughTenantId) {
+        await request.delete(BASE + '/platform/self-serve/tenants/' + walkthroughTenantId, {
+          headers: { 'Authorization': 'Bearer ' + platformToken, 'Content-Type': 'application/json' },
+          data: { confirm_slug: walkthroughSlug },
+        });
+      }
+      await context.close();
+    }
+  });
+
   test.afterEach(async ({ request }) => {
     // Reset signup_mode + onboarding_step so each test starts from the known
     // open + step-3 state set in beforeAll. Without this, the persistence test

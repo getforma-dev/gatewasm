@@ -1,5 +1,6 @@
-import { h, createSignal, createShow } from 'formajs';
+import { h, createShow } from 'formajs';
 import { Skeleton } from '../../../core/components/ui/Skeleton';
+import { CopyButton } from '../../../core/components/ui/CopyButton';
 import {
   selectedTenant,
   selectedTenantStats,

@@ -277,9 +277,18 @@ async function skipWizard(): Promise<void> {
  * createShow transition from wizard → workspace shell can race with hydrate
  * and leave the workspace mounted with stale view-data signals (the operator
  * sees an empty pane until they refresh manually). Doing the navigation as a
- * full page load via window.location.href guarantees init() runs and the
- * workspace shell mounts cleanly with the correct view + plane + hydrated
- * data — exactly what the operator's manual refresh would have achieved.
+ * full page load guarantees init() runs and the workspace shell mounts
+ * cleanly with the correct view + plane + hydrated data — exactly what the
+ * operator's manual refresh would have achieved.
+ *
+ * Implementation note: same-path navigation (which is what we need —
+ * the wizard URL is already /platform/console/{slug}#wizard-X and the
+ * destination is /platform/console/{slug}#{view}) does NOT trigger a full
+ * page load via window.location.href, history.replaceState, or even reload()
+ * reliably across browsers — they all collapse into a soft hash change.
+ * We force a real navigation by adding a one-shot `?launched={ts}` query
+ * param which makes the destination URL distinct from the current URL, so
+ * the browser does a full document load. init() ignores the query param.
  *
  * The welcome toast is persisted to sessionStorage so it survives the page
  * reload and gets displayed by init() after the workspace shell mounts; an
@@ -293,8 +302,20 @@ function navigateToWorkspace(tenant: Tenant): void {
     // sessionStorage unavailable (private browsing) — toast just won't show.
   }
   const targetView = preferredTenantView(tenant);
-  window.location.href =
-    "/platform/console/" + encodeURIComponent(tenant.slug) + "#" + targetView;
+  // Same-path navigation (the wizard URL is /platform/console/{slug}#wizard-X
+  // and the destination is /platform/console/{slug}#{view}) does NOT trigger
+  // a full page load via window.location.href — browsers collapse it into a
+  // soft hash change. Add a one-shot `?launched={ts}` query param to force a
+  // distinct URL so window.location.assign actually does a full document
+  // load. init() ignores the query param.
+  const targetUrl =
+    "/platform/console/" +
+    encodeURIComponent(tenant.slug) +
+    "?launched=" +
+    Date.now() +
+    "#" +
+    targetView;
+  window.location.assign(targetUrl);
 }
 
 // ── Step 0: Create Application ────────────────────────────────────────
