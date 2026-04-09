@@ -560,7 +560,10 @@ function StepAuthMethods(): ReturnType<typeof h> {
 
   async function handleContinue(): Promise<void> {
     setSaving(true);
-    await updateTenant(tenant.id, { allowed_providers: providers() });
+    await updateTenant(tenant.id, {
+      allowed_providers: providers(),
+      signup_mode: signupMode(),
+    });
     setSaving(false);
     advanceStep();
   }

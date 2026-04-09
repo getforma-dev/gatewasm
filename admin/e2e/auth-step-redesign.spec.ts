@@ -163,4 +163,40 @@ test.describe('Auth step redesign', () => {
       await close();
     }
   });
+
+  test('clicking Open then Continue persists signup_mode=open to the tenant @regression', async ({ browser, request }) => {
+    const { page, close } = await openWizardAtAuthStep(browser);
+    try {
+      // Tenant starts at signup_mode=invite_only (set in beforeAll). Switch to Open.
+      const firstGroup = page.locator('.wizard-pane-left .wizard-provider-group').first();
+      await firstGroup.locator('.wizard-access-segmented-option').filter({ hasText: 'Open' }).click();
+
+      // Click the step's Continue button
+      await page.locator('.wizard-pane-left .btn.btn-accent').filter({ hasText: /Continue/ }).click();
+
+      // Verify the persisted value via the management API
+      await expect.poll(async () => {
+        const res = await request.get(BASE + '/platform/self-serve/tenants/' + tenantId, {
+          headers: { 'Authorization': 'Bearer ' + platformToken },
+        });
+        if (!res.ok()) return null;
+        const body = await res.json();
+        return body.signup_mode;
+      }, { timeout: 5000 }).toBe('open');
+    } finally {
+      await close();
+    }
+  });
+
+  test.afterEach(async ({ request }) => {
+    // Reset signup_mode + onboarding_step so each test starts from the known state
+    // set in beforeAll. Without this, the persistence test (which advances
+    // onboarding_step beyond the auth step) would break openWizardAtAuthStep
+    // for any test that runs after it.
+    if (!tenantId) return;
+    await patchWithRetry(request, BASE + '/platform/self-serve/tenants/' + tenantId, {
+      headers: { 'Authorization': 'Bearer ' + platformToken, 'Content-Type': 'application/json' },
+      data: { signup_mode: 'invite_only', onboarding_step: 3 },
+    });
+  });
 });
