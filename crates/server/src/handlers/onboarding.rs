@@ -547,7 +547,8 @@ pub async fn list_my_tenants(
          onboarding_completed, onboarding_step, preferred_tab, \
          branding_primary_color, login_redirect_url, \
          tenant_intent, branding_dark_mode, branding_button_text, \
-         branding_bg_color, branding_card_color, branding_custom_css \
+         branding_bg_color, branding_card_color, branding_custom_css, \
+         COALESCE(signup_mode, 'open') AS signup_mode \
          FROM tenants WHERE owner_user_id = $1 AND status != 'deleted' \
          ORDER BY created_at DESC",
     )
@@ -564,7 +565,8 @@ pub async fn list_my_tenants(
          t.onboarding_completed, t.onboarding_step, t.preferred_tab, \
          t.branding_primary_color, t.login_redirect_url, \
          t.tenant_intent, t.branding_dark_mode, t.branding_button_text, \
-         t.branding_bg_color, t.branding_card_color, t.branding_custom_css, pmt.role AS team_role \
+         t.branding_bg_color, t.branding_card_color, t.branding_custom_css, \
+         COALESCE(t.signup_mode, 'open') AS signup_mode, pmt.role AS team_role \
          FROM platform_members pm \
          JOIN platform_member_tenants pmt ON pmt.member_id = pm.id \
          JOIN tenants t ON t.id = pmt.tenant_id \
@@ -605,6 +607,7 @@ pub async fn list_my_tenants(
             "branding_bg_color": row.get::<Option<String>, _>("branding_bg_color"),
             "branding_card_color": row.get::<Option<String>, _>("branding_card_color"),
             "branding_custom_css": row.get::<Option<String>, _>("branding_custom_css"),
+            "signup_mode": row.get::<String, _>("signup_mode"),
             "access": access,
         });
         if let Some(role) = team_role {
@@ -655,6 +658,7 @@ pub async fn get_my_tenant(
          onboarding_completed, onboarding_step, preferred_tab, \
          tenant_intent, branding_dark_mode, branding_button_text, \
          branding_bg_color, branding_card_color, branding_custom_css, \
+         COALESCE(signup_mode, 'open') AS signup_mode, \
          created_at, updated_at \
          FROM tenants WHERE id = $1 AND status != 'deleted'",
     )
@@ -715,6 +719,7 @@ pub async fn get_my_tenant(
         "branding_bg_color": row.get::<Option<String>, _>("branding_bg_color"),
         "branding_card_color": row.get::<Option<String>, _>("branding_card_color"),
         "branding_custom_css": row.get::<Option<String>, _>("branding_custom_css"),
+        "signup_mode": row.get::<String, _>("signup_mode"),
         "created_at": row.get::<chrono::DateTime<Utc>, _>("created_at").to_rfc3339(),
         "updated_at": row.get::<chrono::DateTime<Utc>, _>("updated_at").to_rfc3339(),
     })))

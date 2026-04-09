@@ -545,6 +545,9 @@ function StepAuthMethods(): ReturnType<typeof h> {
   ];
   const [providers, setProviders] = createSignal<string[]>([...current]);
 
+  const currentSignupMode = (tenant.signup_mode as string | undefined) || "open";
+  const [signupMode, setSignupMode] = createSignal<string>(currentSignupMode);
+
   function toggleProvider(p: string): void {
     const list = providers();
     if (list.includes(p)) {
@@ -647,6 +650,52 @@ function StepAuthMethods(): ReturnType<typeof h> {
         "p",
         { class: "wizard-subtitle" },
         "Choose authentication methods for your app.",
+      ),
+
+      h(
+        "div",
+        { class: "wizard-provider-group" },
+        h("div", { class: "wizard-provider-group-label" }, "Access"),
+        h(
+          "div",
+          { class: "wizard-access-segmented" },
+          h(
+            "button",
+            {
+              type: "button",
+              class: () =>
+                "wizard-access-segmented-option" +
+                (signupMode() === "open" ? " active" : ""),
+              onClick: () => setSignupMode("open"),
+            },
+            h("span", { class: "wizard-access-segmented-option-label" }, "Open"),
+            h(
+              "span",
+              { class: "wizard-access-segmented-option-subtitle" },
+              "Anyone can create an account.",
+            ),
+          ),
+          h(
+            "button",
+            {
+              type: "button",
+              class: () =>
+                "wizard-access-segmented-option" +
+                (signupMode() === "invite_only" ? " active" : ""),
+              onClick: () => setSignupMode("invite_only"),
+            },
+            h(
+              "span",
+              { class: "wizard-access-segmented-option-label" },
+              "Invite-only",
+            ),
+            h(
+              "span",
+              { class: "wizard-access-segmented-option-subtitle" },
+              "Only people you invite can sign up. You'll manage invites from the dashboard.",
+            ),
+          ),
+        ),
       ),
 
       h(

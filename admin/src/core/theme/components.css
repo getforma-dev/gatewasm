@@ -3761,6 +3761,49 @@
   width: fit-content;
 }
 
+/* Access mode segmented control (Step 2 / Auth) */
+
+.wizard-access-segmented {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.wizard-access-segmented-option {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.wizard-access-segmented-option:hover {
+  border-color: var(--border-strong);
+}
+
+.wizard-access-segmented-option.active {
+  border-color: var(--accent);
+  background: var(--surface-raised);
+}
+
+.wizard-access-segmented-option-label {
+  font-size: 0.85rem;
+  font-weight: 500;
+}
+
+.wizard-access-segmented-option-subtitle {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
 /* Mode selection (Step 3) */
 
 .mode-grid {

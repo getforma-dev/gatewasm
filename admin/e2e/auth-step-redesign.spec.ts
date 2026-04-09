@@ -134,4 +134,33 @@ test.describe('Auth step redesign', () => {
       await close();
     }
   });
+
+  test('Access provider-group renders first with segmented control pre-filled from signup_mode @regression', async ({ browser }) => {
+    const { page, close } = await openWizardAtAuthStep(browser);
+    try {
+      // The Access group must be the FIRST wizard-provider-group inside the left pane
+      const firstGroup = page.locator('.wizard-pane-left .wizard-provider-group').first();
+      await expect(firstGroup.locator('.wizard-provider-group-label')).toHaveText('Access');
+
+      // Both segmented options visible with their sub-copy
+      const openOption = firstGroup.locator('.wizard-access-segmented-option').filter({ hasText: 'Open' });
+      const inviteOption = firstGroup.locator('.wizard-access-segmented-option').filter({ hasText: 'Invite-only' });
+      await expect(openOption).toBeVisible();
+      await expect(inviteOption).toBeVisible();
+
+      await expect(firstGroup).toContainText('Anyone can create an account.');
+      await expect(firstGroup).toContainText("Only people you invite can sign up. You'll manage invites from the dashboard.");
+
+      // Pre-fill: tenant was created with signup_mode=invite_only, so Invite-only is active
+      await expect(inviteOption).toHaveClass(/active/);
+      await expect(openOption).not.toHaveClass(/active/);
+
+      // Click Open and verify the active class moves
+      await openOption.click();
+      await expect(openOption).toHaveClass(/active/);
+      await expect(inviteOption).not.toHaveClass(/active/);
+    } finally {
+      await close();
+    }
+  });
 });
