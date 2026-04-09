@@ -183,18 +183,18 @@ test.describe('Auth step redesign', () => {
       const proSection = page.locator('.wizard-pane-left .wizard-pro-section');
 
       await expect(note).toBeVisible();
-      await expect(note).not.toHaveClass(/is-hidden/);
-      await expect(credentialsGroup).toHaveClass(/is-hidden/);
-      await expect(socialGroup).toHaveClass(/is-hidden/);
-      await expect(proSection).toHaveClass(/is-hidden/);
+      await expect(note).not.toHaveClass(/wizard-section-hidden/);
+      await expect(credentialsGroup).toHaveClass(/wizard-section-hidden/);
+      await expect(socialGroup).toHaveClass(/wizard-section-hidden/);
+      await expect(proSection).toHaveClass(/wizard-section-hidden/);
 
       // Click Open and verify the active class moves AND the hidden sections reappear.
       await openOption.click();
       await expect(openOption).toHaveClass(/active/);
       await expect(inviteOption).not.toHaveClass(/active/);
-      await expect(note).toHaveClass(/is-hidden/);
+      await expect(note).toHaveClass(/wizard-section-hidden/);
       await expect(credentialsGroup).toBeVisible();
-      await expect(credentialsGroup).not.toHaveClass(/is-hidden/);
+      await expect(credentialsGroup).not.toHaveClass(/wizard-section-hidden/);
       await expect(socialGroup).toBeVisible();
       await expect(proSection).toBeVisible();
     } finally {
@@ -226,6 +226,42 @@ test.describe('Auth step redesign', () => {
         const body = await res.json();
         return body.signup_mode ?? '__missing__';
       }, { timeout: 5000, message: 'signup_mode should be "open" after Continue' }).toBe('open');
+    } finally {
+      await close();
+    }
+  });
+
+  test('switching to invite_only and back to open preserves allowed_providers @regression', async ({ browser, request }) => {
+    // Seed a non-default allowed_providers list so we can verify it round-trips intact.
+    const seeded = ['email', 'magic_link', 'google', 'github'];
+    const seedRes = await patchWithRetry(request, BASE + '/platform/self-serve/tenants/' + tenantId, {
+      headers: { 'Authorization': 'Bearer ' + platformToken, 'Content-Type': 'application/json' },
+      data: { allowed_providers: seeded, signup_mode: 'open' },
+    });
+    if (!seedRes.ok()) throw new Error('seed PATCH failed: ' + await seedRes.text());
+
+    const { page, close } = await openWizardAtAuthStep(browser);
+    try {
+      const firstGroup = page.locator('.wizard-pane-left .wizard-provider-group').first();
+
+      // Toggle to invite_only then back to open. handleContinue persists on Continue.
+      await firstGroup.locator('.wizard-access-segmented-option').filter({ hasText: 'Invite-only' }).click();
+      await firstGroup.locator('.wizard-access-segmented-option').filter({ hasText: 'Open' }).click();
+      await page.locator('.wizard-pane-left .btn.btn-accent').filter({ hasText: /Continue/ }).click();
+
+      // The seeded allowed_providers should be intact in the DB.
+      await expect.poll(async () => {
+        const res = await request.get(BASE + '/platform/self-serve/tenants/' + tenantId, {
+          headers: { 'Authorization': 'Bearer ' + platformToken },
+        });
+        if (!res.ok()) return null;
+        const body = await res.json();
+        // Normalize: API returns JSON value (could be array or string-encoded array).
+        const providers = Array.isArray(body.allowed_providers)
+          ? body.allowed_providers
+          : (typeof body.allowed_providers === 'string' ? JSON.parse(body.allowed_providers) : []);
+        return [...providers].sort();
+      }, { timeout: 5000, message: 'allowed_providers should be preserved across the invite_only round-trip' }).toEqual([...seeded].sort());
     } finally {
       await close();
     }

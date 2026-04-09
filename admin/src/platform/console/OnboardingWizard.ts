@@ -706,7 +706,7 @@ function StepAuthMethods(): ReturnType<typeof h> {
         {
           class: () =>
             "wizard-invite-only-note" +
-            (signupMode() === "invite_only" ? "" : " is-hidden"),
+            (signupMode() === "invite_only" ? "" : " wizard-section-hidden"),
         },
         "Invited users sign in via the link in their invite email \u2014 no additional setup needed. Switch to Open to enable public sign-up methods.",
       ),
@@ -716,7 +716,7 @@ function StepAuthMethods(): ReturnType<typeof h> {
         {
           class: () =>
             "wizard-provider-group" +
-            (signupMode() === "open" ? "" : " is-hidden"),
+            (signupMode() === "open" ? "" : " wizard-section-hidden"),
         },
         h("div", { class: "wizard-provider-group-label" }, "Credentials"),
         ...CREDENTIAL_PROVIDERS.map((p) => ProviderToggle(p)),
@@ -727,7 +727,7 @@ function StepAuthMethods(): ReturnType<typeof h> {
         {
           class: () =>
             "wizard-provider-group" +
-            (signupMode() === "open" ? "" : " is-hidden"),
+            (signupMode() === "open" ? "" : " wizard-section-hidden"),
         },
         h(
           "div",
@@ -742,7 +742,7 @@ function StepAuthMethods(): ReturnType<typeof h> {
         {
           class: () =>
             "wizard-pro-section" +
-            (signupMode() === "open" ? "" : " is-hidden"),
+            (signupMode() === "open" ? "" : " wizard-section-hidden"),
         },
         h(
           "div",

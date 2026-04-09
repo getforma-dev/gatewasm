@@ -442,7 +442,8 @@ pub async fn create_tenant(
 
     let row = sqlx::query(
         "SELECT created_at, onboarding_completed, onboarding_step, preferred_tab, branding_primary_color, \
-         tenant_intent, branding_dark_mode, branding_button_text \
+         tenant_intent, branding_dark_mode, branding_button_text, \
+         COALESCE(signup_mode, 'open') AS signup_mode \
          FROM tenants WHERE id = $1",
     )
     .bind(&tenant_id)
@@ -477,6 +478,7 @@ pub async fn create_tenant(
                 "tenant_intent": row.get::<Option<String>, _>("tenant_intent"),
                 "branding_dark_mode": row.get::<bool, _>("branding_dark_mode"),
                 "branding_button_text": row.get::<String, _>("branding_button_text"),
+                "signup_mode": row.get::<String, _>("signup_mode"),
                 "primary_color": row.get::<Option<String>, _>("branding_primary_color"),
                 "login_redirect_url": default_login_redirect,
                 "created_at": row.get::<chrono::DateTime<Utc>, _>("created_at").to_rfc3339(),

@@ -209,13 +209,20 @@ async function handleContinue(): Promise<void> {
 
 ## 5. Backend
 
-No changes. Verified during spec review:
+The spec was originally written assuming no backend changes. The WRITE path was verified during spec review:
 
-- `signup_mode` is already in `UpdateTenantRequest` (`crates/server/src/handlers/management.rs:71`) and the parallel `UpdateConfigRequest` (`management.rs:606`).
-- Both update handlers already persist it (`management.rs:477` and `management.rs:1121`) and validate it against `["open", "invite_only"]` via `normalize_signup_mode` (`management.rs:81`).
-- It is already in the `Tenant` TypeScript type and already round-trips through `updateTenant`.
+- `signup_mode` is in `UpdateTenantRequest` (`crates/server/src/handlers/management.rs:71`) and the parallel `UpdateConfigRequest` (`management.rs:606`).
+- Both update handlers persist it (`management.rs:477` and `management.rs:1121`) and validate it against `["open", "invite_only"]` via `normalize_signup_mode` (`management.rs:81`).
+- It is already in the `Tenant` TypeScript type.
 
-Nothing on the server changes for this spec.
+**Implementation note (added during execution):** the READ path the wizard frontend actually uses lives in `crates/server/src/handlers/onboarding.rs`, not `management.rs`. Four handlers in that file were missing `signup_mode` from their SQL SELECT and JSON response, which silently broke the round-trip:
+
+- `list_my_tenants` (the personal-tenants SELECT and the team-shared-tenants SELECT)
+- `get_my_tenant`
+- `update_my_tenant` re-fetch (the response after a successful PATCH)
+- `create_my_tenant` (the response after creating a tenant)
+
+All four were fixed in commits `ae54830`, `7765500`, and (final polish) the merge commit. Each fix adds `COALESCE(signup_mode, 'open') AS signup_mode` to the SELECT and `"signup_mode": row.get::<String, _>("signup_mode")` to the JSON builder. No schema changes, no validation changes, no new types — just plugging the field into the existing query/serialization paths.
 
 ---
 
