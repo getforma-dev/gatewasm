@@ -980,6 +980,9 @@ function StepBranding(): ReturnType<typeof h> {
   const [textColor, setTextColor] = createSignal(
     tenant.branding_text_color || "",
   );
+  const [fontSize, setFontSize] = createSignal<"small" | "medium" | "large">(
+    (tenant.branding_font_size as "small" | "medium" | "large") || "medium",
+  );
 
   const defaultCard = () => "#111114";
   const defaultText = () => "#e0e0e0";
@@ -1009,6 +1012,7 @@ function StepBranding(): ReturnType<typeof h> {
       branding_card_color: cardColor() || null,
       branding_font_family:
         fontFamily() === "System default" ? null : fontFamily(),
+      branding_font_size: fontSize() === "medium" ? null : fontSize(),
       branding_text_color: textColor() || null,
     });
     setSaving(false);
@@ -1244,6 +1248,30 @@ function StepBranding(): ReturnType<typeof h> {
         ),
       ),
 
+      // ── Font Size ──
+      h(
+        "div",
+        { class: "wizard-field" },
+        h("span", null, "Text size"),
+        h(
+          "div",
+          { class: "wizard-size-segmented" },
+          ...(["small", "medium", "large"] as const).map((size) =>
+            h(
+              "button",
+              {
+                type: "button",
+                class: () =>
+                  "wizard-size-option" +
+                  (fontSize() === size ? " active" : ""),
+                onClick: () => setFontSize(size),
+              },
+              size.charAt(0).toUpperCase() + size.slice(1),
+            ),
+          ),
+        ),
+      ),
+
       // ── Text Color ──
       h(
         "label",
@@ -1370,6 +1398,7 @@ function StepBranding(): ReturnType<typeof h> {
         cardColor,
         customCSS: () => "",
         fontFamily,
+        fontSize,
         textColor,
         signupMode: () => (tenant.signup_mode as string | undefined) || "open",
       }),

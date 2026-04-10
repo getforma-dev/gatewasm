@@ -3823,6 +3823,44 @@
   line-height: 1.35;
 }
 
+/* Font size segmented control (Branding step) */
+
+.wizard-size-segmented {
+  display: flex;
+  gap: 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.wizard-size-option {
+  flex: 1 1 0;
+  padding: 6px 12px;
+  background: transparent;
+  color: var(--text-dim);
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 500;
+  border: none;
+  border-right: 1px solid var(--border);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.wizard-size-option:last-child {
+  border-right: none;
+}
+
+.wizard-size-option:hover {
+  background: var(--surface-overlay);
+  color: var(--text);
+}
+
+.wizard-size-option.active {
+  background: var(--accent);
+  color: #fff;
+}
+
 /* Inline form warning (e.g. "pick at least one method to continue") */
 
 .wizard-form-warning {

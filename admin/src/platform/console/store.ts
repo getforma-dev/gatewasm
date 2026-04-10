@@ -45,6 +45,7 @@ export interface Tenant {
   team_role?: string; // "admin" | "editor" | "viewer" — only for access === 'team'
   created_at: string;
   branding_font_family?: string | null;
+  branding_font_size?: string | null;
   branding_text_color?: string | null;
 }
 
@@ -824,6 +825,7 @@ export async function updateTenant(
       | "signup_mode"
       | "branding_custom_css"
       | "branding_font_family"
+      | "branding_font_size"
       | "branding_text_color"
       | "allowed_providers"
     >

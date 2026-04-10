@@ -22,6 +22,7 @@ interface LoginPreviewProps {
   cardColor?: () => string;
   customCSS?: () => string;
   fontFamily?: () => string;
+  fontSize?: () => string;
   textColor?: () => string;
   /**
    * Controls whether the "Don't have an account? Sign up" link renders.
@@ -162,6 +163,9 @@ export function LoginPreview(props: LoginPreviewProps) {
             if (font && font !== "System default") {
               s += 'font-family:"' + font + '",sans-serif;';
             }
+            const size = props.fontSize ? props.fontSize() : "medium";
+            const px = size === "small" ? "13px" : size === "large" ? "17px" : "15px";
+            s += "font-size:" + px + ";";
             const custom = customStyle();
             return s + custom;
           },
