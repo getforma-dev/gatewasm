@@ -486,72 +486,92 @@ export function ConsoleApp() {
     return sections;
   };
 
-  return h('div', null,
-    createSwitch(
-      mode,
-      [
-        { match: 'account', render: () => AccountShell() },
-        {
-          match: 'workspace',
-          render: () => createShow(
-            () => selectedTenant() !== null && selectedTenant()!.onboarding_completed,
-            () => h('div', {
-              class: 'shell',
-              'data-plane': () => plane(),
-            },
-            PlaneNav({
-              plane: () => plane(),
-              view: () => view(),
-              onPlaneSwitch: (p: Plane) => setPlane(p),
-              onTabSwitch: (v: ConsoleView) => navigateTenantView(v),
-              onSettings: () => backToTenants('account-settings'),
-              onSignOut: () => void signout(),
-              onThemeToggle: handleThemeToggle,
-              themeLabel: () => themeMode() === 'dark' ? 'Light Mode' : 'Dark Mode',
-              user: () => currentUser(),
-              tenant: () => selectedTenant(),
-              tenants: () => tenants(),
-              onTenantSwitch: (t) => selectTenant(t),
-              onBackToAccount: () => backToTenants(),
-            }),
-            h('div', { class: 'shell-stage' },
-              h('main', { class: 'main page-enter' },
-                LoadingBar(() => loading()),
-                createSwitch(
-                  () => view(),
-                  [
-                    { match: 'overview', render: () => OverviewView() },
-                    { match: 'members', render: () => UsersView() },
-                    { match: 'integrate', render: () => IntegrateView() },
-                    { match: 'security', render: () => SecurityConfigView() },
-                    { match: 'hosted-page', render: () => HostedPageView() },
-                    { match: 'organizations', render: () => OrganizationsView() },
-                    { match: 'roles', render: () => RolesView() },
-                    { match: 'audit-log', render: () => AuditLogView() },
-                    { match: 'sessions', render: () => SessionsView() },
-                    { match: 'passkeys', render: () => PasskeysView() },
-                    { match: 'tokens', render: () => TokensView() },
-                    { match: 'activity', render: () => ActivityView() },
-                  ],
-                ),
-              ),
-            ),
-            CommandPalette({
-              open: paletteOpen,
-              onClose: closeCommandPalette,
-              shortcutLabel,
-              sections: paletteSections,
-            }),
-          ),
-            () => OnboardingWizard(),
-          ),
-        },
-      ],
+  // ── Top-level routing ───────────────────────────────────────────────────
+  //
+  // A single derived signal is the source of truth for which top-level
+  // shell to render. Three flat createShow bindings each watch the same
+  // function — no nested reactivity, no createSwitch caching, and no
+  // transient wizard mount during mode transitions.
+  //
+  // Why this matters: we used to nest `createShow(tenant && completed)`
+  // inside `createSwitch(mode)`. The createSwitch case for 'workspace'
+  // CACHED its branch (including the inner createShow) per formajs
+  // semantics, so when you clicked "← All Applications" the cached
+  // workspace branch's inner effect would still fire with the new
+  // (null) selectedTenant and briefly mount OnboardingWizard off-DOM.
+  // The wizard's mount code wrote the URL hash to #wizard-create before
+  // the outer switch unmounted the whole thing, producing a visible
+  // "wizard flash" on the way out. The flat structure below makes the
+  // "which shell" decision atomic and re-renders cleanly on every flip.
+  //
+  // The workspace shell still uses a nested createSwitch on `view()` —
+  // that one is safe because the view only changes within workspace mode,
+  // and its cache is disposed when the outer workspace createShow swaps
+  // away.
+  const appRoute = (): 'account' | 'workspace-shell' | 'wizard' => {
+    if (mode() !== 'workspace') return 'account';
+    const t = selectedTenant();
+    if (t && t.onboarding_completed) return 'workspace-shell';
+    return 'wizard';
+  };
+
+  const renderWorkspaceShell = () =>
+    h('div', {
+      class: 'shell',
+      'data-plane': () => plane(),
+    },
+    PlaneNav({
+      plane: () => plane(),
+      view: () => view(),
+      onPlaneSwitch: (p: Plane) => setPlane(p),
+      onTabSwitch: (v: ConsoleView) => navigateTenantView(v),
+      onSettings: () => backToTenants('account-settings'),
+      onSignOut: () => void signout(),
+      onThemeToggle: handleThemeToggle,
+      themeLabel: () => themeMode() === 'dark' ? 'Light Mode' : 'Dark Mode',
+      user: () => currentUser(),
+      tenant: () => selectedTenant(),
+      tenants: () => tenants(),
+      onTenantSwitch: (t) => selectTenant(t),
+      onBackToAccount: () => backToTenants(),
+    }),
+    h('div', { class: 'shell-stage' },
+      h('main', { class: 'main page-enter' },
+        LoadingBar(() => loading()),
+        createSwitch(
+          () => view(),
+          [
+            { match: 'overview', render: () => OverviewView() },
+            { match: 'members', render: () => UsersView() },
+            { match: 'integrate', render: () => IntegrateView() },
+            { match: 'security', render: () => SecurityConfigView() },
+            { match: 'hosted-page', render: () => HostedPageView() },
+            { match: 'organizations', render: () => OrganizationsView() },
+            { match: 'roles', render: () => RolesView() },
+            { match: 'audit-log', render: () => AuditLogView() },
+            { match: 'sessions', render: () => SessionsView() },
+            { match: 'passkeys', render: () => PasskeysView() },
+            { match: 'tokens', render: () => TokensView() },
+            { match: 'activity', render: () => ActivityView() },
+          ],
+        ),
+      ),
     ),
+    CommandPalette({
+      open: paletteOpen,
+      onClose: closeCommandPalette,
+      shortcutLabel,
+      sections: paletteSections,
+    }),
+  );
+
+  return h('div', null,
+    createShow(() => appRoute() === 'account', () => AccountShell()),
+    createShow(() => appRoute() === 'workspace-shell', renderWorkspaceShell),
+    createShow(() => appRoute() === 'wizard', () => OnboardingWizard()),
     // ToastView lives at the top level so it's mounted regardless of which
-    // mode/branch is active. Previously it was nested inside the workspace
-    // shell only, which meant the wizard couldn't surface toasts (e.g.,
-    // the at-least-one-provider rejection in the auth step).
+    // route is active. Previously it was nested inside the workspace shell
+    // only, which meant the wizard couldn't surface toasts.
     ToastView(toast),
   );
 }

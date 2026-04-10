@@ -228,8 +228,13 @@ test.describe('Auth step redesign', () => {
     }
   });
 
-  test('Continue button is disabled and warning shows when allowed_providers is empty @regression', async ({ browser, request }) => {
-    // Force the tenant into the broken empty state, then open the wizard.
+  test('wizard hydrates a usable default when allowed_providers is empty in the DB @regression', async ({ browser, request }) => {
+    // Seed an empty allowed_providers — this can happen with legacy data or a
+    // manual API patch. The wizard's hydration must NOT leave the operator
+    // staring at an unconfigured form: it should pre-fill ["email"] so the
+    // step starts in a valid, advanceable state. The inline warning + Continue
+    // gate are still load-bearing for the operator-initiated empty state
+    // (covered by the "removing the last sign-in method" test).
     const empty = await patchWithRetry(request, BASE + '/platform/self-serve/tenants/' + tenantId, {
       headers: { 'Authorization': 'Bearer ' + platformToken, 'Content-Type': 'application/json' },
       data: { allowed_providers: [] },
@@ -238,31 +243,30 @@ test.describe('Auth step redesign', () => {
 
     const { page, close } = await openWizardAtAuthStep(browser);
     try {
-      // Inline warning is in the DOM and NOT hidden when providers is empty.
+      // Email should be pre-checked from the hydration default.
+      const emailRow = page.locator('.wizard-pane-left .wizard-provider-toggle').filter({ hasText: 'Email / Password' });
+      const emailCheckbox = emailRow.locator('input[type="checkbox"]');
+      await expect(emailCheckbox).toBeChecked();
+
+      // Inline warning is in the DOM and HIDDEN — the form is in a valid state.
       // Asserting explicit class state to make the visibility contract
       // (`.wizard-form-warning-hidden` toggles `display: none`) load-bearing,
       // so any future CSS regression on the hidden helper would surface here.
       const warning = page.locator('.wizard-pane-left .wizard-form-warning');
       await expect(warning).toHaveCount(1);
       await expect(warning).toContainText('at least one sign-in method');
-      await expect(warning).not.toHaveClass(/wizard-form-warning-hidden/);
-
-      // Continue button is disabled
-      const continueBtn = page.locator('.wizard-pane-left .btn.btn-accent').filter({ hasText: /Continue/ });
-      await expect(continueBtn).toBeDisabled();
-
-      // Toggle email on — warning hides, button enables
-      const emailRow = page.locator('.wizard-pane-left .wizard-provider-toggle').filter({ hasText: 'Email / Password' });
-      await emailRow.click();
       await expect(warning).toHaveClass(/wizard-form-warning-hidden/);
+
+      // Continue button is enabled — the operator can advance immediately.
+      const continueBtn = page.locator('.wizard-pane-left .btn.btn-accent').filter({ hasText: /Continue/ });
       await expect(continueBtn).toBeEnabled();
     } finally {
       await close();
     }
   });
 
-  test('cannot remove the last sign-in method via the toggle (preventDefault guard) @regression', async ({ browser, request }) => {
-    // Seed exactly one provider so the guard path is exercised on the next click.
+  test('removing the last sign-in method disables Continue and surfaces inline warning @regression', async ({ browser, request }) => {
+    // Seed exactly one provider so the empty-state path is exercised on the next click.
     await setSignupMode(request, 'open');
     const seed = await patchWithRetry(request, BASE + '/platform/self-serve/tenants/' + tenantId, {
       headers: { 'Authorization': 'Bearer ' + platformToken, 'Content-Type': 'application/json' },
@@ -280,33 +284,98 @@ test.describe('Auth step redesign', () => {
       // implicit form-control association.
       const emailLabel = emailRow.locator('label.wizard-toggle');
       const emailCheckbox = emailRow.locator('input[type="checkbox"]');
+      const continueBtn = page.locator('.wizard-pane-left .btn.btn-accent').filter({ hasText: /Continue/ });
+      const warning = page.locator('.wizard-pane-left .wizard-form-warning');
 
-      // Email is the only provider — initial state checked.
+      // Email is the only provider — initial state checked, Continue enabled,
+      // warning hidden.
       await expect(emailCheckbox).toBeChecked();
+      await expect(continueBtn).toBeEnabled();
+      await expect(warning).toHaveClass(/wizard-form-warning-hidden/);
 
-      // Click the toggle. The input's onClick handler should call
-      // preventDefault when this would empty the providers list, the browser
-      // should NOT flip the checkbox state, and the checkbox should remain
-      // checked. Regression test for the toggle visual desync bug — without
-      // preventDefault, the browser optimistically flips the visual while
-      // the signal stays the same, leaving the toggle and the live preview
-      // out of sync.
+      // Click the last toggle off. The signal goes to [] and the toggle visual
+      // tracks the signal — no preventDefault, no desync. The Continue gate +
+      // inline warning enforce the "at least one" rule at the step exit instead.
+      await emailLabel.click();
+      await expect(emailCheckbox).not.toBeChecked();
+      await expect(continueBtn).toBeDisabled();
+      await expect(warning).not.toHaveClass(/wizard-form-warning-hidden/);
+      await expect(warning).toContainText('at least one sign-in method');
+
+      // Toggling email back on re-enables Continue and hides the warning.
       await emailLabel.click();
       await expect(emailCheckbox).toBeChecked();
-
-      // A toast should appear immediately telling the operator why the
-      // toggle didn't move. Without this feedback the click looks broken.
-      await expect(
-        page.getByText('At least one sign-in method is required.'),
-      ).toBeVisible({ timeout: 5000 });
-
-      // The continue button should remain enabled — providers is still ["email"].
-      const continueBtn = page.locator('.wizard-pane-left .btn.btn-accent').filter({ hasText: /Continue/ });
       await expect(continueBtn).toBeEnabled();
-
-      // The warning should NOT be visible — providers is non-empty.
-      const warning = page.locator('.wizard-pane-left .wizard-form-warning');
       await expect(warning).toHaveClass(/wizard-form-warning-hidden/);
+    } finally {
+      await close();
+    }
+  });
+
+  test('rapid toggling never desyncs the checkbox visual from the signal @regression', async ({ browser, request }) => {
+    // Regression for the visual-desync bug. Seed two providers so the operator
+    // can hammer the same toggle without the old preventDefault path
+    // intervening, then verify that after rapid clicks the checkbox visual
+    // matches the live preview's rendering of the same provider list. The
+    // previous bug left the checkbox displayed off while the signal still
+    // had the provider — the live preview would still show "Continue with
+    // Google" even though the toggle looked off.
+    await setSignupMode(request, 'open');
+    const seed = await patchWithRetry(request, BASE + '/platform/self-serve/tenants/' + tenantId, {
+      headers: { 'Authorization': 'Bearer ' + platformToken, 'Content-Type': 'application/json' },
+      data: { allowed_providers: ['email', 'google'] },
+    });
+    if (!seed.ok()) throw new Error('seed failed: ' + await seed.text());
+
+    const { page, close } = await openWizardAtAuthStep(browser);
+    try {
+      const googleRow = page.locator('.wizard-pane-left .wizard-provider-toggle').filter({ hasText: 'Google' });
+      const googleLabel = googleRow.locator('label.wizard-toggle');
+      const googleCheckbox = googleRow.locator('input[type="checkbox"]');
+      const previewGoogleBtn = page.locator('.wizard-pane-right .lp-btn-oauth').filter({ hasText: 'Continue with Google' });
+
+      // Initial: google is on in both the toggle and the preview.
+      await expect(googleCheckbox).toBeChecked();
+      await expect(previewGoogleBtn).toBeVisible();
+
+      // Hammer the toggle. With double-click + rapid clicks, the preventDefault
+      // guard used to lose track and leave the checkbox off while google was
+      // still in the providers signal. Drive an odd number of clicks so the
+      // expected end state (off) is unambiguous.
+      for (let i = 0; i < 5; i++) {
+        await googleLabel.click({ delay: 0 });
+      }
+
+      // Final check: end state must be consistent across toggle and preview.
+      // Five clicks starting from "on" leaves the toggle "off".
+      await expect(googleCheckbox).not.toBeChecked();
+      await expect(previewGoogleBtn).toHaveCount(0);
+      // The row should also pick up the off-state class so the box visually
+      // reflects the off state (not just the pill).
+      await expect(googleRow).toHaveClass(/wizard-provider-toggle-off/);
+
+      // One more click flips it back, both surfaces in sync.
+      await googleLabel.click();
+      await expect(googleCheckbox).toBeChecked();
+      await expect(previewGoogleBtn).toBeVisible();
+      await expect(googleRow).not.toHaveClass(/wizard-provider-toggle-off/);
+
+      // Regression: clicking the outer row box (outside the toggle label)
+      // goes through the signal-only path. Previously this updated the
+      // signal + live preview but not the checkbox DOM property, so the
+      // pill was visually stuck. The imperative `el.checked = ...` effect
+      // fixes that — the pill should flip when the row box is clicked.
+      // Click the row label element, which is inside the row box but
+      // outside the .wizard-toggle label.
+      await googleRow.locator('.wizard-provider-label').click();
+      await expect(googleCheckbox).not.toBeChecked();
+      await expect(previewGoogleBtn).toHaveCount(0);
+      await expect(googleRow).toHaveClass(/wizard-provider-toggle-off/);
+
+      await googleRow.locator('.wizard-provider-label').click();
+      await expect(googleCheckbox).toBeChecked();
+      await expect(previewGoogleBtn).toBeVisible();
+      await expect(googleRow).not.toHaveClass(/wizard-provider-toggle-off/);
     } finally {
       await close();
     }
@@ -463,13 +532,22 @@ test.describe('Auth step redesign', () => {
       // Toggle Google off — providers should drop to ["email"], Continue still enabled.
       const googleRow = page.locator('.wizard-pane-left .wizard-provider-toggle').filter({ hasText: 'Google' });
       await googleRow.locator('label.wizard-toggle').click();
-      // Now ["email"] only — try to remove email, the preventDefault guard
-      // should keep it checked.
+      // Now ["email"] only — toggling email off is now permitted, but
+      // Continue must disable and the inline warning must surface so the
+      // operator can't advance with zero providers.
       const emailRow = page.locator('.wizard-pane-left .wizard-provider-toggle').filter({ hasText: 'Email / Password' });
       const emailCheckbox = emailRow.locator('input[type="checkbox"]');
       await expect(emailCheckbox).toBeChecked();
       await emailRow.locator('label.wizard-toggle').click();
+      await expect(emailCheckbox).not.toBeChecked();
+      await expect(continueAuth).toBeDisabled();
+      await expect(warning).not.toHaveClass(/wizard-form-warning-hidden/);
+
+      // Toggle email back on so Continue re-enables and we can advance.
+      await emailRow.locator('label.wizard-toggle').click();
       await expect(emailCheckbox).toBeChecked();
+      await expect(continueAuth).toBeEnabled();
+      await expect(warning).toHaveClass(/wizard-form-warning-hidden/);
 
       // Continue advances to Branding.
       await continueAuth.click();

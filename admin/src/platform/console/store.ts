@@ -458,14 +458,26 @@ export { mode };
 /**
  * Navigate to the onboarding wizard in "create" mode (no tenant selected).
  * The wizard's Step 0 handles tenant creation.
+ *
+ * Order matters: we reset the URL path BEFORE flipping signals, so when the
+ * wizard mounts (during the effect flush at the end of the batch) it can
+ * write `#wizard-create` to the hash via replaceState without a subsequent
+ * pushState stripping it. Previously the pushState ran AFTER the batch,
+ * overwriting the wizard's hash write with an empty hash — which left the
+ * wizard displayed correctly but without a deep-linkable URL.
  */
 export function startNewWorkspaceWizard(): void {
+  // Reset the URL path so init() / refresh lands in account mode instead of
+  // trying to re-hydrate whatever tenant slug was previously in the path.
+  // replaceState (not pushState) avoids adding a spurious history entry.
+  if (window.location.pathname !== "/platform/console") {
+    history.replaceState(null, "", "/platform/console");
+  }
   batch(() => {
     setSelectedTenant(null);
     resetTenantScopedState();
     setMode("workspace");
   });
-  history.pushState(null, "", "/platform/console");
 }
 const [accountTab, _setAccountTab] = createSignal<AccountTab>("tenants");
 export { accountTab };
@@ -1891,6 +1903,14 @@ export function selectTenant(tenant: Tenant): void {
  * sets the view, plane, and URL, then hydrates the target view. Used by the
  * wizard's launch + skip-with-defaults paths to land the operator in the
  * workspace shell with fresh data without a full page reload.
+ *
+ * Precondition: the passed `tenant` MUST already have `onboarding_completed
+ * === true`. The top-level `appRoute()` in ConsoleApp uses that flag to
+ * decide between `workspace-shell` and `wizard` — if you call this with a
+ * tenant whose completion flag is still false, the route stays on 'wizard'
+ * and the operator ping-pongs right back into the wizard for the new tenant.
+ * Callers are responsible for doing the `PATCH .../onboarding_completed=true`
+ * BEFORE calling this and passing the refreshed tenant object.
  */
 export function completeOnboarding(tenant: Tenant): void {
   const nextView = preferredTenantView(tenant);

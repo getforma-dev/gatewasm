@@ -1,4 +1,4 @@
-import { createShow, createSignal, h, onCleanup } from "formajs";
+import { createEffect, createShow, createSignal, h, onCleanup } from "formajs";
 import { normalizeTenantSlugInput } from "../tenantSlug";
 import { LoginPreview } from "./LoginPreview";
 import type { Tenant } from "./store";
@@ -642,23 +642,34 @@ function StepAuthMethods(): ReturnType<typeof h> {
   if (!_t) return h("div", null, "No tenant selected");
   const tenant: Tenant = _t;
 
-  const current = (tenant.allowed_providers as string[] | undefined) || [
-    "email",
-  ];
-  const [providers, setProviders] = createSignal<string[]>([...current]);
+  // Hydrate the local signal from the tenant. Treat both `undefined` and an
+  // empty saved array as "use the default" so an operator who somehow lands on
+  // the wizard with an empty allowed_providers (legacy data, manual API patch)
+  // doesn't see an unconfigured form. Normal flow can't persist empty because
+  // Continue is disabled in that state.
+  const savedProviders = tenant.allowed_providers as string[] | undefined;
+  const initialProviders =
+    savedProviders && savedProviders.length > 0
+      ? [...savedProviders]
+      : ["email"];
+  const [providers, setProviders] = createSignal<string[]>(initialProviders);
 
   const currentSignupMode = (tenant.signup_mode as string | undefined) || "open";
   const [signupMode, setSignupMode] = createSignal<string>(currentSignupMode);
 
+  // Toggling is now unconditional — the operator is allowed to flip everything
+  // off so the signal always tracks the visual state exactly. The
+  // "at least one provider required" rule is enforced at the *exit* of the
+  // step instead: handleContinue bails on empty, the Continue button is
+  // disabled when empty, and an inline warning surfaces the reason. This
+  // avoids the visual desync that the old preventDefault guard caused under
+  // rapid clicking — formajs's reactive `checked` binding uses
+  // setAttribute/removeAttribute, which doesn't sync to the DOM property
+  // after the input is dirty, so any click that updated the DOM but not the
+  // signal would leave the toggle out of sync with the live preview.
   function toggleProvider(p: string): void {
     const list = providers();
     if (list.includes(p)) {
-      // Always require at least one provider — invited users still need an
-      // auth method to log in after accepting their invite. The visual
-      // rejection happens at the click handler via preventDefault (see the
-      // input below); this is a defense-in-depth so anything else that calls
-      // toggleProvider also can't reach the empty state.
-      if (list.length === 1) return;
       setProviders(list.filter((x) => x !== p));
     } else {
       setProviders([...list, p]);
@@ -718,6 +729,25 @@ function StepAuthMethods(): ReturnType<typeof h> {
     available?: boolean;
   }): ReturnType<typeof h> {
     const disabled = opt.available === false;
+    const isOn = () => providers().includes(opt.key);
+
+    // Build the input imperatively so we can write `el.checked` (the DOM
+    // property) directly from a createEffect. formajs's reactive `checked`
+    // prop uses setAttribute/removeAttribute, which updates the content
+    // attribute but NOT the DOM property after the input has been dirtied by
+    // a user click. CSS `:checked` follows the property, so a setAttribute-
+    // driven binding can leave the toggle's visual state out of sync with the
+    // signal whenever the signal is updated via a code path that bypasses the
+    // input's native activation — e.g. clicks on the outer row box below.
+    const inputEl = h("input", {
+      type: "checkbox",
+      disabled: disabled,
+      onChange: () => toggleProvider(opt.key),
+    }) as HTMLInputElement;
+    createEffect(() => {
+      inputEl.checked = isOn();
+    });
+
     // Outer is a <div>, NOT a <label>. The wizard-toggle inside is already a
     // <label> wrapping the <input>, so the click hits exactly one form-control
     // association. A nested-label structure here causes the input's change
@@ -728,7 +758,8 @@ function StepAuthMethods(): ReturnType<typeof h> {
       {
         class: () =>
           "wizard-provider-toggle" +
-          (disabled ? " wizard-provider-disabled" : ""),
+          (disabled ? " wizard-provider-disabled" : "") +
+          (!disabled && !isOn() ? " wizard-provider-toggle-off" : ""),
         onClick: (e: Event) => {
           if (disabled) return;
           // Only react when the click landed OUTSIDE the toggle label — clicks
@@ -752,31 +783,7 @@ function StepAuthMethods(): ReturnType<typeof h> {
       h(
         "label",
         { class: "wizard-toggle" },
-        h("input", {
-          type: "checkbox",
-          checked: () => providers().includes(opt.key),
-          disabled: disabled,
-          // preventDefault on click cancels the browser's optimistic visual
-          // flip BEFORE it happens, so the at-least-one-provider guard can
-          // refuse the change without leaving the visual desynced from the
-          // signal. Reactive boolean attribute bindings in formajs cache the
-          // last applied value and won't re-write the DOM when the signal
-          // hasn't changed, so we can't repair the desync after the fact.
-          // We also surface a toast so the operator gets immediate feedback
-          // about WHY the toggle didn't move — without it the click looks
-          // broken.
-          onClick: (e: Event) => {
-            const list = providers();
-            if (list.length === 1 && list.includes(opt.key)) {
-              e.preventDefault();
-              toast.show(
-                "At least one sign-in method is required.",
-                "error",
-              );
-            }
-          },
-          onChange: () => toggleProvider(opt.key),
-        }),
+        inputEl,
         h("span", { class: "wizard-toggle-track" }),
       ),
     );
@@ -910,7 +917,7 @@ function StepAuthMethods(): ReturnType<typeof h> {
             "wizard-form-warning" +
             (providers().length === 0 ? "" : " wizard-form-warning-hidden"),
         },
-        "Pick at least one sign-in method to continue. Invited users still need a way to sign in after they accept their invite.",
+        "Pick at least one sign-in method to continue. End users need a way to log in regardless of how they get an account.",
       ),
 
       h(

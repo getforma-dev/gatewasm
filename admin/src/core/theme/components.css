@@ -3723,11 +3723,25 @@
   border-radius: 8px;
   margin-bottom: 6px;
   cursor: pointer;
-  transition: border-color 0.15s;
+  background: var(--surface-raised);
+  transition: border-color 0.15s, background 0.15s, opacity 0.15s;
 }
 
 .wizard-provider-toggle:hover {
   border-color: var(--border-strong);
+}
+
+/* Off-state styling — dim the whole row when the provider is toggled off so
+   the operator can see the state at a glance, not just from the pill. Keeps
+   the label legible (not faded into the background) but drops the row's
+   visual weight so "on" rows pop. */
+.wizard-provider-toggle-off {
+  background: transparent;
+  opacity: 0.6;
+}
+
+.wizard-provider-toggle-off:hover {
+  opacity: 0.85;
 }
 
 .wizard-provider-disabled {
