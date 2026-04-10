@@ -2013,7 +2013,11 @@ export function OnboardingWizard(): ReturnType<typeof h> {
             h(
               "span",
               { class: "wizard-tenant-name" },
-              () => selectedTenant()!.name,
+              // Null-safe: formajs's nested createShow doesn't cascade dispose
+              // to inner branch roots when the outer root is disposed, so this
+              // text child's internalEffect can outlive the createShow guard
+              // above and fire during a batch that sets selectedTenant to null.
+              () => selectedTenant()?.name ?? "",
             ),
         ),
       ),
