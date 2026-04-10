@@ -2,7 +2,7 @@
  * LoginPreview — native reactive mock of the tenant login page
  * wrapped in a mini browser chrome for a polished preview feel.
  */
-import { createShow, h } from "formajs";
+import { createEffect, createShow, h } from "formajs";
 import {
   EyeIcon,
   GitHubIcon,
@@ -62,6 +62,12 @@ export function LoginPreview(props: LoginPreviewProps) {
 
   const rootVars = () => {
     const t = tokens();
+    const userText = props.textColor ? props.textColor() : "";
+    const font = props.fontFamily ? props.fontFamily() : "";
+    const effectiveFont =
+      font && font !== "System default"
+        ? `"${font}", sans-serif`
+        : "inherit";
     return {
       "--lp-accent": props.primaryColor(),
       "--lp-bg": props.bgColor ? props.bgColor() || t.bg : t.bg,
@@ -69,15 +75,35 @@ export function LoginPreview(props: LoginPreviewProps) {
         ? props.cardColor() || t.surface
         : t.surface,
       "--lp-card-border": t.border,
-      "--lp-text": t.text,
-      "--lp-text-dim": t.textDim,
-      "--lp-text-muted": t.textMuted,
+      "--lp-text": userText || t.text,
+      "--lp-text-dim": userText || t.textDim,
+      "--lp-text-muted": userText || t.textMuted,
       "--lp-input-bg": t.surface,
       "--lp-input-border": t.border,
       "--lp-oauth-bg": t.surfaceRaised,
       "--lp-btn-text": props.darkMode() ? t.bg : "#ffffff",
+      "--lp-font": effectiveFont,
     };
   };
+
+  // Dynamically load Google Fonts when the operator picks a non-system font.
+  // Each font gets its own <link> (idempotent — the browser deduplicates
+  // identical hrefs). We don't remove old links because the operator may
+  // switch back and forth during the session.
+  createEffect(() => {
+    const font = props.fontFamily ? props.fontFamily() : "";
+    if (!font || font === "System default") return;
+    const id = "lp-gfont-" + font.replace(/\s+/g, "-").toLowerCase();
+    if (document.getElementById(id)) return;
+    const link = document.createElement("link");
+    link.id = id;
+    link.rel = "stylesheet";
+    link.href =
+      "https://fonts.googleapis.com/css2?family=" +
+      encodeURIComponent(font) +
+      ":wght@400;500;600;700&display=swap";
+    document.head.appendChild(link);
+  });
 
   const slugText = props.slug ? props.slug : () => "your-app";
 
@@ -126,14 +152,18 @@ export function LoginPreview(props: LoginPreviewProps) {
         {
           class: "lp-card",
           style: () => {
-            const base =
+            let s =
               "background:" +
               (props.cardColor
                 ? props.cardColor() || tokens().surface
                 : tokens().surface) +
               ";";
+            const font = props.fontFamily ? props.fontFamily() : "";
+            if (font && font !== "System default") {
+              s += 'font-family:"' + font + '",sans-serif;';
+            }
             const custom = customStyle();
-            return base + custom;
+            return s + custom;
           },
         },
         h(

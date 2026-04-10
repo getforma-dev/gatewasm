@@ -1159,6 +1159,19 @@ function StepBranding(): ReturnType<typeof h> {
             onInput: (e: Event) =>
               setButtonColor((e.target as HTMLInputElement).value),
           }),
+          createShow(
+            () => buttonColor() !== "#6366f1",
+            () =>
+              h(
+                "button",
+                {
+                  type: "button",
+                  class: "btn btn-ghost btn-sm",
+                  onClick: () => setButtonColor("#6366f1"),
+                },
+                "Reset",
+              ),
+          ),
         ),
       ),
 
