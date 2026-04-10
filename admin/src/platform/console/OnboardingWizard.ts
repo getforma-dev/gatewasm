@@ -762,10 +762,17 @@ function StepAuthMethods(): ReturnType<typeof h> {
           // signal. Reactive boolean attribute bindings in formajs cache the
           // last applied value and won't re-write the DOM when the signal
           // hasn't changed, so we can't repair the desync after the fact.
+          // We also surface a toast so the operator gets immediate feedback
+          // about WHY the toggle didn't move — without it the click looks
+          // broken.
           onClick: (e: Event) => {
             const list = providers();
             if (list.length === 1 && list.includes(opt.key)) {
               e.preventDefault();
+              toast.show(
+                "At least one sign-in method is required.",
+                "error",
+              );
             }
           },
           onChange: () => toggleProvider(opt.key),

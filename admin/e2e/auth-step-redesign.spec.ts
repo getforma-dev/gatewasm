@@ -294,6 +294,12 @@ test.describe('Auth step redesign', () => {
       await emailLabel.click();
       await expect(emailCheckbox).toBeChecked();
 
+      // A toast should appear immediately telling the operator why the
+      // toggle didn't move. Without this feedback the click looks broken.
+      await expect(
+        page.getByText('At least one sign-in method is required.'),
+      ).toBeVisible({ timeout: 5000 });
+
       // The continue button should remain enabled — providers is still ["email"].
       const continueBtn = page.locator('.wizard-pane-left .btn.btn-accent').filter({ hasText: /Continue/ });
       await expect(continueBtn).toBeEnabled();

@@ -542,12 +542,16 @@ export function ConsoleApp() {
               shortcutLabel,
               sections: paletteSections,
             }),
-            ToastView(toast),
           ),
             () => OnboardingWizard(),
           ),
         },
       ],
     ),
+    // ToastView lives at the top level so it's mounted regardless of which
+    // mode/branch is active. Previously it was nested inside the workspace
+    // shell only, which meant the wizard couldn't surface toasts (e.g.,
+    // the at-least-one-provider rejection in the auth step).
+    ToastView(toast),
   );
 }
