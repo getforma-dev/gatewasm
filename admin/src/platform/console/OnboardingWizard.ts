@@ -1002,6 +1002,61 @@ function StepBranding(): ReturnType<typeof h> {
     "Outfit",
   ];
 
+  // Helper for color picker rows. Uses imperative `.value` writes via
+  // createEffect so the text input stays in sync after Reset clicks —
+  // formajs's reactive `value` prop uses setAttribute, which doesn't update
+  // the DOM property after the user has typed (same dirty-input issue as the
+  // auth step's checkbox).
+  function ColorRow(
+    label: string,
+    getter: () => string,
+    setter: (v: string) => void,
+    defaultValue: string,
+    placeholder?: string,
+  ): ReturnType<typeof h> {
+    const colorInput = h("input", {
+      type: "color",
+      onInput: (e: Event) =>
+        setter((e.target as HTMLInputElement).value),
+    }) as HTMLInputElement;
+    const textInput = h("input", {
+      type: "text",
+      class: "input input-sm",
+      onInput: (e: Event) =>
+        setter((e.target as HTMLInputElement).value),
+    }) as HTMLInputElement;
+    if (placeholder) textInput.placeholder = placeholder;
+    createEffect(() => {
+      const v = getter();
+      colorInput.value = v || placeholder || defaultValue || "#000000";
+      textInput.value = v;
+    });
+    return h(
+      "label",
+      { class: "wizard-field" },
+      h("span", null, label),
+      h(
+        "div",
+        { class: "wizard-color-row" },
+        colorInput,
+        textInput,
+        createShow(
+          () => getter() !== defaultValue,
+          () =>
+            h(
+              "button",
+              {
+                type: "button",
+                class: "btn btn-ghost btn-sm",
+                onClick: () => setter(defaultValue),
+              },
+              "Reset",
+            ),
+        ),
+      ),
+    );
+  }
+
   async function handleContinue(): Promise<void> {
     setSaving(true);
     await updateTenant(tenant.id, {
@@ -1143,41 +1198,7 @@ function StepBranding(): ReturnType<typeof h> {
       ),
 
       // ── Button Color (was "Primary color") ──
-      h(
-        "label",
-        { class: "wizard-field" },
-        h("span", null, "Button color"),
-        h(
-          "div",
-          { class: "wizard-color-row" },
-          h("input", {
-            type: "color",
-            value: buttonColor(),
-            onInput: (e: Event) =>
-              setButtonColor((e.target as HTMLInputElement).value),
-          }),
-          h("input", {
-            type: "text",
-            class: "input input-sm",
-            value: () => buttonColor(),
-            onInput: (e: Event) =>
-              setButtonColor((e.target as HTMLInputElement).value),
-          }),
-          createShow(
-            () => buttonColor() !== "#6366f1",
-            () =>
-              h(
-                "button",
-                {
-                  type: "button",
-                  class: "btn btn-ghost btn-sm",
-                  onClick: () => setButtonColor("#6366f1"),
-                },
-                "Reset",
-              ),
-          ),
-        ),
-      ),
+      ColorRow("Button color", buttonColor, setButtonColor, "#6366f1"),
 
       // ── Button Text ──
       h(
@@ -1194,42 +1215,7 @@ function StepBranding(): ReturnType<typeof h> {
       ),
 
       // ── Card Background ──
-      h(
-        "label",
-        { class: "wizard-field" },
-        h("span", null, "Card background"),
-        h(
-          "div",
-          { class: "wizard-color-row" },
-          h("input", {
-            type: "color",
-            value: () => cardColor() || defaultCard(),
-            onInput: (e: Event) =>
-              setCardColor((e.target as HTMLInputElement).value),
-          }),
-          h("input", {
-            type: "text",
-            class: "input input-sm",
-            placeholder: () => defaultCard(),
-            value: () => cardColor(),
-            onInput: (e: Event) =>
-              setCardColor((e.target as HTMLInputElement).value),
-          }),
-          createShow(
-            () => cardColor() !== "",
-            () =>
-              h(
-                "button",
-                {
-                  type: "button",
-                  class: "btn btn-ghost btn-sm",
-                  onClick: () => setCardColor(""),
-                },
-                "Reset",
-              ),
-          ),
-        ),
-      ),
+      ColorRow("Card background", cardColor, setCardColor, "", defaultCard()),
 
       // ── Font Family ──
       h(
@@ -1273,42 +1259,7 @@ function StepBranding(): ReturnType<typeof h> {
       ),
 
       // ── Text Color ──
-      h(
-        "label",
-        { class: "wizard-field" },
-        h("span", null, "Text color"),
-        h(
-          "div",
-          { class: "wizard-color-row" },
-          h("input", {
-            type: "color",
-            value: () => textColor() || defaultText(),
-            onInput: (e: Event) =>
-              setTextColor((e.target as HTMLInputElement).value),
-          }),
-          h("input", {
-            type: "text",
-            class: "input input-sm",
-            placeholder: () => defaultText(),
-            value: () => textColor(),
-            onInput: (e: Event) =>
-              setTextColor((e.target as HTMLInputElement).value),
-          }),
-          createShow(
-            () => textColor() !== "",
-            () =>
-              h(
-                "button",
-                {
-                  type: "button",
-                  class: "btn btn-ghost btn-sm",
-                  onClick: () => setTextColor(""),
-                },
-                "Reset",
-              ),
-          ),
-        ),
-      ),
+      ColorRow("Text color", textColor, setTextColor, "", defaultText()),
 
       // ── Pro Section (dark mode, custom CSS, page bg, remove branding) ──
       h(
