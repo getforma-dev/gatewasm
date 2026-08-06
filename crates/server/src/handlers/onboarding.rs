@@ -11,7 +11,7 @@ use sqlx::Row;
 
 use crate::error::AppError;
 use crate::frontend::FrontendSnapshot;
-use crate::handlers::management::is_valid_css_color;
+use crate::handlers::management::{is_safe_css_color, is_valid_css_color, sanitize_custom_css};
 use crate::html_template::{render_page, PageConfig, PageOutput};
 use crate::ir;
 use crate::jwt::signing;
@@ -220,34 +220,6 @@ fn validate_slug(slug: &str) -> Result<String, AppError> {
         });
     }
     Ok(slug)
-}
-
-fn sanitize_custom_css(input: &str) -> String {
-    let truncated = if input.len() > 2000 { &input[..2000] } else { input };
-    let mut result = truncated.to_string();
-    let patterns = [
-        "url(", "@import", "expression(", "javascript:", "-moz-binding",
-        "behavior:", "</style", "<script", "<!--",
-    ];
-    for pat in &patterns {
-        let mut cleaned = String::with_capacity(result.len());
-        let lower = result.to_lowercase();
-        let pat_lower = pat.to_lowercase();
-        let mut pos = 0;
-        while pos < result.len() {
-            if pos + pat_lower.len() <= lower.len()
-                && &lower[pos..pos + pat_lower.len()] == pat_lower.as_str()
-            {
-                pos += pat_lower.len();
-            } else {
-                cleaned.push(result.as_bytes()[pos] as char);
-                pos += 1;
-            }
-        }
-        result = cleaned;
-    }
-    result.retain(|c| c != '<' && c != '>' && c != '\\' && c != '{' && c != '}');
-    result.trim().to_string()
 }
 
 // ── Self-Serve API ──────────────────────────────────────────────────────
@@ -787,6 +759,26 @@ pub async fn update_my_tenant(
                 error: "invalid_color",
                 message: "primary_color must be a valid CSS hex color (e.g. #abc, #aabbcc)".into(),
             });
+        }
+    }
+
+    // These two reach the hosted login page's inline <style> unescaped, so
+    // they are validated here rather than only encoded at render. An empty
+    // string is the existing "clear this override" sentinel and is stored as
+    // NULL further down, so it is allowed through.
+    for (field, value) in [
+        ("branding_bg_color", body.branding_bg_color.as_deref()),
+        ("branding_card_color", body.branding_card_color.as_deref()),
+    ] {
+        if let Some(v) = value.filter(|v| !v.trim().is_empty()) {
+            if !is_safe_css_color(v) {
+                return Err(AppError::BadRequest {
+                    error: "invalid_color",
+                    message: format!(
+                        "{field} must be a CSS color (hex, rgb()/hsl(), or a keyword)"
+                    ),
+                });
+            }
         }
     }
 

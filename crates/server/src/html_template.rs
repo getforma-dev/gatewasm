@@ -51,13 +51,31 @@ fn build_head(
     }
 
     if let Some(css) = personality_css {
-        let safe_css = css
-            .replace("</style>", "&lt;/style&gt;")
-            .replace("</STYLE>", "&lt;/STYLE&gt;");
-        head.push_str(&format!("<style nonce=\"{nonce}\">{safe_css}</style>\n"));
+        head.push_str(&format!(
+            "<style nonce=\"{nonce}\">{}</style>\n",
+            css_text_safe(css)
+        ));
     }
 
     head
+}
+
+/// Neutralize a string for embedding inside a `<style>` element.
+///
+/// `<style>` content is HTML RAWTEXT: character references are not decoded,
+/// so there is nothing to "escape" in the usual sense. The tokenizer leaves
+/// RAWTEXT only via `</` (end-tag-open), and the tag name that follows is
+/// matched ASCII-case-insensitively and may be terminated by whitespace, `/`
+/// or `>`. Enumerating spellings therefore cannot work — the previous
+/// `.replace("</style>", ..)` caught two of them and missed `</StYlE>`,
+/// `</style\n>`, `</style/` and `</style bar>`.
+///
+/// Neutralizing `</` itself is exact, because it is the only sequence that can
+/// begin the exit. `\/` is a valid CSS escape for `/`, so a legitimate
+/// declaration survives, and a lone `<` is left alone so Media Queries Level 4
+/// range syntax (`@media (400px < width)`) still works.
+fn css_text_safe(css: &str) -> String {
+    css.replace("</", "<\\/")
 }
 
 fn resolve_assets(manifest: &AssetManifest, route_pattern: &str) -> ResolvedAssets {
@@ -209,5 +227,67 @@ fn render_page_phase2(config: &PageConfig) -> PageOutput {
     PageOutput {
         html,
         csp: csp::build_csp_header(&nonce),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn no_assets() -> ResolvedAssets {
+        ResolvedAssets {
+            fonts: vec![],
+            css_urls: vec![],
+            js_urls: vec![],
+        }
+    }
+
+    #[test]
+    fn css_text_safe_blocks_every_end_tag_spelling() {
+        // End-tag matching is ASCII-case-insensitive and the tag name may be
+        // followed by whitespace, `/` or `>`. The previous two-literal
+        // replace caught only `</style>` and `</STYLE>`.
+        for payload in [
+            "</style>",
+            "</STYLE>",
+            "</StYlE>",
+            "</style\n>",
+            "</style\t>",
+            "</style/",
+            "</style bar>",
+            "</style",
+        ] {
+            let out = css_text_safe(&format!("body{{color:red}}{payload}<img src=x>"));
+            assert!(
+                !out.contains("</"),
+                "`{payload}` left an end-tag-open in {out:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn css_text_safe_leaves_ordinary_css_alone() {
+        let css = "body{background:#0a0a0c;--glow-size:1100px;}";
+        assert_eq!(css_text_safe(css), css);
+        // Media Queries L4 range syntax survives — this is why we neutralize
+        // `</` rather than stripping every `<`.
+        assert_eq!(
+            css_text_safe("@media (400px < width)"),
+            "@media (400px < width)"
+        );
+    }
+
+    #[test]
+    fn personality_css_cannot_close_the_style_element() {
+        let head = build_head("t", "N0NCE", &no_assets(), Some("</StYlE ><img src=x>"));
+        // Exactly one `</style>`: the one build_head emits itself.
+        assert_eq!(head.matches("</style>").count(), 1);
+    }
+
+    #[test]
+    fn build_head_escapes_the_title_exactly_once() {
+        let head = build_head("A&B <x>", "N0NCE", &no_assets(), None);
+        assert!(head.contains("<title>A&amp;B &lt;x&gt;</title>"));
+        assert!(!head.contains("&amp;amp;"), "title was double-escaped");
     }
 }
