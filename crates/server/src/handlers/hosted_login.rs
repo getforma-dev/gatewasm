@@ -215,10 +215,23 @@ pub(crate) fn html_escape(s: &str) -> String {
         .replace('\'', "&#39;")
 }
 
-/// Sanitize a JSON string for safe embedding inside <script> tags.
-/// Prevents </script> breakout by escaping </ sequences.
+/// Serialize a JSON value for safe embedding inside a `<script>` element.
+///
+/// Script data has two exits, not one: `</script` and `<!--`. The latter puts
+/// the tokenizer into script-data-escaped state, where the page's real
+/// `</script>` stops closing the element and the rest of the document is
+/// swallowed. Escaping only `</` — as this did — misses it.
+///
+/// Both begin with `<`, and `serde_json` emits a bare `<` only inside a string
+/// literal, where `<` is byte-identical. So escaping every `<` is both
+/// complete and value-preserving: the output parses back to the same value.
+/// U+2028/U+2029 are escaped too — legal in JSON strings, but illegal raw
+/// line terminators in JavaScript before ES2019.
 pub(crate) fn json_for_script(json: &serde_json::Value) -> String {
-    json.to_string().replace("</", "<\\/")
+    json.to_string()
+        .replace('<', "\\u003C")
+        .replace('\u{2028}', "\\u2028")
+        .replace('\u{2029}', "\\u2029")
 }
 
 /// Extract a safe `?redirect=` param from the query string.

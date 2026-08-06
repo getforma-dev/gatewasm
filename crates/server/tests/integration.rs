@@ -12477,3 +12477,50 @@ async fn hosted_login_survives_non_ascii_branding_css() {
         .unwrap();
     assert_eq!(res.status(), StatusCode::OK);
 }
+
+#[tokio::test]
+async fn benchmark_query_params_cannot_break_out_of_the_config_script() {
+    // /platform/benchmark has no auth layer and interpolated serde_json output
+    // straight into a <script>. serde_json escapes `"` and `\` but not `<`, so
+    // a query param could close the element, or open a comment and put the
+    // tokenizer into script-data-escaped state where the real </script> stops
+    // closing it.
+    let app = test_app().await;
+    let res = app
+        .oneshot(get_request(
+            "/platform/benchmark?sort=%3C/script%3E%3Ch1%20id=pwned%3Ex&dir=%3C!--%3Cscript%3E&search=%3C/SCRIPT%3E",
+        ))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let body = body_string(res).await;
+
+    // Isolate the config script's contents. Asserting over the whole document
+    // would be wrong: Forma's SSR island markers are legitimate `<!--` comments.
+    let marker = body
+        .find("window.__FORMA_SERVER_URL__")
+        .expect("benchmark page must emit a config script");
+    let open_end = body[..marker].rfind('>').expect("script tag open") + 1;
+    let close = body[open_end..]
+        .find("</script>")
+        .expect("config script must be closed")
+        + open_end;
+    let script = &body[open_end..close];
+
+    // `json_for_script` escapes every `<`, so the script body has none.
+    assert!(
+        !script.contains('<'),
+        "unescaped `<` inside the config script: {script:?}"
+    );
+    // The payload survived, escaped — encoded rather than silently dropped.
+    assert!(
+        script.contains("\\u003C"),
+        "expected the injected `<` to be escaped: {script:?}"
+    );
+    // And the document's script elements still balance.
+    assert_eq!(
+        body.matches("<script").count(),
+        body.matches("</script>").count(),
+        "unbalanced <script> elements"
+    );
+}
