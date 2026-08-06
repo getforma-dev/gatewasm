@@ -39,7 +39,6 @@ All commands run from the project root.
 | `npm run dev` | Starts Rust server + frontend watcher + Mailpit (all three) |
 | `npm run dev:clean` | Clears all user data, then starts dev (keeps tenants/roles) |
 | `npm run dev:reset` | Wipes DB schema completely, then starts dev (server re-runs migrations) |
-| `npm run cache:clear` | Opens `/dev/clear-cache` to purge browser localStorage/cookies |
 
 ### Building
 

@@ -6,6 +6,7 @@ use chrono::Utc;
 
 use crate::frontend::FrontendSnapshot;
 use crate::handlers::auth::extract_refresh_cookie;
+use crate::handlers::management::{is_safe_css_color, sanitize_custom_css};
 use crate::html_template::{render_page, PageConfig};
 use crate::jwt::signing;
 use crate::middleware::tenant::TenantContext;
@@ -161,18 +162,33 @@ else{{b.style.opacity='';b.style.pointerEvents='';}}
 
     let page_title = format!("{} — Sign In", html_escape(app_name));
 
-    let bg_color = tenant.branding_bg_color.as_deref().unwrap_or("#0a0a0c");
+    // These three values are interpolated into an inline <style> on a page
+    // served to unauthenticated visitors. They are validated on write, but
+    // rows predate that validator and a new write path could always be added,
+    // so fall back rather than trust the column.
+    let bg_color = tenant
+        .branding_bg_color
+        .as_deref()
+        .filter(|c| is_safe_css_color(c))
+        .unwrap_or("#0a0a0c");
     let mut personality_css = format!(
         "body{{background:{bg};color:#e8e6e3;--accent:{pc};}}",
         bg = bg_color,
         pc = primary_color,
     );
-    if let Some(ref card_color) = tenant.branding_card_color {
-        personality_css.push_str(&format!(".tl-card{{background:{};}}",card_color));
+    if let Some(card_color) = tenant
+        .branding_card_color
+        .as_deref()
+        .filter(|c| is_safe_css_color(c))
+    {
+        personality_css.push_str(&format!(".tl-card{{background:{card_color};}}"));
     }
-    if let Some(ref custom_css) = tenant.branding_custom_css {
-        if !custom_css.is_empty() {
-            personality_css.push_str(&format!(".tl-card{{{}}}", custom_css));
+    if let Some(custom_css) = tenant.branding_custom_css.as_deref() {
+        // Re-sanitize on read. `sanitize_custom_css` is idempotent: its output
+        // is a subset of the grammar it accepts.
+        let safe = sanitize_custom_css(custom_css);
+        if !safe.is_empty() {
+            personality_css.push_str(&format!(".tl-card{{{safe}}}"));
         }
     }
 

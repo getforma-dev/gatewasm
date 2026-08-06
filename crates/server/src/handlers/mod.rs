@@ -662,7 +662,6 @@ fn create_router_inner(state: AppState, rate_limit_enabled: bool) -> Router {
         .merge(ws_ticket_route)
         .route("/ws", get(crate::ws::handler::ws_upgrade))
         .route("/health", get(health))
-        .route("/dev/clear-cache", get(dev_clear_cache))
         .route("/bridge.js", get(serve_bridge_js))
         .route("/bridge/integrity", get(bridge_integrity::bridge_integrity))
         .route(
@@ -762,75 +761,6 @@ async fn favicon() -> impl IntoResponse {
         )
             .into_response(),
     }
-}
-
-/// GET /dev/clear-cache — Dev-only page that nukes service workers, caches, storage, and cookies.
-/// Runs on the same origin so it has access to everything.
-/// Queries ALL tenant slugs from the DB to clear every possible HttpOnly auth cookie.
-async fn dev_clear_cache(State(state): State<AppState>) -> impl IntoResponse {
-    // Query all tenant slugs so we can expire every possible auth cookie
-    let slugs: Vec<String> = sqlx::query_scalar("SELECT slug FROM tenants")
-        .fetch_all(&state.db)
-        .await
-        .unwrap_or_default();
-
-    let mut hm = axum::http::HeaderMap::new();
-    hm.insert(header::CONTENT_TYPE, "text/html; charset=utf-8".parse().unwrap());
-
-    // Clear cookies for every tenant slug
-    for slug in &slugs {
-        // Scoped cookie at /t/{slug}
-        let c = format!("gw_rt_{}=; HttpOnly; Path=/t/{}; Max-Age=0", slug, slug);
-        hm.append(header::SET_COOKIE, c.parse().unwrap());
-        // Platform-style cookie at /
-        let c2 = format!("gw_rt_{}=; HttpOnly; Path=/; Max-Age=0", slug);
-        hm.append(header::SET_COOKIE, c2.parse().unwrap());
-    }
-    // Legacy cookies
-    hm.append(header::SET_COOKIE, "refresh_token=; HttpOnly; Path=/; Max-Age=0".parse().unwrap());
-    hm.append(header::SET_COOKIE, "__Host-refresh_token=; HttpOnly; Secure; SameSite=None; Path=/; Max-Age=0".parse().unwrap());
-
-    (hm, r#"<!DOCTYPE html>
-<html><head><meta charset="utf-8"><title>Clearing caches...</title>
-<style>
-  body{background:#0a0a0c;color:#e8e6e3;font-family:monospace;display:flex;align-items:center;
-  justify-content:center;min-height:100vh;flex-direction:column;gap:0.5rem;font-size:0.85rem}
-  .ok{color:#34d399} .item{color:#6366f1} a{color:#6366f1}
-</style></head><body><div id="log">Clearing...</div>
-<script>
-(async()=>{
-  const log=document.getElementById('log'),L=[];
-  const add=m=>{L.push(m);log.innerHTML=L.join('<br>')};
-  // Clear JS-accessible cookies across all paths
-  const cookies=document.cookie.split(';');
-  let cc=0;
-  for(const c of cookies){
-    const name=c.split('=')[0].trim();
-    if(!name)continue;
-    // Clear at root and every /t/* subpath
-    document.cookie=name+'=; Max-Age=0; Path=/';
-    // Also try common subpaths
-    const paths=window.location.pathname.match(/\/t\/[^/]+/g)||[];
-    for(const p of paths) document.cookie=name+'=; Max-Age=0; Path='+p;
-    cc++;
-  }
-  add('\u2713 Expired '+cc+' JS-accessible cookie(s)');
-  add('<span class="item">\u2713 HttpOnly auth cookies expired via response headers (all '+document.title+' tenants)</span>');
-  if('serviceWorker' in navigator){
-    const rs=await navigator.serviceWorker.getRegistrations();
-    for(const r of rs){await r.unregister();add('<span class="item">\u2713 Unregistered SW: '+r.scope+'</span>')}
-    if(!rs.length)add('No service workers registered')
-  }
-  if('caches' in window){
-    const ks=await caches.keys();
-    for(const k of ks){await caches.delete(k);add('<span class="item">\u2713 Deleted cache: '+k+'</span>')}
-    if(!ks.length)add('No cache storage entries')
-  }
-  const lc=localStorage.length;localStorage.clear();add('\u2713 localStorage cleared ('+lc+' items)');
-  const sc=sessionStorage.length;sessionStorage.clear();add('\u2713 sessionStorage cleared ('+sc+' items)');
-  add('<br><span class="ok">Done. <a href="javascript:history.back()">Go back</a> or <a href="/platform/console">Console</a></span>');
-})();
-</script></body></html>"#)
 }
 
 async fn health(State(state): State<AppState>) -> Json<serde_json::Value> {

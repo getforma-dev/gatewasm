@@ -12394,3 +12394,86 @@ async fn test_asset_route_returns_404_for_missing() {
 
     assert_eq!(resp.status(), StatusCode::NOT_FOUND);
 }
+
+// ── Security regressions ────────────────────────────────────────────────
+//
+// These cover defects that were live in the tree: an unauthenticated route
+// that enumerated every tenant, and a `<style>` escape that matched only two
+// literal spellings of the closing tag.
+
+#[tokio::test]
+async fn dev_clear_cache_route_is_gone() {
+    // The handler ran `SELECT slug FROM tenants` and emitted one Set-Cookie
+    // per tenant, disclosing the full tenant list to any anonymous caller and
+    // force-logging-out every session. It shipped in the release binary with
+    // no auth layer and no debug_assertions guard.
+    let app = test_app().await;
+    let res = app
+        .oneshot(get_request("/dev/clear-cache"))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
+async fn hosted_login_drops_branding_that_would_escape_the_style_block() {
+    // Written straight to the column, bypassing the write-side validator, so
+    // this covers rows that predate it and any future write path that forgets
+    // to validate.
+    //
+    // This asserts the *render-side* filtering: the values never reach the
+    // page. It deliberately does not double as the escaper's test — with the
+    // filter in place nothing hostile gets that far, so it cannot fail if the
+    // escaper regresses. `css_text_safe_blocks_every_end_tag_spelling` in
+    // html_template.rs covers the escaper itself, and does fail without it.
+    let (app, pool) = test_app_with_pool().await;
+    sqlx::query(
+        "UPDATE tenants SET branding_bg_color = $1, branding_card_color = $2, \
+         branding_custom_css = $3 WHERE slug = $4",
+    )
+    .bind("#000}</StYlE ><h1 id=pwned>phish</h1><style>")
+    .bind("#111}</style\n><img src=x>")
+    .bind("color:red}</STYLE><form action=https://evil.example>")
+    .bind(TEST_TENANT_SLUG)
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    let res = app
+        .oneshot(get_request(&format!("/t/{}/login", TEST_TENANT_SLUG)))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let body = body_string(res).await;
+
+    // The page emits exactly one <style> element, so exactly one closing tag.
+    assert_eq!(
+        body.to_lowercase().matches("</style").count(),
+        1,
+        "branding closed the <style> element"
+    );
+    assert!(!body.contains("id=pwned"), "injected markup reached the page");
+    assert!(
+        !body.contains("evil.example"),
+        "injected form action reached the page"
+    );
+}
+
+#[tokio::test]
+async fn hosted_login_survives_non_ascii_branding_css() {
+    // `sanitize_custom_css` aborted the process on any non-ASCII input, so a
+    // tenant storing an accented value took the platform down on render.
+    let (app, pool) = test_app_with_pool().await;
+    sqlx::query("UPDATE tenants SET branding_custom_css = $1 WHERE slug = $2")
+        .bind("color:#fff; font-family:Ünsere Schrift; letter-spacing:é")
+        .bind(TEST_TENANT_SLUG)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    let res = app
+        .oneshot(get_request(&format!("/t/{}/login", TEST_TENANT_SLUG)))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+}
