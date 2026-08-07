@@ -13,7 +13,7 @@ Multi-tenant authentication platform built on [Forma](https://github.com/getform
 - Self-serve tenant onboarding with trial enforcement
 - HIPAA compliance engine with startup validation
 - Island architecture SSR with activateIslands()
-- CSP-safe hardened runtime — no eval, no Function
+- No `eval` and no `new Function` in any shipped artifact; strict nonce-based CSP with `'strict-dynamic'`, `object-src 'none'`, and no `unsafe-inline` on `script-src` or `style-src`
 
 ## Project Structure
 
@@ -30,8 +30,8 @@ gatewasm/
 
 ## Prerequisites
 
-- **Rust** — `rustup` with stable toolchain (`rustc 1.80+`)
-- **Node.js** — v18+ or v20+
+- **Rust** — `rustup` with stable toolchain (`rustc 1.85+`; the Docker image pins 1.93)
+- **Node.js** — v20.19+ or v22+ (`@getforma/core` 2.0.0 sets that floor; CI uses 22)
 - **Docker** — for local PostgreSQL (`docker 24+`)
 - **npm** — comes with Node.js
 
