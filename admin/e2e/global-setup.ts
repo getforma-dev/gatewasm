@@ -1,16 +1,24 @@
+import { tmpdir } from 'os';
+import { join } from 'path';
 import { execSync, spawn } from 'child_process';
 import { writeFileSync } from 'fs';
 
 const PORT = 3102;
 const MAILPIT_SMTP_PORT = 1025;
 const MAILPIT_UI_PORT = 8025;
-const PID_FILE = '/tmp/gatewasm-e2e.pid';
-const MAILPIT_PID_FILE = '/tmp/gatewasm-e2e-mailpit.pid';
+// `/tmp` does not exist on Windows and writing there threw before the suite
+// could start. `os.tmpdir()` is the portable spelling.
+const PID_FILE = join(tmpdir(), 'gatewasm-e2e.pid');
+const MAILPIT_PID_FILE = join(tmpdir(), 'gatewasm-e2e-mailpit.pid');
 
 export default async function globalSetup() {
-  // Kill any existing server and mailpit
-  try { execSync(`lsof -ti :${PORT} | xargs kill 2>/dev/null`); } catch {}
-  try { execSync(`lsof -ti :${MAILPIT_SMTP_PORT} | xargs kill 2>/dev/null`); } catch {}
+  // Kill any existing server and mailpit. `lsof` is not available on Windows;
+  // the try/catch already tolerated that, but it printed a confusing error on
+  // every run, so skip it there instead.
+  if (process.platform !== 'win32') {
+    try { execSync(`lsof -ti :${PORT} | xargs kill 2>/dev/null`); } catch {}
+    try { execSync(`lsof -ti :${MAILPIT_SMTP_PORT} | xargs kill 2>/dev/null`); } catch {}
+  }
   await new Promise(r => setTimeout(r, 1000));
 
   // Start Mailpit — local SMTP trap for capturing test emails.
@@ -53,7 +61,7 @@ export default async function globalSetup() {
 
   // Test-only defaults — override via environment for CI or shared envs.
   const server = spawn('cargo', ['run', '-p', 'gatewasm-server'], {
-    cwd: process.cwd().replace('/admin', ''),
+    cwd: join(process.cwd(), '..'),
     env: {
       ...process.env,
       PORT: String(PORT),

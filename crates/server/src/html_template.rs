@@ -20,5 +20,37 @@
 //!   cannot be interpolated from an arbitrary string.
 
 pub use forma_server::csp::CspNonce;
-pub use forma_server::template::render_page;
 pub use forma_server::types::{PageConfig, PageOutput};
+
+/// Render a page, suppressing the service-worker registration in dev.
+///
+/// forma-server emits the registration unconditionally. When the server is
+/// reading assets from `admin/dist` on the filesystem, a service worker caches
+/// them and the next edit silently serves stale JS — the "something looks
+/// stale" failure CONTRIBUTING sends people to. The local template used to
+/// gate this and the gate was lost when rendering moved to the framework;
+/// `smoke.spec.ts` caught it.
+pub fn render_page(config: &PageConfig) -> PageOutput {
+    let mut out = forma_server::template::render_page(config);
+    if crate::assets::use_filesystem_assets() {
+        let sw = sw_registration_tag(out.nonce.as_str());
+        debug_assert!(
+            out.html.contains(&sw),
+            "forma-server changed the service-worker snippet; \
+             sw_registration_tag no longer matches and dev would silently \
+             register a worker again"
+        );
+        out.html = out.html.replace(&sw, "");
+    }
+    out
+}
+
+/// The exact element forma-server emits to register the service worker.
+///
+/// Reconstructed rather than pattern-matched so a change upstream fails the
+/// assertion above instead of quietly leaving the worker in place.
+fn sw_registration_tag(nonce: &str) -> String {
+    format!(
+        "<script nonce=\"{nonce}\">if('serviceWorker' in navigator)navigator.serviceWorker.register('/sw.js');</script>\n"
+    )
+}

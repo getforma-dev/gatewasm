@@ -10,6 +10,20 @@ use std::collections::HashMap;
 
 use crate::{assets, AssetManifest, RenderMode};
 
+/// Routes allowed to server-render (Phase 2).
+///
+/// Deliberately an allowlist rather than "any route the compiler emitted IR
+/// for". `@getforma/compiler` 0.3.1 emits IR for every configured route, so
+/// keying off IR presence silently switched SSR on for pages that had never
+/// been migrated or verified — `/platform/login` started serving markup with
+/// its "New here?" link missing, and onboarding emitted an `<svg width="">`
+/// that the browser rejected. Both were caught by e2e, and neither is
+/// something a dependency upgrade should decide.
+///
+/// Adding a route here is the last step of migrating it, after its islands are
+/// split out and its no-JS shell is verified. See SSR-MIGRATION-PLAN.md.
+const SSR_ROUTES: &[&str] = &["/platform/benchmark"];
+
 /// Load and parse all IR modules from the active asset source.
 ///
 /// In development we read `.ir` files from `admin/dist` on the filesystem so
@@ -22,6 +36,9 @@ use crate::{assets, AssetManifest, RenderMode};
 /// Version compatibility is no longer checked separately — since forma-ir
 /// 0.2.0 `IrModule::parse` rejects an incompatible header itself, so a
 /// successful parse *is* the compatibility guarantee.
+///
+/// Phase 2 is opt-in per route via [`SSR_ROUTES`], not "on wherever IR
+/// exists". See that constant for why.
 pub fn load_ir_modules(
     manifest: &AssetManifest,
 ) -> (HashMap<String, RenderMode>, HashMap<String, IrModule>) {
@@ -51,6 +68,15 @@ pub fn load_ir_modules(
             render_modes.insert(route_pattern.clone(), RenderMode::Phase1ClientMount);
             continue;
         };
+
+        if !SSR_ROUTES.contains(&route_pattern.as_str()) {
+            tracing::debug!(
+                route = %route_pattern,
+                "IR is available but the route is not opted in to Phase 2 SSR"
+            );
+            render_modes.insert(route_pattern.clone(), RenderMode::Phase1ClientMount);
+            continue;
+        }
 
         match IrModule::parse(&ir_bytes) {
             Ok(module) => {
