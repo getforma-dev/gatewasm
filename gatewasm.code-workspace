@@ -23,14 +23,14 @@
   "tasks": {
     "version": "2.0.0",
     "tasks": [
-      { "label": "db: up (dev + test)", "type": "shell", "command": "npm run db:test" },
-      { "label": "build: frontend (SSR)", "type": "shell", "command": "npm run build:ssr" },
-      { "label": "dev: server + frontend + mail", "type": "shell", "command": "npm run dev" },
-      { "label": "test: rust unit", "type": "shell", "command": "npm test" },
-      { "label": "test: rust integration", "type": "shell", "command": "npm run test:integration" },
-      { "label": "test: e2e (all)", "type": "shell", "command": "npm run test:e2e" },
-      { "label": "test: e2e (smoke)", "type": "shell", "command": "npm run test:e2e:smoke" },
-      { "label": "check: SSR degradations", "type": "shell", "command": "cd admin && npm run check:ssr" }
+      { "label": "db: up (dev + test)", "type": "shell", "command": "npm run db:test", "problemMatcher": [] },
+      { "label": "build: frontend (SSR)", "type": "shell", "command": "npm run build:ssr", "problemMatcher": [] },
+      { "label": "dev: server + frontend + mail", "type": "shell", "command": "npm run dev", "isBackground": true, "problemMatcher": [] },
+      { "label": "test: rust unit", "type": "shell", "command": "npm test", "problemMatcher": [] },
+      { "label": "test: rust integration", "type": "shell", "command": "npm run test:integration", "problemMatcher": [] },
+      { "label": "test: e2e (all)", "type": "shell", "command": "npm run test:e2e", "problemMatcher": [] },
+      { "label": "test: e2e (smoke)", "type": "shell", "command": "npm run test:e2e:smoke", "problemMatcher": [] },
+      { "label": "check: SSR degradations", "type": "shell", "command": "cd admin && npm run check:ssr", "problemMatcher": [] }
     ]
   }
 }
