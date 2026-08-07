@@ -60,6 +60,15 @@ while IFS='=' read -r key was; do
     echo "  These are not cosmetic. The SSR stream shipped a dead link for months" >&2
     echo "  precisely because nobody was forced to read it." >&2
     FAILED=1
+  elif (( now == 0 && was > 0 )); then
+    # A stream collapsing to exactly zero is far more often a broken collector
+    # than a real fix — a cache hit, a changed output format, a renamed flag.
+    # This script shipped that bug: clippy emits nothing on a warm target dir,
+    # so CI read 0 and called it 'improved 26 -> 0'. Fail instead.
+    echo "::error::$key reported 0 warnings against a baseline of $was" >&2
+    echo "  That is far more likely a broken check than $was real fixes." >&2
+    echo "  Confirm the command still produces output before re-recording." >&2
+    FAILED=1
   elif (( now < was )); then
     echo "$key warnings improved: $was -> $now — re-record with --update" >&2
     FAILED=1
