@@ -73,7 +73,7 @@ pub async fn token_exchange(
         grant_type = %body.grant_type,
         client_id = ?body.client_id,
         redirect_uri = ?body.redirect_uri,
-        code_prefix = ?body.code.as_deref().map(|c| &c[..c.len().min(12)]),
+        code_prefix = ?body.code.as_deref().map(|c| crate::text::truncate_chars(c, 12)),
         "Token exchange requested"
     );
     match body.grant_type.as_str() {
@@ -151,7 +151,7 @@ async fn handle_auth_code(
         auth_code_row.ok_or_else(|| {
             tracing::warn!(
                 request_id = %request_id,
-                code_prefix = %&code[..code.len().min(12)],
+                code_prefix = %crate::text::truncate_chars(code, 12),
                 client_id = %req_client_id,
                 redirect_uri = %req_redirect_uri,
                 "Authorization code rejected: no matching code row"

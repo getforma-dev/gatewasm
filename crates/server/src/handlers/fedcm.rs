@@ -239,6 +239,9 @@ pub async fn token_assertion(
 /// FedCM endpoints are called by the browser without tenant context, so we
 /// need to look for any cookie matching the refresh token naming pattern:
 /// `__Host-gw_rt_*`, `gw_rt_*`, `__Host-refresh_token`, or `refresh_token`.
+// Both indices come from `find('=')`. `=` is one byte, so `eq_pos` and
+// `eq_pos + 1` are always char boundaries whatever the rest contains.
+#[allow(clippy::string_slice)]
 fn find_any_refresh_cookie(headers: &HeaderMap) -> Option<String> {
     // First try the generic fallback (no tenant slug)
     if let Some(rt) = extract_refresh_cookie(headers, None) {

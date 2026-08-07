@@ -18,6 +18,7 @@ pub mod handlers;
 pub mod html_template;
 pub mod ir;
 pub mod jwt;
+pub mod text;
 pub mod middleware;
 pub mod redirects;
 pub mod responses;

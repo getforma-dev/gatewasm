@@ -30,7 +30,7 @@ pub async fn require_management_auth(
         .and_then(|v| v.to_str().ok());
 
     let bearer = match auth_header {
-        Some(h) if h.starts_with("Bearer ") => &h[7..],
+        Some(h) if h.starts_with("Bearer ") => h.strip_prefix("Bearer ").unwrap_or(h),
         _ => {
             return Err(AppError::Unauthorized {
                 error: "unauthorized",
@@ -55,7 +55,7 @@ pub async fn require_management_auth(
 
 /// Resolve tenant context from a `mgmt_` API key (existing behavior).
 async fn resolve_from_api_key(api_key: &str, state: &AppState) -> Result<TenantContext, AppError> {
-    let prefix = &api_key[..api_key.len().min(13)]; // "mgmt_" + 8 chars
+    let prefix = crate::text::truncate_chars(api_key, 13); // "mgmt_" + 8 chars
     let key_hash = signing::hash_token(api_key);
 
     let row = sqlx::query(
@@ -120,7 +120,7 @@ pub async fn require_platform_admin(
         .and_then(|v| v.to_str().ok());
 
     let token = match auth_header {
-        Some(h) if h.starts_with("Bearer plat_") => &h[7..],
+        Some(h) if h.starts_with("Bearer plat_") => h.strip_prefix("Bearer ").unwrap_or(h),
         _ => {
             return Err(AppError::Unauthorized {
                 error: "unauthorized",

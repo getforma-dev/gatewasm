@@ -12669,3 +12669,53 @@ async fn docs_pins_swagger_ui_and_ships_its_own_policy() {
         "{csp}"
     );
 }
+
+#[tokio::test]
+async fn token_endpoint_survives_a_non_ascii_authorization_code() {
+    // `/auth/token` is unauthenticated by design (OAuth), and the handler
+    // logged a 12-byte prefix of `code` straight after parsing the body,
+    // before any validation. A mixed-width value put that index mid-codepoint
+    // and the slice panicked — with panic="abort" in the release profile, one
+    // POST took down the process serving every tenant.
+    //
+    // Mixed width is the case that matters: an all-2-byte or all-3-byte string
+    // lands on a boundary at 12 by coincidence.
+    // The slice lives inside `tracing::info!`, whose fields are only evaluated
+    // when a subscriber is listening. Without this the test cannot fail: it
+    // passed against the unfixed code because no subscriber was installed, so
+    // the panicking expression was never run. Production sets RUST_LOG=info.
+    let _ = tracing_subscriber::fmt()
+        .with_max_level(tracing::Level::INFO)
+        .with_test_writer()
+        .try_init();
+
+    let app = test_app().await;
+    for code in [
+        format!("a{}", "é".repeat(6)),
+        format!("ab{}", "日".repeat(5)),
+        format!("abc{}", "🔑".repeat(3)),
+        format!("abcdefghijk{}", "é"),
+    ] {
+        let res = app
+            .clone()
+            .oneshot(json_request(
+                "POST",
+                "/auth/token",
+                serde_json::json!({
+                    "grant_type": "authorization_code",
+                    "code": code,
+                    "client_id": "whatever",
+                    "redirect_uri": "http://localhost/cb",
+                }),
+            ))
+            .await
+            .unwrap();
+        // The code is bogus, so a 4xx is the right answer. What matters is
+        // that we got an answer at all rather than an aborted process.
+        assert!(
+            res.status().is_client_error() || res.status().is_server_error(),
+            "unexpected status {} for code {code:?}",
+            res.status()
+        );
+    }
+}

@@ -693,6 +693,10 @@ fn create_router_inner(state: AppState, rate_limit_enabled: bool) -> Router {
     // extensions, and dispatches the rewritten request (/auth/login) to main_router.
     let main_for_slug = main_router.clone();
     let state_for_slug = state.clone();
+    // The slices below are indexed from `find('/')` on a URI path. `/` is one
+    // byte and the path always starts with one, so every index used here is a
+    // char boundary.
+    #[allow(clippy::string_slice)]
     let slug_handler = Router::new().fallback(move |mut req: Request| {
         let router = main_for_slug.clone();
         let state = state_for_slug.clone();

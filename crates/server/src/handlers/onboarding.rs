@@ -307,7 +307,7 @@ pub async fn create_tenant(
 
     let tenant_id = format!("ten_{}", uuid::Uuid::new_v4());
     let api_key = format!("mgmt_{}", uuid::Uuid::new_v4());
-    let api_key_prefix = &api_key[..api_key.len().min(13)];
+    let api_key_prefix = crate::text::truncate_chars(&api_key, 13);
     let api_key_hash = signing::hash_token(&api_key);
     let trial_ends_at = Utc::now() + Duration::days(14);
 
@@ -1151,7 +1151,7 @@ pub async fn rotate_my_tenant_key(
     }
 
     let new_key = format!("mgmt_{}", uuid::Uuid::new_v4());
-    let prefix = &new_key[..new_key.len().min(13)];
+    let prefix = crate::text::truncate_chars(&new_key, 13);
     let hash = signing::hash_token(&new_key);
 
     sqlx::query("UPDATE tenants SET api_key_hash = $1, api_key_prefix = $2, updated_at = NOW() WHERE id = $3")
