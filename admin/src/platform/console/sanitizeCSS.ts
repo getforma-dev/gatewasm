@@ -34,8 +34,13 @@ const ALLOWED_FUNCTIONS = new Set([
 
 const MAX_CHARS = 2000;
 
-/** Characters that cannot terminate a declaration, open a rule or comment, or fetch. */
-const SAFE_VALUE_CHARS = /^[A-Za-z0-9 #%.,\-+/()!_"']*$/;
+/**
+ * Characters that cannot terminate a declaration, open a rule or comment, or
+ * fetch. Letters and digits in any script — `font-family:Ünsere Schrift` and
+ * CJK font names are ordinary CSS, and no non-ASCII letter is a CSS syntax
+ * character.
+ */
+const SAFE_VALUE_CHARS = /^[\p{L}\p{N} #%.,\-+/()!_"']*$/u;
 
 export function isSafeCSSValue(value: string): boolean {
   if (value.includes('/*') || value.includes('*/')) return false;
@@ -52,7 +57,7 @@ export function isSafeCSSValue(value: string): boolean {
       // Function name is the identifier run ending at i. A vendor spelling
       // such as -webkit-linear-gradient keeps its leading `-` and so fails.
       let start = i;
-      while (start > 0 && /[A-Za-z0-9\-_]/.test(value[start - 1]!)) start--;
+      while (start > 0 && /[\p{L}\p{N}\-_]/u.test(value[start - 1]!)) start--;
       if (!ALLOWED_FUNCTIONS.has(value.slice(start, i).toLowerCase())) return false;
     } else if (ch === ')') {
       depth--;

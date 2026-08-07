@@ -210,8 +210,12 @@ fn is_safe_css_value(value: &str) -> bool {
     // `!` carries `!important`. `"`/`'` carry quoted font names. Absent, and
     // deliberately: `\` (escapes), `;` (declaration separator), `{` `}` (rule
     // breakout), `<` `>` (markup), `@` (at-rules), `:` (property separator).
+    // Alphanumeric in any script, not just ASCII: `font-family:Ünsere Schrift`
+    // and CJK font names are ordinary CSS. No non-ASCII letter is a CSS syntax
+    // character, so widening this does not widen what can be expressed
+    // structurally.
     if !value.chars().all(|c| {
-        c.is_ascii_alphanumeric()
+        c.is_alphanumeric()
             || matches!(
                 c,
                 ' ' | '#' | '%' | '.' | ',' | '-' | '+' | '/' | '(' | ')' | '!' | '_' | '"' | '\''
@@ -235,11 +239,12 @@ fn is_safe_css_value(value: &str) -> bool {
                 // on the allowlist — including vendor spellings such as
                 // `-webkit-linear-gradient`, since the run captures the
                 // leading `-`.
-                let start = bytes[..i]
-                    .iter()
-                    .rposition(|c| !(c.is_ascii_alphanumeric() || *c == b'-' || *c == b'_'))
-                    .map_or(0, |p| p + 1);
-                let name = value[start..i].to_ascii_lowercase();
+                let start = value[..i]
+                    .char_indices()
+                    .rev()
+                    .find(|(_, c)| !(c.is_alphanumeric() || *c == '-' || *c == '_'))
+                    .map_or(0, |(idx, c)| idx + c.len_utf8());
+                let name = value[start..i].to_lowercase();
                 if !ALLOWED_CSS_FUNCTIONS.contains(&name.as_str()) {
                     return false;
                 }
@@ -1972,6 +1977,16 @@ mod tests {
         assert_eq!(
             sanitize_custom_css("color: rgb(10, 20, 30)"),
             "color:rgb(10, 20, 30)"
+        );
+        // Non-Latin font names are ordinary CSS. This is also the input shape
+        // that used to abort the process.
+        assert_eq!(
+            sanitize_custom_css("font-family:Ünsere Schrift"),
+            "font-family:Ünsere Schrift"
+        );
+        assert_eq!(
+            sanitize_custom_css("font-family:\"ヒラギノ角ゴ\", sans-serif"),
+            "font-family:\"ヒラギノ角ゴ\", sans-serif"
         );
     }
 
