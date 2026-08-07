@@ -46,36 +46,89 @@ pub fn is_valid_css_color(s: &str) -> bool {
     }
 }
 
-/// Properties a tenant may set on the hosted-login card. Deliberately small:
-/// this is a branding knob, not a stylesheet. Everything that can fetch a
-/// resource (`background`, `background-image`, `list-style`, `cursor`,
-/// `filter`, `mask`) or escape its box (`position`, `content`) is excluded.
+/// Properties a tenant may set on the hosted-login card. This is a branding
+/// knob, not a stylesheet, but it has to cover what tenants already saved
+/// through the previous unvalidated write path — `background` shorthands,
+/// longhand spacing, and text effects were all in use and rendering.
+///
+/// Excluded: anything that escapes the card's box (`position`, `content`,
+/// `z-index`, `transform`) and the image properties, which are pointless here
+/// anyway because `url()` is not an allowed function.
 const ALLOWED_CSS_PROPERTIES: &[&str] = &[
+    "background",
     "background-color",
     "border",
+    "border-bottom",
     "border-color",
+    "border-left",
     "border-radius",
+    "border-right",
     "border-style",
+    "border-top",
     "border-width",
     "box-shadow",
     "color",
     "font-family",
     "font-size",
+    "font-style",
     "font-weight",
+    "gap",
+    "height",
     "letter-spacing",
     "line-height",
     "margin",
+    "margin-bottom",
+    "margin-left",
+    "margin-right",
+    "margin-top",
+    "max-height",
+    "max-width",
+    "min-height",
+    "min-width",
     "opacity",
+    "outline",
+    "outline-color",
     "padding",
+    "padding-bottom",
+    "padding-left",
+    "padding-right",
+    "padding-top",
     "text-align",
+    "text-decoration",
+    "text-shadow",
     "text-transform",
+    "width",
 ];
 
-/// Functional notations a declaration value may use. `url()`, `image-set()`,
-/// `expression()` and `-moz-binding()` are absent: those fetch or execute.
-/// `var()`/`calc()` are absent because their arguments would need recursive
-/// validation for no branding benefit.
-const ALLOWED_CSS_FUNCTIONS: &[&str] = &["rgb", "rgba", "hsl", "hsla"];
+/// Functional notations a declaration value may use. Gradients and the modern
+/// colour spaces are here because tenants were already storing them through
+/// the old unvalidated path and they rendered fine.
+///
+/// Absent, and the reason the list is an allowlist at all: `url()`,
+/// `image-set()`, `expression()` and `-moz-binding()` fetch or execute.
+const ALLOWED_CSS_FUNCTIONS: &[&str] = &[
+    "calc",
+    "clamp",
+    "color-mix",
+    "conic-gradient",
+    "hsl",
+    "hsla",
+    "hwb",
+    "lab",
+    "lch",
+    "linear-gradient",
+    "max",
+    "min",
+    "oklab",
+    "oklch",
+    "radial-gradient",
+    "repeating-conic-gradient",
+    "repeating-linear-gradient",
+    "repeating-radial-gradient",
+    "rgb",
+    "rgba",
+    "var",
+];
 
 /// Maximum accepted length of a raw declaration list, in CHARACTERS.
 const CUSTOM_CSS_MAX_CHARS: usize = 2000;
@@ -133,58 +186,76 @@ pub fn sanitize_custom_css(input: &str) -> String {
 /// tenants have already saved.
 pub fn is_safe_css_color(s: &str) -> bool {
     let s = s.trim();
-    !s.is_empty() && s.chars().count() <= 64 && is_safe_css_value(s)
+    // Generous enough for a multi-stop gradient, which tenants stored through
+    // the previous unvalidated path and which rendered correctly.
+    !s.is_empty() && s.chars().count() <= 200 && is_safe_css_value(s)
 }
 
-/// True if a declaration value is built only from characters and functional
-/// notations that cannot terminate the declaration, open a rule or comment,
-/// or fetch a resource.
+/// True if a declaration value cannot terminate the declaration, open a rule
+/// or a comment, or fetch a resource.
+///
+/// Two gates. The character gate rejects `\`, and that is what makes the
+/// function-name gate sound: with no CSS escapes available, an identifier can
+/// only be spelled literally, so `url(` cannot be smuggled in as `u\72 l(` —
+/// the trick that made the previous denylist unfixable. The name gate then
+/// only has to compare plain text.
+///
+/// Nesting is handled, so `linear-gradient(135deg, rgb(0 0 0), #fff)` passes
+/// while `linear-gradient(red, url(evil))` does not.
 fn is_safe_css_value(value: &str) -> bool {
-    let mut rest = value;
-    while let Some(open) = rest.find('(') {
-        let (head, tail) = rest.split_at(open);
-        if !is_safe_plain_css(head) {
-            return false;
-        }
-        // The function name is the trailing ASCII-alphanumeric run of `head`.
-        // A vendor prefix such as `-webkit-gradient` yields `gradient`, which
-        // is not on the allowlist — so it fails closed.
-        let name: String = {
-            let trailing: Vec<char> = head
-                .chars()
-                .rev()
-                .take_while(char::is_ascii_alphanumeric)
-                .collect();
-            trailing.into_iter().rev().collect()
-        };
-        if !ALLOWED_CSS_FUNCTIONS.contains(&name.to_ascii_lowercase().as_str()) {
-            return false;
-        }
-        let Some(close) = tail.find(')') else {
-            return false;
-        };
-        // `/` is allowed inside arguments for the `rgb(0 0 0 / 50%)` form. A
-        // `(` inside the arguments means nesting we did not parse — rejected
-        // by the character check below.
-        let args = &tail[1..close];
-        if !args
-            .chars()
-            .all(|c| c.is_ascii_digit() || matches!(c, ' ' | '.' | ',' | '%' | '-' | '+' | '/'))
-        {
-            return false;
-        }
-        rest = &tail[close + 1..];
+    // Comments could hide a declaration split across sanitizer passes.
+    if value.contains("/*") || value.contains("*/") {
+        return false;
     }
-    is_safe_plain_css(rest)
+    // `!` carries `!important`. `"`/`'` carry quoted font names. Absent, and
+    // deliberately: `\` (escapes), `;` (declaration separator), `{` `}` (rule
+    // breakout), `<` `>` (markup), `@` (at-rules), `:` (property separator).
+    if !value.chars().all(|c| {
+        c.is_ascii_alphanumeric()
+            || matches!(
+                c,
+                ' ' | '#' | '%' | '.' | ',' | '-' | '+' | '/' | '(' | ')' | '!' | '_' | '"' | '\''
+            )
+    }) {
+        return false;
+    }
+    // Unbalanced quotes would swallow the declarations we emit after this one.
+    if value.matches('"').count() % 2 != 0 || value.matches('\'').count() % 2 != 0 {
+        return false;
+    }
+
+    let bytes = value.as_bytes();
+    let mut depth = 0i32;
+    for (i, &b) in bytes.iter().enumerate() {
+        match b {
+            b'(' => {
+                depth += 1;
+                // The function name is the identifier run ending at `i`.
+                // Empty (`(` with no name) fails closed, as does any name not
+                // on the allowlist — including vendor spellings such as
+                // `-webkit-linear-gradient`, since the run captures the
+                // leading `-`.
+                let start = bytes[..i]
+                    .iter()
+                    .rposition(|c| !(c.is_ascii_alphanumeric() || *c == b'-' || *c == b'_'))
+                    .map_or(0, |p| p + 1);
+                let name = value[start..i].to_ascii_lowercase();
+                if !ALLOWED_CSS_FUNCTIONS.contains(&name.as_str()) {
+                    return false;
+                }
+            }
+            b')' => {
+                depth -= 1;
+                if depth < 0 {
+                    return false;
+                }
+            }
+            _ => {}
+        }
+    }
+    depth == 0
 }
 
-/// Rejects `\` (CSS escapes — the denylist's blind spot), `<` `>` (HTML),
-/// `{` `}` (rule breakout), `(` `)` (handled by the caller), `@` (at-rules),
-/// `"` `'` (strings), `;` (the declaration separator), and `/` `*` (comments).
-fn is_safe_plain_css(s: &str) -> bool {
-    s.chars()
-        .all(|c| c.is_ascii_alphanumeric() || matches!(c, ' ' | '#' | '%' | '.' | ',' | '-' | '+'))
-}
 
 // ── Platform Admin endpoints (authenticated with plat_ key) ─────────────
 
@@ -1906,35 +1977,54 @@ mod tests {
 
     #[test]
     fn sanitize_custom_css_drops_dangerous_declarations() {
+        // Each of these must be dropped ENTIRELY. Asserting only on the
+        // absence of specific characters would let a partially-surviving
+        // declaration through unnoticed.
         for bad in [
             "background:url(https://evil.example/x)",
             "background:u\\72 l(https://evil.example/x)", // CSS escape -> url(
+            "background:URL(https://evil.example/x)",     // case
+            "background:-webkit-linear-gradient(url(x))", // vendor prefix + nested fetch
+            "background:linear-gradient(red, url(evil))", // nested fetch
             "background-image:image-set('x')",
             "color:red} body{background:url(evil)} .x{",
             "behavior:url(#default#time2)",
             "color:expression(alert(1))",
             "@import url(evil)",
             "-moz-binding:url(evil)",
-            "color:red;}</StYlE><h1>pwned",
+            "color:red/*x*/;background:url(y)", // comment splice
+            "color:rgb(0,0,0",                  // unbalanced paren
+            "font-family:\"unclosed",           // unbalanced quote
         ] {
-            let out = sanitize_custom_css(bad);
-            for forbidden in ['<', '>', '{', '}', '\\', '(', ')'] {
-                // Parenthesised values only survive via the function
-                // allowlist, which excludes every fetching notation.
-                if forbidden == '(' || forbidden == ')' {
-                    assert!(
-                        !out.to_ascii_lowercase().contains("url"),
-                        "{bad:?} -> {out:?}"
-                    );
-                    continue;
-                }
-                assert!(!out.contains(forbidden), "{bad:?} -> {out:?}");
-            }
+            assert_eq!(
+                sanitize_custom_css(bad),
+                "",
+                "expected {bad:?} to be dropped entirely"
+            );
+        }
+
+        // A hostile declaration must not take a legitimate sibling with it,
+        // nor survive alongside one.
+        assert_eq!(
+            sanitize_custom_css("color:#fff; background:url(evil); border-radius:8px"),
+            "color:#fff;border-radius:8px"
+        );
+
+        // Where a safe declaration precedes a breakout attempt, keeping the
+        // safe half is correct — what matters is that nothing structural
+        // survives.
+        let spliced = sanitize_custom_css("color:red;}</StYlE><h1>pwned");
+        assert_eq!(spliced, "color:red");
+        for forbidden in ['<', '>', '{', '}', '\\'] {
+            assert!(!spliced.contains(forbidden), "{spliced:?}");
         }
     }
 
     #[test]
     fn safe_css_colors_accept_the_free_text_field_grammar() {
+        // The wizard pairs its colour picker with a free-text field, so these
+        // are all values a tenant could already have saved and rendered
+        // through the previous unvalidated write path.
         for good in [
             "#fff",
             "#6366f1",
@@ -1942,7 +2032,13 @@ mod tests {
             "transparent",
             "rgb(10,20,30)",
             "rgba(10,20,30,0.5)",
+            "rgb(0 0 0 / 50%)",
             "hsl(200 50% 40%)",
+            "oklch(0.7 0.1 250)",
+            "color-mix(in srgb, #fff 30%, #000)",
+            "var(--accent)",
+            "linear-gradient(135deg,#667eea,#764ba2)",
+            "radial-gradient(circle at 30% 30%, rgb(0 0 0), #fff)",
         ] {
             assert!(is_safe_css_color(good), "rejected {good}");
         }
@@ -1951,8 +2047,9 @@ mod tests {
             "url(evil)",
             "</style>",
             "expression(alert(1))",
-            "var(--x)",
-            "\\75 rl(x)",
+            "var(--x, url(evil))", // fallback smuggling a fetch
+            "-webkit-image-set(x)",
+            "\\75 rl(x)", // CSS escape — rejected because `\` is
             "",
         ] {
             assert!(!is_safe_css_color(bad), "accepted {bad}");

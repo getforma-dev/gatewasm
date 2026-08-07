@@ -280,8 +280,19 @@ mod tests {
     #[test]
     fn personality_css_cannot_close_the_style_element() {
         let head = build_head("t", "N0NCE", &no_assets(), Some("</StYlE ><img src=x>"));
-        // Exactly one `</style>`: the one build_head emits itself.
-        assert_eq!(head.matches("</style>").count(), 1);
+        // Match case-insensitively on the tag-open prefix. Asserting on the
+        // literal `</style>` would be case-sensitive, so the mixed-case
+        // payload could never match it and the test would pass even with the
+        // escaper deleted.
+        assert_eq!(
+            head.to_lowercase().matches("</style").count(),
+            1,
+            "branding closed the <style> element: {head}"
+        );
+        assert!(
+            head.contains("<\\/StYlE"),
+            "payload should be neutralized in place, not stripped: {head}"
+        );
     }
 
     #[test]

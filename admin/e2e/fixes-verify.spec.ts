@@ -4,28 +4,13 @@ import { TenantLogin } from './selectors';
 
 test.describe('Route and cache fixes', () => {
 
-  test('/dev/clear-cache clears SW, caches, storage, and cookies @regression', async ({ page }) => {
-    // Set some state first
-    await page.goto(BASE + '/t/platform/login', { waitUntil: 'networkidle' });
-    await page.evaluate(() => {
-      localStorage.setItem('test_key', 'test_value');
-      sessionStorage.setItem('test_session', 'test_value');
-    });
-
-    // Hit the clear cache page
-    await page.goto(BASE + '/dev/clear-cache');
-    await page.waitForFunction(() => document.body?.textContent?.includes('Done'), { timeout: 10000 });
-
-    const body = await page.textContent('body');
-    expect(body).toContain('localStorage cleared');
-    expect(body).toContain('sessionStorage cleared');
-    expect(body).toContain('HttpOnly auth cookies expired');
-    expect(body).toContain('Done');
-
-    // Verify localStorage actually cleared
-    await page.goto(BASE + '/t/platform/login', { waitUntil: 'networkidle' });
-    const lsValue = await page.evaluate(() => localStorage.getItem('test_key'));
-    expect(lsValue).toBeNull();
+  test('/dev/clear-cache is gone @regression', async ({ page }) => {
+    // The route was unauthenticated, shipped in the release binary, and ran
+    // `SELECT slug FROM tenants` — handing the full tenant list to any
+    // anonymous caller via Set-Cookie headers and expiring every session.
+    // Removed; `npm run dev:clean` and `dev:reset` cover the dev workflow.
+    const res = await page.goto(BASE + '/dev/clear-cache');
+    expect(res?.status()).toBe(404);
   });
 
   test('dashboard does NOT doom-loop @regression', async ({ page }) => {

@@ -97,7 +97,8 @@ From `admin/` directory, additional test filtering:
 ### When to use which reset
 
 ```
-Something looks stale         →  npm run cache:clear  (browser caches)
+Something looks stale          →  hard-reload the browser (Ctrl+Shift+R) or clear
+                                  site data in devtools → Application
 User data is messy             →  npm run dev:clean    (truncate users, keep schema)
 Migrations changed             →  npm run dev:reset    (drop schema, re-run migrations)
 Dependencies or build broken   →  npm run fresh        (nuke + reinstall + rebuild)

@@ -12524,3 +12524,45 @@ async fn benchmark_query_params_cannot_break_out_of_the_config_script() {
         "unbalanced <script> elements"
     );
 }
+
+#[tokio::test]
+async fn manage_config_sanitizes_branding_custom_css_on_write() {
+    // This path stored the value raw while the self-serve path sanitized it —
+    // the same field, the same render sink, two write paths with different
+    // care. The validator existed and was simply never called here, so this
+    // asserts the WIRING, which a unit test on the sanitizer cannot.
+    let (app, pool) = test_app_with_pool().await;
+    let (tenant_id, mgmt_key) =
+        create_test_tenant_with_mgmt_key(&pool, "mgmt-css", "Mgmt CSS").await;
+
+    let res = app
+        .oneshot(mgmt_request(
+            "PATCH",
+            "/manage/config",
+            serde_json::json!({
+                "branding_custom_css": "color:#fff;}</StYlE><script>alert(1)</script>;background:url(https://evil.example)"
+            }),
+            &mgmt_key,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+
+    let stored: Option<String> =
+        sqlx::query_scalar("SELECT branding_custom_css FROM tenants WHERE id = $1")
+            .bind(&tenant_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    let stored = stored.unwrap_or_default();
+    for forbidden in ['<', '>', '{', '}', '\\'] {
+        assert!(
+            !stored.contains(forbidden),
+            "management write path stored {forbidden:?}: {stored:?}"
+        );
+    }
+    assert!(
+        !stored.to_ascii_lowercase().contains("url"),
+        "management write path stored a fetching notation: {stored:?}"
+    );
+}

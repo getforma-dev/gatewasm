@@ -6,7 +6,7 @@ use chrono::Utc;
 
 use crate::frontend::FrontendSnapshot;
 use crate::handlers::auth::extract_refresh_cookie;
-use crate::handlers::management::{is_safe_css_color, sanitize_custom_css};
+use crate::handlers::management::{is_safe_css_color, is_valid_css_color, sanitize_custom_css};
 use crate::html_template::{render_page, PageConfig};
 use crate::jwt::signing;
 use crate::middleware::tenant::TenantContext;
@@ -76,7 +76,15 @@ async fn login_page_render(
 ) -> crate::html_template::PageOutput {
     let frontend = FrontendSnapshot::capture(state);
     let app_name = tenant.branding_app_name.as_deref().unwrap_or(&tenant.name);
-    let primary_color = &tenant.branding_primary_color;
+    // Hex-validated on both write paths, but it lands in the same inline
+    // <style> as the other three branding values, so it gets the same
+    // render-side fallback rather than being trusted because of where it came
+    // from. `--accent` is also read back out into the JSON config below.
+    let primary_color: &str = if is_valid_css_color(&tenant.branding_primary_color) {
+        &tenant.branding_primary_color
+    } else {
+        "#6366f1"
+    };
     let logo_html = tenant
         .branding_logo_url
         .as_ref()
@@ -162,31 +170,51 @@ else{{b.style.opacity='';b.style.pointerEvents='';}}
 
     let page_title = format!("{} — Sign In", html_escape(app_name));
 
-    // These three values are interpolated into an inline <style> on a page
-    // served to unauthenticated visitors. They are validated on write, but
-    // rows predate that validator and a new write path could always be added,
-    // so fall back rather than trust the column.
-    let bg_color = tenant
-        .branding_bg_color
-        .as_deref()
-        .filter(|c| is_safe_css_color(c))
-        .unwrap_or("#0a0a0c");
+    // These values are interpolated into an inline <style> on a page served to
+    // unauthenticated visitors. They are validated on write, but rows predate
+    // that validator and a new write path could always be added, so fall back
+    // rather than trust the column. A fallback is logged: it changes what a
+    // tenant's users see, and nobody would otherwise know which tenant to tell.
+    let bg_color = match tenant.branding_bg_color.as_deref() {
+        Some(c) if !is_safe_css_color(c) => {
+            tracing::warn!(
+                tenant = %tenant.slug,
+                field = "branding_bg_color",
+                "stored branding value is not a safe CSS colour; rendering the default"
+            );
+            "#0a0a0c"
+        }
+        Some(c) => c,
+        None => "#0a0a0c",
+    };
     let mut personality_css = format!(
         "body{{background:{bg};color:#e8e6e3;--accent:{pc};}}",
         bg = bg_color,
         pc = primary_color,
     );
-    if let Some(card_color) = tenant
-        .branding_card_color
-        .as_deref()
-        .filter(|c| is_safe_css_color(c))
-    {
-        personality_css.push_str(&format!(".tl-card{{background:{card_color};}}"));
+    match tenant.branding_card_color.as_deref() {
+        Some(c) if is_safe_css_color(c) => {
+            personality_css.push_str(&format!(".tl-card{{background:{c};}}"));
+        }
+        Some(_) => tracing::warn!(
+            tenant = %tenant.slug,
+            field = "branding_card_color",
+            "stored branding value is not a safe CSS colour; omitting it"
+        ),
+        None => {}
     }
     if let Some(custom_css) = tenant.branding_custom_css.as_deref() {
         // Re-sanitize on read. `sanitize_custom_css` is idempotent: its output
         // is a subset of the grammar it accepts.
         let safe = sanitize_custom_css(custom_css);
+        if safe.trim() != custom_css.trim() {
+            tracing::warn!(
+                tenant = %tenant.slug,
+                field = "branding_custom_css",
+                "stored custom CSS lost declarations on sanitizing; the tenant's \
+                 login page differs from what they saved"
+            );
+        }
         if !safe.is_empty() {
             personality_css.push_str(&format!(".tl-card{{{safe}}}"));
         }
