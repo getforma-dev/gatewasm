@@ -18,12 +18,12 @@
     "typecheck": "tsc --noEmit && tsc --noEmit -p e2e/tsconfig.json"
   },
   "dependencies": {
-    "@getforma/core": "^1.0.9"
+    "@getforma/core": "^2.0.0"
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.11.1",
-    "@getforma/build": "^0.1.8",
-    "@getforma/compiler": "^0.1.2",
+    "@getforma/build": "^0.2.0",
+    "@getforma/compiler": "^0.3.1",
     "@playwright/test": "^1.50.0",
     "@tailwindcss/cli": "^4.1.0",
     "@types/node": "^25.5.2",
