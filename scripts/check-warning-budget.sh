@@ -105,6 +105,15 @@ if [[ ! -f "$BASELINE_FILE" ]]; then
   exit 1
 fi
 
+# The lines behind a stream's count, so an off-baseline number names its
+# warnings instead of leaving the reader to reproduce the runner's platform.
+lines_of() {
+  case "$1" in
+    clippy) grep "^.*: warning:" <<<"$CLIPPY_OUT" || true ;;
+    bundle) grep "Budget exceeded" <<<"$BUNDLE_OUT" || true ;;
+  esac
+}
+
 while IFS='=' read -r key was; do
   [[ -z "$key" ]] && continue
   now="$(current_of "$key")"
@@ -113,9 +122,11 @@ while IFS='=' read -r key was; do
     echo "::error::$key warnings rose from $was to $now" >&2
     echo "  These are not cosmetic. The SSR stream shipped a dead link for months" >&2
     echo "  precisely because nobody was forced to read it." >&2
+    lines_of "$key" >&2
     FAILED=1
   elif (( now < was )); then
     echo "$key warnings improved: $was -> $now — re-record with --update" >&2
+    lines_of "$key" >&2
     FAILED=1
   else
     echo "$key: $now (baseline $was)"
