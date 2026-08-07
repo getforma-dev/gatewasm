@@ -13,7 +13,14 @@ export default async function globalSetup() {
   try { execSync(`lsof -ti :${MAILPIT_SMTP_PORT} | xargs kill 2>/dev/null`); } catch {}
   await new Promise(r => setTimeout(r, 1000));
 
-  // Start Mailpit — local SMTP trap for capturing test emails
+  // Start Mailpit — local SMTP trap for capturing test emails.
+  //
+  // Optional. CI does not install it, and the server suppresses delivery in
+  // test environments anyway, so its absence must not stop the suite. Without
+  // the 'error' handler below, a missing binary raises ENOENT as an unhandled
+  // 'error' event, which killed the whole run before a single test executed —
+  // the CI job could never pass on any commit.
+  let mailpitReady = false;
   const mailpit = spawn('mailpit', [
     '--smtp', `0.0.0.0:${MAILPIT_SMTP_PORT}`,
     '--listen', `0.0.0.0:${MAILPIT_UI_PORT}`,
@@ -21,19 +28,28 @@ export default async function globalSetup() {
     stdio: ['ignore', 'pipe', 'pipe'],
     detached: true,
   });
+  mailpit.on('error', (err: NodeJS.ErrnoException) => {
+    if (err.code === 'ENOENT') {
+      console.warn('[e2e] mailpit not installed — email-inspecting tests will be skipped');
+    } else {
+      console.warn(`[e2e] mailpit failed to start: ${err.message}`);
+    }
+  });
   mailpit.stdout?.resume();
   mailpit.stderr?.resume();
   mailpit.unref();
-  writeFileSync(MAILPIT_PID_FILE, String(mailpit.pid));
+  if (mailpit.pid) writeFileSync(MAILPIT_PID_FILE, String(mailpit.pid));
 
   // Wait for Mailpit to be ready
   for (let i = 0; i < 10; i++) {
     try {
       const res = await fetch(`http://127.0.0.1:${MAILPIT_UI_PORT}/api/v1/messages?limit=1`);
-      if (res.ok) break;
+      if (res.ok) { mailpitReady = true; break; }
     } catch {}
     await new Promise(r => setTimeout(r, 500));
   }
+  // Surfaced so a test that needs the inbox can skip rather than fail obscurely.
+  process.env.MAILPIT_AVAILABLE = mailpitReady ? '1' : '';
 
   // Test-only defaults — override via environment for CI or shared envs.
   const server = spawn('cargo', ['run', '-p', 'gatewasm-server'], {
