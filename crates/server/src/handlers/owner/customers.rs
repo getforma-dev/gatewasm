@@ -1047,7 +1047,7 @@ pub async fn customer_insights(
         ));
     }
 
-    auth_events.sort_by(|a, b| b.0.cmp(&a.0));
+    auth_events.sort_by_key(|(ts, _)| std::cmp::Reverse(*ts));
     let recent_auth_events: Vec<serde_json::Value> =
         auth_events.into_iter().take(60).map(|(_, ev)| ev).collect();
 
