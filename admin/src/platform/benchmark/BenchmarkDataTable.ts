@@ -32,38 +32,43 @@ function handleSort(col: string) {
 }
 
 export function BenchmarkDataTable() {
-  const thead = h('thead', null,
-    h('tr', null,
-      ...COLUMNS.map(col =>
-        h('th', {
-          class: 'benchmark-th',
-          onClick: () => handleSort(col.key),
-        },
-          col.label,
-          h('span', { class: 'sort-indicator' }, sortIndicator(col.key)),
+  // A show BRANCH FACTORY must construct its content on every invocation:
+  // createShow disposes the outgoing branch's reactive roots when it swaps,
+  // so a table built once and returned by reference comes back DEAD after the
+  // first loading flip — its createList is disposed and tbody stays empty
+  // forever. Building here means every swap-in gets a live list.
+  // Verified by: e2e/benchmark.spec.ts > "row count increase fetches from server"
+  const buildTable = () => h('div', { class: 'table-wrap benchmark-table-wrap' },
+    h('table', { class: 'benchmark-table' },
+      h('thead', null,
+        h('tr', null,
+          ...COLUMNS.map(col =>
+            h('th', {
+              class: 'benchmark-th',
+              onClick: () => handleSort(col.key),
+            },
+              col.label,
+              h('span', { class: 'sort-indicator' }, sortIndicator(col.key)),
+            ),
+          ),
+        ),
+      ),
+      h('tbody', null,
+        createList(
+          rows,
+          (row: BenchmarkRow) => String(row.id),
+          (row: BenchmarkRow) =>
+            h('tr', null,
+              h('td', null, String(row.id)),
+              h('td', null, row.name),
+              h('td', null, row.email),
+              h('td', null, row.role),
+              h('td', null, row.status),
+              h('td', null, row.score),
+            ),
         ),
       ),
     ),
-  );
-
-  const tbody = h('tbody', null,
-    createList(
-      rows,
-      (row: BenchmarkRow) => String(row.id),
-      (row: BenchmarkRow) =>
-        h('tr', null,
-          h('td', null, String(row.id)),
-          h('td', null, row.name),
-          h('td', null, row.email),
-          h('td', null, row.role),
-          h('td', null, row.status),
-          h('td', null, row.score),
-        ),
-    ),
-  );
-
-  const table = h('div', { class: 'table-wrap benchmark-table-wrap' },
-    h('table', { class: 'benchmark-table' }, thead, tbody),
   );
 
   return h('div', { class: 'benchmark-data-table' },
@@ -75,7 +80,7 @@ export function BenchmarkDataTable() {
         () => h('div', { class: 'benchmark-error' }, () => error() || 'Error loading data'),
         () => createShow(
           () => rows().length > 0,
-          () => table,
+          buildTable,
           () => h('div', { class: 'benchmark-empty' }, 'No matching rows'),
         ),
       ),
