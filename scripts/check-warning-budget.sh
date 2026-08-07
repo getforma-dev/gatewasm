@@ -74,8 +74,12 @@ collect() {
 # leaves the crate fingerprint-fresh and clippy prints NOTHING for it — 25
 # real warnings read as 0 with full completion evidence. Cleaning only the
 # primary crate forces the re-lint while every dependency stays cached.
+# CARGO_TERM_COLOR=never: CI exports `always`, which threads ANSI escapes
+# through the middle of every ': warning:' — the count read 0 against 25 real
+# warnings while the 'Finished' evidence (an intact word) still passed. The
+# counter and the evidence check must see the same bytes a plain pipe sees.
 cargo clean -p gatewasm-server 2>/dev/null || true
-CLIPPY_OUT=$(collect clippy 'Finished|error\[' cargo clippy -p gatewasm-server --lib --message-format=short)
+CLIPPY_OUT=$(collect clippy 'Finished|error\[' env CARGO_TERM_COLOR=never cargo clippy -p gatewasm-server --lib --message-format=short)
 CURRENT_clippy=$(grep -c "^.*: warning:" <<<"$CLIPPY_OUT" || true)
 
 # ── bundle size budgets ───────────────────────────────────────────────────
