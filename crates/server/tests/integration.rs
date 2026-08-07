@@ -5424,6 +5424,14 @@ async fn test_slug_in_url_nonexistent_tenant() {
 // ══════════════════════════════════════════════════════════════════════════
 
 /// Helper: extract response body as String.
+/// Extract one directive's value from a Content-Security-Policy string.
+fn csp_directive<'a>(csp: &'a str, name: &str) -> Option<&'a str> {
+    csp.split(';')
+        .map(str::trim)
+        .find_map(|d| d.strip_prefix(name).filter(|rest| rest.starts_with(' ')))
+        .map(str::trim)
+}
+
 async fn body_string(response: axum::response::Response) -> String {
     let bytes = axum::body::to_bytes(response.into_body(), 1_000_000)
         .await
@@ -8404,7 +8412,6 @@ async fn test_tenant_security_config_defaults() {
     // Foundation defaults (all ON)
     assert_eq!(sc["idle_timeout_minutes"], 30);
     assert_eq!(sc["host_prefix_cookies"], true);
-    assert_eq!(sc["csp_enabled"], true);
     assert_eq!(sc["client_fingerprint"], true);
 
     // Pro defaults (all OFF)
@@ -8442,7 +8449,6 @@ async fn test_manage_config_includes_security_config() {
     let sc = &body["security_config"];
     assert_eq!(sc["idle_timeout_minutes"], 30);
     assert_eq!(sc["host_prefix_cookies"], true);
-    assert_eq!(sc["csp_enabled"], true);
     assert_eq!(sc["client_fingerprint"], true);
     assert_eq!(sc["webauthn_enabled"], false);
     assert_eq!(sc["dpop_required"], false);
@@ -8473,7 +8479,6 @@ async fn test_update_tenant_security_config() {
     assert_eq!(sc["idle_timeout_minutes"], 15);
     // Foundation defaults preserved for unset fields
     assert_eq!(sc["host_prefix_cookies"], true);
-    assert_eq!(sc["csp_enabled"], true);
     assert_eq!(sc["client_fingerprint"], true);
     // Pro/Enterprise/Compliance defaults preserved
     assert_eq!(sc["webauthn_enabled"], false);
@@ -8694,7 +8699,6 @@ async fn test_compliance_tenant_can_enable_everything() {
 
     // Foundation defaults still preserved
     assert_eq!(sc["host_prefix_cookies"], true);
-    assert_eq!(sc["csp_enabled"], true);
     assert_eq!(sc["client_fingerprint"], true);
 }
 
@@ -8799,7 +8803,6 @@ async fn test_security_config_partial_update() {
 
     // Foundation defaults still intact
     assert_eq!(sc["host_prefix_cookies"], true);
-    assert_eq!(sc["csp_enabled"], true);
     assert_eq!(sc["client_fingerprint"], true);
 
     // Unset fields still at defaults
@@ -8849,9 +8852,22 @@ async fn test_csp_header_on_login_page() {
         csp.contains("'self'"),
         "CSP style-src must include 'self' for stylesheets"
     );
+    // Directive-scoped, not a substring match. forma-server 0.2.0 adds
+    // `style-src-attr 'unsafe-inline'`, which permits `style=""` attributes in
+    // markup while leaving `style-src` nonce-only and scripts untouched — a
+    // bare `!contains("unsafe-inline")` cannot tell that scoped relaxation
+    // apart from a blanket one, and would fail on a stronger policy.
     assert!(
-        !csp.contains("unsafe-inline"),
-        "CSP must NOT allow unsafe-inline anywhere"
+        !csp_directive(csp, "script-src")
+            .expect("script-src")
+            .contains("unsafe-inline"),
+        "script-src must NOT allow unsafe-inline: {csp}"
+    );
+    assert!(
+        !csp_directive(csp, "style-src")
+            .expect("style-src")
+            .contains("unsafe-inline"),
+        "style-src must NOT allow unsafe-inline: {csp}"
     );
     assert!(
         csp.contains("frame-ancestors 'none'"),
@@ -8954,10 +8970,18 @@ async fn test_csp_header_on_dashboard_page() {
         csp.contains("script-src 'nonce-"),
         "Dashboard CSP must have nonce-based script-src"
     );
-    // No unsafe-inline anywhere — all styles moved to CSS classes
+    // Directive-scoped — see the note in test_csp_header_on_login_page.
     assert!(
-        !csp.contains("unsafe-inline"),
-        "Dashboard CSP must NOT allow unsafe-inline"
+        !csp_directive(csp, "script-src")
+            .expect("script-src")
+            .contains("unsafe-inline"),
+        "Dashboard script-src must NOT allow unsafe-inline: {csp}"
+    );
+    assert!(
+        !csp_directive(csp, "style-src")
+            .expect("style-src")
+            .contains("unsafe-inline"),
+        "Dashboard style-src must NOT allow unsafe-inline: {csp}"
     );
 
     // Clone CSP before consuming res
@@ -12393,4 +12417,305 @@ async fn test_asset_route_returns_404_for_missing() {
         .unwrap();
 
     assert_eq!(resp.status(), StatusCode::NOT_FOUND);
+}
+
+// ── Security regressions ────────────────────────────────────────────────
+//
+// These cover defects that were live in the tree: an unauthenticated route
+// that enumerated every tenant, and a `<style>` escape that matched only two
+// literal spellings of the closing tag.
+
+#[tokio::test]
+async fn dev_clear_cache_route_is_gone() {
+    // The handler ran `SELECT slug FROM tenants` and emitted one Set-Cookie
+    // per tenant, disclosing the full tenant list to any anonymous caller and
+    // force-logging-out every session. It shipped in the release binary with
+    // no auth layer and no debug_assertions guard.
+    let app = test_app().await;
+    let res = app
+        .oneshot(get_request("/dev/clear-cache"))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
+async fn hosted_login_drops_branding_that_would_escape_the_style_block() {
+    // Written straight to the column, bypassing the write-side validator, so
+    // this covers rows that predate it and any future write path that forgets
+    // to validate.
+    //
+    // This asserts the *render-side* filtering: the values never reach the
+    // page. It deliberately does not double as the escaper's test — with the
+    // filter in place nothing hostile gets that far, so it cannot fail if the
+    // escaper regresses. `css_text_safe_blocks_every_end_tag_spelling` in
+    // html_template.rs covers the escaper itself, and does fail without it.
+    let (app, pool) = test_app_with_pool().await;
+    sqlx::query(
+        "UPDATE tenants SET branding_bg_color = $1, branding_card_color = $2, \
+         branding_custom_css = $3 WHERE slug = $4",
+    )
+    .bind("#000}</StYlE ><h1 id=pwned>phish</h1><style>")
+    .bind("#111}</style\n><img src=x>")
+    .bind("color:red}</STYLE><form action=https://evil.example>")
+    .bind(TEST_TENANT_SLUG)
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    let res = app
+        .oneshot(get_request(&format!("/t/{}/login", TEST_TENANT_SLUG)))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let body = body_string(res).await;
+
+    // The page emits exactly one <style> element, so exactly one closing tag.
+    assert_eq!(
+        body.to_lowercase().matches("</style").count(),
+        1,
+        "branding closed the <style> element"
+    );
+    assert!(!body.contains("id=pwned"), "injected markup reached the page");
+    assert!(
+        !body.contains("evil.example"),
+        "injected form action reached the page"
+    );
+}
+
+#[tokio::test]
+async fn hosted_login_survives_non_ascii_branding_css() {
+    // `sanitize_custom_css` aborted the process on any non-ASCII input, so a
+    // tenant storing an accented value took the platform down on render.
+    let (app, pool) = test_app_with_pool().await;
+    sqlx::query("UPDATE tenants SET branding_custom_css = $1 WHERE slug = $2")
+        .bind("color:#fff; font-family:Ünsere Schrift; letter-spacing:é")
+        .bind(TEST_TENANT_SLUG)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    let res = app
+        .oneshot(get_request(&format!("/t/{}/login", TEST_TENANT_SLUG)))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+}
+
+#[tokio::test]
+async fn benchmark_query_params_cannot_break_out_of_the_config_script() {
+    // /platform/benchmark has no auth layer and interpolated serde_json output
+    // straight into a <script>. serde_json escapes `"` and `\` but not `<`, so
+    // a query param could close the element, or open a comment and put the
+    // tokenizer into script-data-escaped state where the real </script> stops
+    // closing it.
+    let app = test_app().await;
+    let res = app
+        .oneshot(get_request(
+            "/platform/benchmark?sort=%3C/script%3E%3Ch1%20id=pwned%3Ex&dir=%3C!--%3Cscript%3E&search=%3C/SCRIPT%3E",
+        ))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let body = body_string(res).await;
+
+    // Isolate the config script's contents. Asserting over the whole document
+    // would be wrong: Forma's SSR island markers are legitimate `<!--` comments.
+    let marker = body
+        .find("window.__FORMA_SERVER_URL__")
+        .expect("benchmark page must emit a config script");
+    let open_end = body[..marker].rfind('>').expect("script tag open") + 1;
+    let close = body[open_end..]
+        .find("</script>")
+        .expect("config script must be closed")
+        + open_end;
+    let script = &body[open_end..close];
+
+    // `json_for_script` escapes every `<`, so the script body has none.
+    assert!(
+        !script.contains('<'),
+        "unescaped `<` inside the config script: {script:?}"
+    );
+    // The payload survived, escaped — encoded rather than silently dropped.
+    assert!(
+        script.contains("\\u003C"),
+        "expected the injected `<` to be escaped: {script:?}"
+    );
+    // And the document's script elements still balance.
+    assert_eq!(
+        body.matches("<script").count(),
+        body.matches("</script>").count(),
+        "unbalanced <script> elements"
+    );
+}
+
+#[tokio::test]
+async fn manage_config_sanitizes_branding_custom_css_on_write() {
+    // This path stored the value raw while the self-serve path sanitized it —
+    // the same field, the same render sink, two write paths with different
+    // care. The validator existed and was simply never called here, so this
+    // asserts the WIRING, which a unit test on the sanitizer cannot.
+    let (app, pool) = test_app_with_pool().await;
+    let (tenant_id, mgmt_key) =
+        create_test_tenant_with_mgmt_key(&pool, "mgmt-css", "Mgmt CSS").await;
+
+    let res = app
+        .oneshot(mgmt_request(
+            "PATCH",
+            "/manage/config",
+            serde_json::json!({
+                "branding_custom_css": "color:#fff;}</StYlE><script>alert(1)</script>;background:url(https://evil.example)"
+            }),
+            &mgmt_key,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+
+    let stored: Option<String> =
+        sqlx::query_scalar("SELECT branding_custom_css FROM tenants WHERE id = $1")
+            .bind(&tenant_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    let stored = stored.unwrap_or_default();
+    for forbidden in ['<', '>', '{', '}', '\\'] {
+        assert!(
+            !stored.contains(forbidden),
+            "management write path stored {forbidden:?}: {stored:?}"
+        );
+    }
+    assert!(
+        !stored.to_ascii_lowercase().contains("url"),
+        "management write path stored a fetching notation: {stored:?}"
+    );
+}
+
+#[tokio::test]
+async fn every_html_route_carries_a_csp() {
+    // CSP used to be per-handler opt-in, which is how /docs, /internal/docs and
+    // the verify-email page each shipped with none. The middleware floor makes
+    // it a property of the server; this asserts the floor is actually reached.
+    let app = test_app().await;
+    for uri in [
+        "/docs",
+        "/platform/login",
+        "/platform/onboarding",
+        "/platform/benchmark",
+        "/platform/console",
+        "/no-such-page-404",
+        &format!("/t/{}/login", TEST_TENANT_SLUG),
+        &format!("/t/{}/site", TEST_TENANT_SLUG),
+    ] {
+        let res = app.clone().oneshot(get_request(uri)).await.unwrap();
+        let ct = res
+            .headers()
+            .get("content-type")
+            .and_then(|v| v.to_str().ok())
+            .unwrap_or("");
+        if !ct.starts_with("text/html") {
+            continue;
+        }
+        let csp = res
+            .headers()
+            .get("content-security-policy")
+            .unwrap_or_else(|| panic!("{uri} returned HTML with no CSP"))
+            .to_str()
+            .unwrap();
+        assert!(
+            csp.contains("frame-ancestors 'none'"),
+            "{uri} CSP does not forbid framing: {csp}"
+        );
+        assert!(
+            !csp_directive(csp, "script-src")
+                .unwrap_or("")
+                .contains("unsafe-inline"),
+            "{uri} allows inline script: {csp}"
+        );
+        assert_eq!(
+            res.headers()
+                .get("x-content-type-options")
+                .and_then(|v| v.to_str().ok()),
+            Some("nosniff"),
+            "{uri} is missing nosniff"
+        );
+    }
+}
+
+#[tokio::test]
+async fn docs_pins_swagger_ui_and_ships_its_own_policy() {
+    let app = test_app().await;
+    let res = app.oneshot(get_request("/docs")).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let csp = res
+        .headers()
+        .get("content-security-policy")
+        .expect("/docs must have a CSP")
+        .to_str()
+        .unwrap()
+        .to_string();
+    let body = body_string(res).await;
+
+    // Third-party script is pinned by hash, not merely by URL.
+    assert!(body.contains("integrity=\"sha384-"), "no SRI on /docs");
+    assert!(!body.contains("swagger-ui-dist@5/"), "unpinned version range");
+    // The page's own policy names the host it loads from, and nothing looser.
+    assert!(csp.contains("https://unpkg.com"), "{csp}");
+    assert!(!csp.contains("unsafe-eval"), "{csp}");
+    assert!(
+        !csp_directive(&csp, "script-src")
+            .expect("script-src")
+            .contains("unsafe-inline"),
+        "{csp}"
+    );
+}
+
+#[tokio::test]
+async fn token_endpoint_survives_a_non_ascii_authorization_code() {
+    // `/auth/token` is unauthenticated by design (OAuth), and the handler
+    // logged a 12-byte prefix of `code` straight after parsing the body,
+    // before any validation. A mixed-width value put that index mid-codepoint
+    // and the slice panicked — with panic="abort" in the release profile, one
+    // POST took down the process serving every tenant.
+    //
+    // Mixed width is the case that matters: an all-2-byte or all-3-byte string
+    // lands on a boundary at 12 by coincidence.
+    // The slice lives inside `tracing::info!`, whose fields are only evaluated
+    // when a subscriber is listening. Without this the test cannot fail: it
+    // passed against the unfixed code because no subscriber was installed, so
+    // the panicking expression was never run. Production sets RUST_LOG=info.
+    let _ = tracing_subscriber::fmt()
+        .with_max_level(tracing::Level::INFO)
+        .with_test_writer()
+        .try_init();
+
+    let app = test_app().await;
+    for code in [
+        format!("a{}", "é".repeat(6)),
+        format!("ab{}", "日".repeat(5)),
+        format!("abc{}", "🔑".repeat(3)),
+        format!("abcdefghijk{}", "é"),
+    ] {
+        let res = app
+            .clone()
+            .oneshot(json_request(
+                "POST",
+                "/auth/token",
+                serde_json::json!({
+                    "grant_type": "authorization_code",
+                    "code": code,
+                    "client_id": "whatever",
+                    "redirect_uri": "http://localhost/cb",
+                }),
+            ))
+            .await
+            .unwrap();
+        // The code is bogus, so a 4xx is the right answer. What matters is
+        // that we got an answer at all rather than an aborted process.
+        assert!(
+            res.status().is_client_error() || res.status().is_server_error(),
+            "unexpected status {} for code {code:?}",
+            res.status()
+        );
+    }
 }

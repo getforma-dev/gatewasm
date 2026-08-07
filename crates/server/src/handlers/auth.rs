@@ -103,9 +103,11 @@ pub fn extract_cookie_values(headers: &axum::http::HeaderMap, name: &str) -> Vec
         .filter_map(|v| v.to_str().ok())
         .flat_map(|s| s.split(';'))
     {
-        let pair = pair.trim();
-        if pair.starts_with(&prefix) {
-            found.push(pair[prefix.len()..].to_string());
+        // `strip_prefix` rather than `starts_with` + a byte slice: the slice
+        // was safe only because the guard made the index a char boundary, and
+        // that is an argument rather than a guarantee.
+        if let Some(value) = pair.trim().strip_prefix(&prefix) {
+            found.push(value.to_string());
         }
     }
     found

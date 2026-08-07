@@ -11,12 +11,21 @@
 set -euo pipefail
 
 BASE="${BASE:-http://localhost:${PORT:-3001}}"
-PLAT_KEY="${PLATFORM_ADMIN_KEY:-plat_local_dev_key}"
+
+# The server reads PLATFORM_ADMIN_KEY from .env; this script runs in a shell
+# that usually has not exported it. Read it from .env so the two can't disagree.
+PLAT_KEY="${PLATFORM_ADMIN_KEY:-}"
+ENV_FILE="$(cd "$(dirname "$0")/.." && pwd)/.env"
+if [ -z "$PLAT_KEY" ] && [ -f "$ENV_FILE" ]; then
+  PLAT_KEY=$(grep -E '^PLATFORM_ADMIN_KEY=' "$ENV_FILE" | head -1 | cut -d= -f2-)
+fi
+PLAT_KEY="${PLAT_KEY:-plat_local_dev_key}"
 
 # Colors
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 CYAN='\033[0;36m'
+RED='\033[0;31m'
 NC='\033[0m'
 
 # ---------------------------------------------------------------------------
@@ -38,6 +47,18 @@ api() {
     -H "Authorization: Bearer $auth" \
     -H "Content-Type: application/json" \
     "$@" 2>/dev/null || true
+}
+
+# A tenant create that fails (e.g. wrong PLATFORM_ADMIN_KEY) must not be
+# reported as "already exists" — verify the tenant actually answers.
+ensure_tenant() {
+  local slug="$1"
+  if ! curl -sf "$BASE/t/$slug/login" > /dev/null 2>&1; then
+    echo -e "  ${RED}FAILED:${NC} tenant '$slug' does not exist after seeding."
+    echo "  Most likely PLATFORM_ADMIN_KEY does not match the server's key"
+    echo "  (set it in .env, or export it before running this script)."
+    exit 1
+  fi
 }
 
 # ---------------------------------------------------------------------------
@@ -66,7 +87,8 @@ FORMA_MGMT_KEY=$(echo "$FORMA_RESULT" | grep -o '"api_key":"[^"]*"' | head -1 | 
 if [ -n "$FORMA_MGMT_KEY" ]; then
   echo -e "  ${GREEN}Created.${NC} mgmt key: $FORMA_MGMT_KEY"
 else
-  echo "  Already exists or created (no new key returned)"
+  ensure_tenant forma
+  echo "  Already exists (no new key returned)"
   FORMA_MGMT_KEY=""
 fi
 
@@ -85,7 +107,8 @@ ACME_MGMT_KEY=$(echo "$ACME_RESULT" | grep -o '"api_key":"[^"]*"' | head -1 | cu
 if [ -n "$ACME_MGMT_KEY" ]; then
   echo -e "  ${GREEN}Created.${NC} mgmt key: $ACME_MGMT_KEY"
 else
-  echo "  Already exists or created (no new key returned)"
+  ensure_tenant acme
+  echo "  Already exists (no new key returned)"
   ACME_MGMT_KEY=""
 fi
 

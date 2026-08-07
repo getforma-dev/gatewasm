@@ -161,7 +161,6 @@ export interface SecurityConfig {
   idle_timeout_minutes: number;
   max_sessions_per_user: number;
   host_prefix_cookies: boolean;
-  csp_enabled: boolean;
   client_fingerprint: boolean;
   webauthn_enabled: boolean;
   webauthn_attestation: string;

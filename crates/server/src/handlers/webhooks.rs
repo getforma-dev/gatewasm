@@ -237,8 +237,12 @@ pub async fn get_webhook(
     })?;
 
     let secret: String = row.get("secret");
-    let masked = if secret.len() > 10 {
-        format!("{}...{}", &secret[..10], &secret[secret.len() - 4..])
+    let masked = if secret.chars().count() > 10 {
+        let tail: String = {
+            let last: Vec<char> = secret.chars().rev().take(4).collect();
+            last.into_iter().rev().collect()
+        };
+        format!("{}...{}", crate::text::truncate_chars(&secret, 10), tail)
     } else {
         "***".to_string()
     };

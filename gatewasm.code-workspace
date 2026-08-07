@@ -1,0 +1,36 @@
+{
+  "folders": [
+    { "name": "gatewasm (root: scripts, docker, docs)", "path": "." },
+    { "name": "admin — frontend + e2e", "path": "admin" },
+    { "name": "server — Rust backend", "path": "crates/server" },
+    { "name": "infra — AWS CDK", "path": "infra" }
+  ],
+  "settings": {
+    "rust-analyzer.linkedProjects": ["Cargo.toml"],
+    "rust-analyzer.check.command": "clippy",
+    "files.exclude": { "**/target": true, "**/node_modules": true, "**/dist": true },
+    "search.exclude": { "**/target": true, "**/node_modules": true, "**/admin/dist": true },
+    "typescript.tsdk": "admin/node_modules/typescript/lib"
+  },
+  "extensions": {
+    "recommendations": [
+      "rust-lang.rust-analyzer",
+      "ms-playwright.playwright",
+      "ms-azuretools.vscode-docker",
+      "tamasfe.even-better-toml"
+    ]
+  },
+  "tasks": {
+    "version": "2.0.0",
+    "tasks": [
+      { "label": "db: up (dev + test)", "type": "shell", "command": "npm run db:test", "problemMatcher": [] },
+      { "label": "build: frontend (SSR)", "type": "shell", "command": "npm run build:ssr", "problemMatcher": [] },
+      { "label": "dev: server + frontend + mail", "type": "shell", "command": "npm run dev", "isBackground": true, "problemMatcher": [] },
+      { "label": "test: rust unit", "type": "shell", "command": "npm test", "problemMatcher": [] },
+      { "label": "test: rust integration", "type": "shell", "command": "npm run test:integration", "problemMatcher": [] },
+      { "label": "test: e2e (all)", "type": "shell", "command": "npm run test:e2e", "problemMatcher": [] },
+      { "label": "test: e2e (smoke)", "type": "shell", "command": "npm run test:e2e:smoke", "problemMatcher": [] },
+      { "label": "check: SSR degradations", "type": "shell", "command": "cd admin && npm run check:ssr", "problemMatcher": [] }
+    ]
+  }
+}

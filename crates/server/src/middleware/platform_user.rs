@@ -29,7 +29,7 @@ pub async fn require_platform_user(
         .and_then(|v| v.to_str().ok());
 
     let token = match auth_header {
-        Some(h) if h.starts_with("Bearer ") => &h[7..],
+        Some(h) if h.starts_with("Bearer ") => h.strip_prefix("Bearer ").unwrap_or(h),
         _ => {
             return Err(AppError::Unauthorized {
                 error: "unauthorized",

@@ -14,6 +14,29 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # Deliberately has no `needs:` and no admin build. The three cargo jobs all
+  # gate on `frontend`, so when workspace resolution broke in March the failure
+  # surfaced late and looked like a test failure. This fails in about a minute
+  # and names the real cause.
+  lockfile:
+    name: Lockfile integrity
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Workspace resolves against the committed lockfile
+        run: cargo metadata --locked --format-version 1 > /dev/null
+      - name: No path-sourced third-party crates
+        # A `[patch.crates-io]` entry pointing outside the repo cannot be built
+        # by CI or by `docker build`, whose context is the repo root, and it
+        # strips the source/checksum pinning from Cargo.lock.
+        run: |
+          if grep -q '^\[patch\.' Cargo.toml; then
+            echo "::error file=Cargo.toml::[patch.*] section present; third-party crates must come from the registry"
+            exit 1
+          fi
+
   frontend:
     name: Frontend validation
     runs-on: ubuntu-24.04
@@ -31,6 +54,13 @@ jobs:
           npm ci
           npx tsc --noEmit
           npx tsx build.ts --ssr
+      # The compiler prints one diagnostic per construct it cannot render
+      # server-side. They scrolled past unread for months while /platform/login
+      # served its "New here?" link with no href. This does not fix them; it
+      # stops the count rising.
+      - name: SSR degradations have not regressed
+        working-directory: admin
+        run: npm run check:ssr
 
   unit-tests:
     name: Rust unit tests
@@ -102,7 +132,7 @@ jobs:
   e2e-tests:
     name: E2E smoke tests
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    timeout-minutes: 25
     needs: frontend
     services:
       postgres:
@@ -140,6 +170,11 @@ jobs:
             sleep 2
           done
           exit 1
+      # Prebuild so globalSetup's `cargo run` starts the server instead of
+      # compiling it. Without this the e2e job pays for a second full build
+      # inside the health-check window and times out before any test runs.
+      - name: Build server
+        run: cargo build -p gatewasm-server
       - name: Run e2e smoke tests
         working-directory: admin
         run: npx playwright test --grep @smoke

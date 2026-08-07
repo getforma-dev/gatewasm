@@ -108,7 +108,7 @@ pub fn asset_bytes(name: &str) -> Option<Vec<u8>> {
             return Some(data);
         }
     }
-    forma_server::assets::asset_bytes::<AdminAssets>(name)
+    forma_server::assets::asset_bytes::<AdminAssets>(name).map(|b| b.to_vec())
 }
 
 /// Load and parse the asset manifest from embedded admin/dist/manifest.json.

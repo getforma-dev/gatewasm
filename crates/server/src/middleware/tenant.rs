@@ -150,6 +150,9 @@ impl TenantCache {
 /// 1. `PathSlug` from extensions (set by `rewrite_tenant_path` for `/t/{slug}/...` URLs)
 /// 2. `X-Tenant-Slug` header (for API clients / testing)
 /// 3. Subdomain from `Host` header (e.g. `acme.gatewasm.io` → slug = `acme`)
+// The subdomain slice is byte-arithmetic on a Host header. `HeaderValue::to_str`
+// only succeeds for visible ASCII, so every byte index is a char boundary.
+#[allow(clippy::string_slice)]
 pub async fn extract_tenant(
     State(state): State<AppState>,
     mut req: Request,

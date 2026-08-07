@@ -41,7 +41,7 @@ fn validate_fingerprint(fp: &str) -> Result<(), AppError> {
         });
     }
 
-    let hex_part = &fp[7..];
+    let hex_part = fp.strip_prefix("sha256:").unwrap_or(fp);
     if hex_part.is_empty() {
         return Err(AppError::BadRequest {
             error: "invalid_fingerprint",

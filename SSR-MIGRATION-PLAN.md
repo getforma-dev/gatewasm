@@ -4,17 +4,107 @@ Convert all CSR (`mount()`) pages to the island architecture (SSR page component
 
 ---
 
-## Already Done (3 pages)
+## Status
 
-| Route | Page Component | Islands |
-|-------|---------------|---------|
-| `/platform/login` | `LoginPage.ts` | AuthCard, MfaPanel |
-| `/platform/onboarding` | `OnboardingPage.ts` | RegistrationForm |
-| `/platform/benchmark` | `BenchmarkPage.ts` | FilterBar, BenchmarkDataTable, PerfPanel, PerfStat |
+| Route | Page Component | Islands | Serving SSR? |
+|-------|---------------|---------|---|
+| `/platform/benchmark` | `BenchmarkPage.ts` | FilterBar, BenchmarkDataTable, PerfPanel, PerfStat | **Yes** |
+| `/platform/login` | `LoginPage.ts` | AuthCard, MfaPanel | No — see below |
+| `/platform/onboarding` | `OnboardingPage.ts` | RegistrationForm | No — see below |
 
 These use the dual-mode `app.ts` pattern: `activateIslands` when SSR markers exist, `mount()` fallback for dev mode.
 
----
+**The island work being done is not the same as the route serving correct SSR.**
+`/platform/login` and `/platform/onboarding` have their components split, but
+their server-rendered markup is wrong and they are held on Phase 1:
+
+- `/platform/login` renders without its `a[href="/platform/onboarding"]` link.
+  The client render produces it; the SSR walk does not.
+- `/platform/onboarding` emits `<svg width="">`, which the browser reports as
+  `Unexpected end of attribute. Expected length, ""`.
+
+Both were caught by `admin/e2e/smoke.spec.ts` and `login.spec.ts` the first time
+the e2e suite was able to run. Fix the SSR output before opting either route in.
+
+### Why attributes go missing, and why the compiler is not the thing to change
+
+An earlier note here claimed forma-ir was missing a `DYN_ATTR` path for closure
+attributes. That was wrong. `@getforma/compiler` Rule 6 already emits `DYN_ATTR`
+for a function-valued prop, reuses the signal's own slot when the binding is
+`() => sig()`, and tries to fold an SSR default. It then **warns, per site, with
+the fix**, and has been doing so on every build:
+
+```
+IR: attribute 'href' on <a> binds `() => a bare '+' expression`, which the
+compiler cannot evaluate in .../platform/login/LoginPage.ts — the attribute is
+OMITTED server-side and only appears once the client hydrates — initialize the
+signals it reads with literal defaults, or fold the value into a module-level const
+```
+
+The attribute vanishes because the expression genuinely cannot be evaluated:
+`() => '/platform/onboarding' + (ownerInviteToken ? … : '')` reads a mutable
+`let` derived from `window.location.search`. Nothing the compiler could do makes
+that renderable without the server supplying the value.
+
+**Decision: fix the source, not the compiler.** This is the faster path as well
+as the correct one:
+
+| | per-request SSR cost | IR size |
+|---|---|---|
+| folded / static attribute | none — a string-table entry copied during the walk | one string |
+| `DYN_ATTR` + server-supplied slot | slot lookup + write, and the handler must thread the value | slot + default |
+| `DYN_ATTR`, no default (today) | none, because the attribute is omitted — and the output is wrong | slot |
+
+Teaching the compiler to guess would push every attribute onto the slot path:
+larger IR, a slower walk, and wrong output whenever the guess is wrong. The
+fast path and the correct path are the same path.
+
+### The actual problem: 158 diagnostics nobody reads
+
+`npm run check:ssr` counts them and fails if the total rises, with a committed
+baseline in `admin/scripts/ir-degradations.json`. It runs in CI. It fixes
+nothing; it makes the count only able to go down.
+
+Distribution at the time of writing — the two visible e2e failures are the tip:
+
+```
+ 24  platform/console/helpers.ts          17  platform/login/AuthCard.ts
+ 21  platform/console/OnboardingWizard.ts 16  platform/onboarding/RegistrationForm.ts
+ 19  platform/console/ConsoleApp.ts       12  platform/login/MfaPanel.ts
+```
+
+`/platform/login` alone carries 33 across its three files. Every one is a place
+the server-rendered HTML differs from what the client shows.
+
+### Worked example: the missing href, and the blocker it exposed
+
+`ownerInviteToken` was a mutable `let` in `platform/login/store.ts`, so it is
+now a signal with a literal `''` default, and the href is a ternary whose
+else-branch is a plain literal rather than one unresolvable concatenation.
+Both are prerequisites for the attribute ever folding, and both are better code.
+
+**It still does not fold**, and the reason is the real blocker for this whole
+migration. `ir-walk.ts:676` in `@getforma/compiler`:
+
+```js
+callerScope: sub.filePath === walkCtx.sourceFile ? walkCtx.signalScope ?? null : null
+```
+
+Signal scope is nulled across a file boundary. The compiler resolves imported
+*constants* (`resolveImportedConstant`) but not imported *signal defaults*, so
+`lookupSignal` fails for anything declared in `store.ts` — which is every signal
+in this app, and the architecture Forma's own docs recommend.
+
+The compiler's advice, "initialize the signals it reads with literal defaults",
+is therefore unactionable here: the default exists and is literal, and the
+compiler cannot see it from the consuming file.
+
+**This is the upstream change worth making** — narrow, and it makes output
+strictly faster rather than slower. Resolving an imported signal's default lets
+the attribute fold to a string-table entry with no per-request cost, instead of
+being omitted and left to hydration. Until then, an attribute can only fold if
+the signal it reads is declared in the same file, so migrating a route means
+either colocating its signals or accepting a degraded no-JS shell.
 
 ## Migration Order
 
@@ -123,22 +213,43 @@ Start with the simplest page, build confidence with the pattern, then tackle com
 
 4. Run `npm run build:ssr` to generate IR bytecode
 
-5. Restart server — it loads IR modules and enables Phase 2 for the route
+5. Wire the handler: copy the `frontend.render_mode()` / `ir_module()` / slots
+   lookup from `benchmark.rs`
+
+6. Verify the SSR output is correct BEFORE opting in — diff it against the
+   client render, and run the route's e2e specs
+
+7. Add the route to `SSR_ROUTES` in `crates/server/src/ir/mod.rs`, then restart
 ```
 
 ---
 
 ## Prerequisites
 
-- All pages already use `render_page` in their Rust handlers — no server changes needed
-- The `render_mode` in each handler defaults to Phase1 and auto-upgrades to Phase2 when IR exists
-- The `@getforma/compiler` traces `PageComponent` imports to emit IR
+- The `@getforma/compiler` traces `PageComponent` imports to emit IR.
+- **Each handler needs a server change.** Calling `render_page` is not enough:
+  `hosted_login.rs`, `dashboard.rs` (which covers two routes), `owner/dashboard.rs`
+  and `platform_dashboard.rs` pass a literal `RenderMode::Phase1ClientMount` with
+  `ir_module: None, slots: None` and never consult `frontend.render_mode()`. Copy
+  the three-line lookup from `benchmark.rs`. An earlier version of this document
+  claimed no server changes were needed, and that is why the frontend work in
+  steps 1-3 appears to do nothing.
+- **Phase 2 is opt-in per route**, via `SSR_ROUTES` in `crates/server/src/ir/mod.rs`.
+  It does *not* auto-upgrade when IR exists. It used to, and that was the bug:
+  `@getforma/compiler` 0.3.1 emits IR for every configured route where 0.1.8 did
+  not, so upgrading the compiler silently switched server rendering on for pages
+  that had never been migrated, and they served broken markup.
 
 ## Testing
 
 - `npm run build:ssr` — verify IR files generated for each page
 - Restart server — verify "Phase 2 SSR enabled for N route(s)" log message
 - Check page source — should contain full HTML, not empty `<div id="app">`
+- **Diff the SSR markup against the client render.** Missing elements are the
+  failure mode seen so far, and they are invisible once JS hydrates: the page
+  looks right in a browser while the no-JS shell and the first paint are wrong.
+- Watch the browser console — a malformed attribute in the SSR output (e.g.
+  `width=""`) shows up there and nowhere else
 - Refresh spam test — no white flash
 - Dev mode (`npm run dev` without `--ssr`) — verify fallback `mount()` still works
 

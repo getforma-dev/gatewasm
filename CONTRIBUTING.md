@@ -39,7 +39,6 @@ All commands run from the project root.
 | `npm run dev` | Starts Rust server + frontend watcher + Mailpit (all three) |
 | `npm run dev:clean` | Clears all user data, then starts dev (keeps tenants/roles) |
 | `npm run dev:reset` | Wipes DB schema completely, then starts dev (server re-runs migrations) |
-| `npm run cache:clear` | Opens `/dev/clear-cache` to purge browser localStorage/cookies |
 
 ### Building
 
@@ -98,7 +97,8 @@ From `admin/` directory, additional test filtering:
 ### When to use which reset
 
 ```
-Something looks stale         →  npm run cache:clear  (browser caches)
+Something looks stale          →  hard-reload the browser (Ctrl+Shift+R) or clear
+                                  site data in devtools → Application
 User data is messy             →  npm run dev:clean    (truncate users, keep schema)
 Migrations changed             →  npm run dev:reset    (drop schema, re-run migrations)
 Dependencies or build broken   →  npm run fresh        (nuke + reinstall + rebuild)

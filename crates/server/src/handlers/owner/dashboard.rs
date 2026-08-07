@@ -137,6 +137,7 @@ pub async fn dashboard_page(
         route_pattern: "/platform/admin/dashboard",
         manifest: frontend.manifest(),
         config_script: None,
+        config_json: None,
         body_class: Some("owner-dashboard min-h-screen antialiased"),
         personality_css: Some("body{background:#0a0a0c;color:#e8e6e3;--grid-opacity:0.25;--glow-size:700px;--glow-intensity:0.04;}"),
         body_prefix: None,

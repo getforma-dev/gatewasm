@@ -11,7 +11,7 @@ use sqlx::Row;
 
 use crate::error::AppError;
 use crate::frontend::FrontendSnapshot;
-use crate::handlers::management::is_valid_css_color;
+use crate::handlers::management::{is_safe_css_color, is_valid_css_color, sanitize_custom_css};
 use crate::html_template::{render_page, PageConfig, PageOutput};
 use crate::ir;
 use crate::jwt::signing;
@@ -63,18 +63,18 @@ fn populate_onboarding_slots(state: &AppState, ir_module: &ir::parser::IrModule)
 
     let mut providers = Vec::new();
     if google {
-        providers.push(ir::slot::SlotValue::Object(vec![
+        providers.push(ir::slot::SlotValue::Object(std::sync::Arc::from(vec![
             ("provider".into(), ir::slot::SlotValue::Text("google".into())),
             ("label".into(), ir::slot::SlotValue::Text("Continue with Google".into())),
-        ]));
+        ])));
     }
     if github {
-        providers.push(ir::slot::SlotValue::Object(vec![
+        providers.push(ir::slot::SlotValue::Object(std::sync::Arc::from(vec![
             ("provider".into(), ir::slot::SlotValue::Text("github".into())),
             ("label".into(), ir::slot::SlotValue::Text("Continue with GitHub".into())),
-        ]));
+        ])));
     }
-    slots.set(SLOT_OAUTH_PROVIDERS, ir::slot::SlotValue::Array(providers));
+    slots.set(SLOT_OAUTH_PROVIDERS, ir::slot::SlotValue::Array(providers.into()));
 
     slots
 }
@@ -112,6 +112,7 @@ fn render_get_started_page_html(state: &AppState) -> PageOutput {
         route_pattern,
         manifest: frontend.manifest(),
         config_script: Some(&config_script),
+        config_json: None,
         body_class: None,
         personality_css: Some("body{background:#0a0a0c;color:#e8e6e3;--grid-opacity:0.15;--glow-size:1100px;--glow-intensity:0.10;}"),
         body_prefix: None,
@@ -154,6 +155,7 @@ fn render_platform_login_page_html(state: &AppState) -> PageOutput {
         route_pattern,
         manifest: frontend.manifest(),
         config_script: Some(&config_script),
+        config_json: None,
         body_class: None,
         personality_css: Some("body{background:#0a0a0c;color:#e8e6e3;--grid-opacity:0.25;--glow-size:900px;--glow-intensity:0.07;}"),
         body_prefix: None,
@@ -220,34 +222,6 @@ fn validate_slug(slug: &str) -> Result<String, AppError> {
         });
     }
     Ok(slug)
-}
-
-fn sanitize_custom_css(input: &str) -> String {
-    let truncated = if input.len() > 2000 { &input[..2000] } else { input };
-    let mut result = truncated.to_string();
-    let patterns = [
-        "url(", "@import", "expression(", "javascript:", "-moz-binding",
-        "behavior:", "</style", "<script", "<!--",
-    ];
-    for pat in &patterns {
-        let mut cleaned = String::with_capacity(result.len());
-        let lower = result.to_lowercase();
-        let pat_lower = pat.to_lowercase();
-        let mut pos = 0;
-        while pos < result.len() {
-            if pos + pat_lower.len() <= lower.len()
-                && &lower[pos..pos + pat_lower.len()] == pat_lower.as_str()
-            {
-                pos += pat_lower.len();
-            } else {
-                cleaned.push(result.as_bytes()[pos] as char);
-                pos += 1;
-            }
-        }
-        result = cleaned;
-    }
-    result.retain(|c| c != '<' && c != '>' && c != '\\' && c != '{' && c != '}');
-    result.trim().to_string()
 }
 
 // ── Self-Serve API ──────────────────────────────────────────────────────
@@ -333,7 +307,7 @@ pub async fn create_tenant(
 
     let tenant_id = format!("ten_{}", uuid::Uuid::new_v4());
     let api_key = format!("mgmt_{}", uuid::Uuid::new_v4());
-    let api_key_prefix = &api_key[..api_key.len().min(13)];
+    let api_key_prefix = crate::text::truncate_chars(&api_key, 13);
     let api_key_hash = signing::hash_token(&api_key);
     let trial_ends_at = Utc::now() + Duration::days(14);
 
@@ -790,6 +764,26 @@ pub async fn update_my_tenant(
         }
     }
 
+    // These two reach the hosted login page's inline <style> unescaped, so
+    // they are validated here rather than only encoded at render. An empty
+    // string is the existing "clear this override" sentinel and is stored as
+    // NULL further down, so it is allowed through.
+    for (field, value) in [
+        ("branding_bg_color", body.branding_bg_color.as_deref()),
+        ("branding_card_color", body.branding_card_color.as_deref()),
+    ] {
+        if let Some(v) = value.filter(|v| !v.trim().is_empty()) {
+            if !is_safe_css_color(v) {
+                return Err(AppError::BadRequest {
+                    error: "invalid_color",
+                    message: format!(
+                        "{field} must be a CSS color (hex, rgb()/hsl(), or a keyword)"
+                    ),
+                });
+            }
+        }
+    }
+
     let validated_login_redirect = match body.login_redirect_url.as_ref() {
         Some(v) => Some(validate_login_redirect_input(
             &state.config.server_url,
@@ -1157,7 +1151,7 @@ pub async fn rotate_my_tenant_key(
     }
 
     let new_key = format!("mgmt_{}", uuid::Uuid::new_v4());
-    let prefix = &new_key[..new_key.len().min(13)];
+    let prefix = crate::text::truncate_chars(&new_key, 13);
     let hash = signing::hash_token(&new_key);
 
     sqlx::query("UPDATE tenants SET api_key_hash = $1, api_key_prefix = $2, updated_at = NOW() WHERE id = $3")

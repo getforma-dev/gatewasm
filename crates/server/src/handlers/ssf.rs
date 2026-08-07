@@ -89,8 +89,8 @@ fn generate_ssf_secret() -> String {
 
 /// Mask a secret: show first 8 chars + `...`
 fn mask_secret(secret: &str) -> String {
-    if secret.len() > 8 {
-        format!("{}...", &secret[..8])
+    if secret.chars().count() > 8 {
+        format!("{}...", crate::text::truncate_chars(secret, 8))
     } else {
         "***".to_string()
     }

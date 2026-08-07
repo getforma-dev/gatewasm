@@ -5,6 +5,7 @@ use axum::{
 use serde::{Deserialize, Serialize};
 
 use crate::frontend::FrontendSnapshot;
+use crate::handlers::hosted_login::json_for_script;
 use crate::html_template::{render_page, PageConfig};
 use crate::ir;
 use crate::{AppState, RenderMode};
@@ -115,16 +116,20 @@ pub async fn benchmark_page(
     let row_count = params.rows.unwrap_or(DEFAULT_ROWS).min(MAX_ROWS);
     let rows = process_rows(&params);
 
+    // `sort`, `dir` and `search` come straight off the query string on a route
+    // with no auth layer. `serde_json` escapes `"` and `\` but not `<` or `/`,
+    // so interpolating it raw let a request close the <script> element. Every
+    // other page routes its config through `json_for_script`; this one did not.
     let config_script = format!(
-        "window.__FORMA_SERVER_URL__=\"{}\";window.__BENCHMARK_CONFIG__={};window.__BENCHMARK_DATA__={};",
-        state.config.server_url,
-        serde_json::json!({
+        "window.__FORMA_SERVER_URL__={};window.__BENCHMARK_CONFIG__={};window.__BENCHMARK_DATA__={};",
+        json_for_script(&serde_json::Value::String(state.config.server_url.clone())),
+        json_for_script(&serde_json::json!({
             "rows": row_count,
             "sort": params.sort.as_deref().unwrap_or("id"),
             "dir": params.dir.as_deref().unwrap_or("asc"),
             "search": params.search.as_deref().unwrap_or(""),
-        }),
-        serde_json::json!(rows),
+        })),
+        json_for_script(&serde_json::json!(rows)),
     );
 
     let route_pattern = "/platform/benchmark";
@@ -144,6 +149,7 @@ pub async fn benchmark_page(
         route_pattern,
         manifest: frontend.manifest(),
         config_script: Some(&config_script),
+        config_json: None,
         body_class: None,
         personality_css: Some(
             "body{background:#0a0a0c;color:#e8e6e3;--grid-opacity:0.12;--glow-size:1000px;--glow-intensity:0.08;}",

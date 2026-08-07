@@ -35,15 +35,241 @@ fn tenant_from_req(req: &axum::extract::Request) -> Result<TenantContext, AppErr
 // ── Validation helpers ──────────────────────────────────────────────────
 
 /// Validate that a string is a safe CSS hex color (e.g. `#abc`, `#aabbcc`).
+// `starts_with('#')` makes byte 1 a char boundary.
+#[allow(clippy::string_slice)]
 pub fn is_valid_css_color(s: &str) -> bool {
     let s = s.trim();
     if s.starts_with('#') {
+        // `starts_with('#')` guarantees byte 1 is a char boundary.
         let hex = &s[1..];
         matches!(hex.len(), 3 | 4 | 6 | 8) && hex.chars().all(|c| c.is_ascii_hexdigit())
     } else {
         false
     }
 }
+
+/// Properties a tenant may set on the hosted-login card. This is a branding
+/// knob, not a stylesheet, but it has to cover what tenants already saved
+/// through the previous unvalidated write path — `background` shorthands,
+/// longhand spacing, and text effects were all in use and rendering.
+///
+/// Excluded: anything that escapes the card's box (`position`, `content`,
+/// `z-index`, `transform`) and the image properties, which are pointless here
+/// anyway because `url()` is not an allowed function.
+const ALLOWED_CSS_PROPERTIES: &[&str] = &[
+    "background",
+    "background-color",
+    "border",
+    "border-bottom",
+    "border-color",
+    "border-left",
+    "border-radius",
+    "border-right",
+    "border-style",
+    "border-top",
+    "border-width",
+    "box-shadow",
+    "color",
+    "font-family",
+    "font-size",
+    "font-style",
+    "font-weight",
+    "gap",
+    "height",
+    "letter-spacing",
+    "line-height",
+    "margin",
+    "margin-bottom",
+    "margin-left",
+    "margin-right",
+    "margin-top",
+    "max-height",
+    "max-width",
+    "min-height",
+    "min-width",
+    "opacity",
+    "outline",
+    "outline-color",
+    "padding",
+    "padding-bottom",
+    "padding-left",
+    "padding-right",
+    "padding-top",
+    "text-align",
+    "text-decoration",
+    "text-shadow",
+    "text-transform",
+    "width",
+];
+
+/// Functional notations a declaration value may use. Gradients and the modern
+/// colour spaces are here because tenants were already storing them through
+/// the old unvalidated path and they rendered fine.
+///
+/// Absent, and the reason the list is an allowlist at all: `url()`,
+/// `image-set()`, `expression()` and `-moz-binding()` fetch or execute.
+const ALLOWED_CSS_FUNCTIONS: &[&str] = &[
+    "calc",
+    "clamp",
+    "color-mix",
+    "conic-gradient",
+    "hsl",
+    "hsla",
+    "hwb",
+    "lab",
+    "lch",
+    "linear-gradient",
+    "max",
+    "min",
+    "oklab",
+    "oklch",
+    "radial-gradient",
+    "repeating-conic-gradient",
+    "repeating-linear-gradient",
+    "repeating-radial-gradient",
+    "rgb",
+    "rgba",
+    "var",
+];
+
+/// Maximum accepted length of a raw declaration list, in CHARACTERS.
+const CUSTOM_CSS_MAX_CHARS: usize = 2000;
+
+/// Sanitize an operator-supplied CSS *declaration list* (no selectors, no
+/// at-rules) for interpolation into `.tl-card{ ... }`.
+///
+/// Allowlist, not denylist. The previous denylist implementation:
+///  * panicked on *any* non-ASCII input. It walked byte offsets of one string
+///    while slicing another, and its `as_bytes()[pos] as char` step re-encoded
+///    each byte as Latin-1, which grew the string on every pass until a slice
+///    finally landed mid-codepoint. `"é"` — two bytes — was enough. With
+///    `panic = "abort"` in the release profile that aborted the process
+///    serving every tenant.
+///  * could not see through CSS escapes: `background:u\72 l(evil)` unescapes
+///    to `url(evil)` inside the CSS parser, long after any substring check has
+///    run. No denylist can fix that; an allowlist does not need to.
+///
+/// Declarations that are unparseable or not on the allowlist are dropped
+/// silently — this is a branding form, so a partial result beats a 400.
+// The only slice is bounded by `char_indices().nth()`, which yields a boundary.
+#[allow(clippy::string_slice)]
+pub fn sanitize_custom_css(input: &str) -> String {
+    // Truncate by characters. Byte-slicing a `&str` panics off a boundary.
+    let truncated = match input.char_indices().nth(CUSTOM_CSS_MAX_CHARS) {
+        Some((byte_idx, _)) => &input[..byte_idx],
+        None => input,
+    };
+
+    let mut kept: Vec<String> = Vec::new();
+    for declaration in truncated.split(';') {
+        let Some((property, value)) = declaration.split_once(':') else {
+            continue;
+        };
+        let property = property.trim().to_ascii_lowercase();
+        let value = value.trim();
+
+        if !ALLOWED_CSS_PROPERTIES.contains(&property.as_str()) {
+            continue;
+        }
+        if value.is_empty() || value.chars().count() > 200 || !is_safe_css_value(value) {
+            continue;
+        }
+        kept.push(format!("{property}:{value}"));
+    }
+
+    kept.join(";")
+}
+
+/// Validate a CSS color for a context where the value is interpolated into a
+/// stylesheet rather than an attribute.
+///
+/// Deliberately wider than [`is_valid_css_color`], which is hex-only because
+/// `branding_primary_color` is driven purely by a color picker.
+/// `branding_bg_color`/`branding_card_color` are also editable through a
+/// free-text field in the branding wizard, so hex-only would reject values
+/// tenants have already saved.
+pub fn is_safe_css_color(s: &str) -> bool {
+    let s = s.trim();
+    // Generous enough for a multi-stop gradient, which tenants stored through
+    // the previous unvalidated path and which rendered correctly.
+    !s.is_empty() && s.chars().count() <= 200 && is_safe_css_value(s)
+}
+
+/// True if a declaration value cannot terminate the declaration, open a rule
+/// or a comment, or fetch a resource.
+///
+/// Two gates. The character gate rejects `\`, and that is what makes the
+/// function-name gate sound: with no CSS escapes available, an identifier can
+/// only be spelled literally, so `url(` cannot be smuggled in as `u\72 l(` —
+/// the trick that made the previous denylist unfixable. The name gate then
+/// only has to compare plain text.
+///
+/// Nesting is handled, so `linear-gradient(135deg, rgb(0 0 0), #fff)` passes
+/// while `linear-gradient(red, url(evil))` does not.
+// Every slice below is boundary-safe by construction: `i` is the position of an
+// ASCII `(`, and `start` comes from `char_indices`. Justified rather than
+// rewritten because this function exists to fix a byte-slicing panic, and the
+// reasoning is the point.
+#[allow(clippy::string_slice)]
+fn is_safe_css_value(value: &str) -> bool {
+    // Comments could hide a declaration split across sanitizer passes.
+    if value.contains("/*") || value.contains("*/") {
+        return false;
+    }
+    // `!` carries `!important`. `"`/`'` carry quoted font names. Absent, and
+    // deliberately: `\` (escapes), `;` (declaration separator), `{` `}` (rule
+    // breakout), `<` `>` (markup), `@` (at-rules), `:` (property separator).
+    // Alphanumeric in any script, not just ASCII: `font-family:Ünsere Schrift`
+    // and CJK font names are ordinary CSS. No non-ASCII letter is a CSS syntax
+    // character, so widening this does not widen what can be expressed
+    // structurally.
+    if !value.chars().all(|c| {
+        c.is_alphanumeric()
+            || matches!(
+                c,
+                ' ' | '#' | '%' | '.' | ',' | '-' | '+' | '/' | '(' | ')' | '!' | '_' | '"' | '\''
+            )
+    }) {
+        return false;
+    }
+    // Unbalanced quotes would swallow the declarations we emit after this one.
+    if value.matches('"').count() % 2 != 0 || value.matches('\'').count() % 2 != 0 {
+        return false;
+    }
+
+    let bytes = value.as_bytes();
+    let mut depth = 0i32;
+    for (i, &b) in bytes.iter().enumerate() {
+        match b {
+            b'(' => {
+                depth += 1;
+                // The function name is the identifier run ending at `i`.
+                // Empty (`(` with no name) fails closed, as does any name not
+                // on the allowlist — including vendor spellings such as
+                // `-webkit-linear-gradient`, since the run captures the
+                // leading `-`.
+                let start = value[..i]
+                    .char_indices()
+                    .rev()
+                    .find(|(_, c)| !(c.is_alphanumeric() || *c == '-' || *c == '_'))
+                    .map_or(0, |(idx, c)| idx + c.len_utf8());
+                let name = value[start..i].to_lowercase();
+                if !ALLOWED_CSS_FUNCTIONS.contains(&name.as_str()) {
+                    return false;
+                }
+            }
+            b')' => {
+                depth -= 1;
+                if depth < 0 {
+                    return false;
+                }
+            }
+            _ => {}
+        }
+    }
+    depth == 0
+}
+
 
 // ── Platform Admin endpoints (authenticated with plat_ key) ─────────────
 
@@ -159,7 +385,7 @@ pub async fn create_tenant(
 
     let tenant_id = format!("ten_{}", uuid::Uuid::new_v4());
     let api_key = format!("mgmt_{}", uuid::Uuid::new_v4());
-    let api_key_prefix = &api_key[..api_key.len().min(13)]; // "mgmt_" + 8 chars
+    let api_key_prefix = crate::text::truncate_chars(&api_key, 13); // "mgmt_" + 8 chars
     let api_key_hash = signing::hash_token(&api_key);
 
     let providers = body
@@ -554,7 +780,7 @@ pub async fn rotate_api_key(
     }
 
     let new_key = format!("mgmt_{}", uuid::Uuid::new_v4());
-    let prefix = &new_key[..new_key.len().min(13)];
+    let prefix = crate::text::truncate_chars(&new_key, 13);
     let hash = signing::hash_token(&new_key);
 
     sqlx::query("UPDATE tenants SET api_key_hash = $1, api_key_prefix = $2, updated_at = NOW() WHERE id = $3")
@@ -1099,10 +1325,18 @@ pub async fn update_config(
             .await?;
     }
     if let Some(ref v) = body.branding_custom_css {
+        // Same field and same render sink as the self-serve path, which has
+        // always sanitized. This path did not.
+        let sanitized = sanitize_custom_css(v);
+        let val = if sanitized.is_empty() {
+            None
+        } else {
+            Some(sanitized)
+        };
         sqlx::query(
             "UPDATE tenants SET branding_custom_css = $1, updated_at = NOW() WHERE id = $2",
         )
-        .bind(v)
+        .bind(val.as_deref())
         .bind(&tenant.tenant_id)
         .execute(&state.db)
         .await?;
@@ -1718,5 +1952,131 @@ mod tests {
         assert!(!is_valid_css_color("#12345")); // 5 chars not valid
         assert!(!is_valid_css_color("red;} body{background:url(evil)}"));
         assert!(!is_valid_css_color(""));
+    }
+
+    #[test]
+    fn sanitize_custom_css_never_panics_on_non_ascii() {
+        // The previous implementation aborted the process on every one of
+        // these. `"é"` — two bytes — was enough: re-encoding each byte as
+        // Latin-1 grew the string on every pattern pass until a slice landed
+        // mid-codepoint.
+        for input in [
+            "é",
+            "éaaa",
+            "café{color:red}",
+            "日本語",
+            "Ünsere Farben",
+            "\u{130}", // İ — to_lowercase() is 2 bytes in, 3 out
+            &"é".repeat(1500),      // 3000 bytes: the old byte-slice at 2000
+            &format!("{}é", "a".repeat(1999)), // boundary lands mid-char
+            &"🔒".repeat(800),
+        ] {
+            let _ = sanitize_custom_css(input);
+        }
+    }
+
+    #[test]
+    fn sanitize_custom_css_keeps_allowed_declarations() {
+        assert_eq!(
+            sanitize_custom_css("background-color:#111114; border-radius: 12px"),
+            "background-color:#111114;border-radius:12px"
+        );
+        // rgb() survives: the branding wizard pairs its color picker with a
+        // free-text field, so tenants have saved values in this form.
+        assert_eq!(
+            sanitize_custom_css("color: rgb(10, 20, 30)"),
+            "color:rgb(10, 20, 30)"
+        );
+        // Non-Latin font names are ordinary CSS. This is also the input shape
+        // that used to abort the process.
+        assert_eq!(
+            sanitize_custom_css("font-family:Ünsere Schrift"),
+            "font-family:Ünsere Schrift"
+        );
+        assert_eq!(
+            sanitize_custom_css("font-family:\"ヒラギノ角ゴ\", sans-serif"),
+            "font-family:\"ヒラギノ角ゴ\", sans-serif"
+        );
+    }
+
+    #[test]
+    fn sanitize_custom_css_drops_dangerous_declarations() {
+        // Each of these must be dropped ENTIRELY. Asserting only on the
+        // absence of specific characters would let a partially-surviving
+        // declaration through unnoticed.
+        for bad in [
+            "background:url(https://evil.example/x)",
+            "background:u\\72 l(https://evil.example/x)", // CSS escape -> url(
+            "background:URL(https://evil.example/x)",     // case
+            "background:-webkit-linear-gradient(url(x))", // vendor prefix + nested fetch
+            "background:linear-gradient(red, url(evil))", // nested fetch
+            "background-image:image-set('x')",
+            "color:red} body{background:url(evil)} .x{",
+            "behavior:url(#default#time2)",
+            "color:expression(alert(1))",
+            "@import url(evil)",
+            "-moz-binding:url(evil)",
+            "color:red/*x*/;background:url(y)", // comment splice
+            "color:rgb(0,0,0",                  // unbalanced paren
+            "font-family:\"unclosed",           // unbalanced quote
+        ] {
+            assert_eq!(
+                sanitize_custom_css(bad),
+                "",
+                "expected {bad:?} to be dropped entirely"
+            );
+        }
+
+        // A hostile declaration must not take a legitimate sibling with it,
+        // nor survive alongside one.
+        assert_eq!(
+            sanitize_custom_css("color:#fff; background:url(evil); border-radius:8px"),
+            "color:#fff;border-radius:8px"
+        );
+
+        // Where a safe declaration precedes a breakout attempt, keeping the
+        // safe half is correct — what matters is that nothing structural
+        // survives.
+        let spliced = sanitize_custom_css("color:red;}</StYlE><h1>pwned");
+        assert_eq!(spliced, "color:red");
+        for forbidden in ['<', '>', '{', '}', '\\'] {
+            assert!(!spliced.contains(forbidden), "{spliced:?}");
+        }
+    }
+
+    #[test]
+    fn safe_css_colors_accept_the_free_text_field_grammar() {
+        // The wizard pairs its colour picker with a free-text field, so these
+        // are all values a tenant could already have saved and rendered
+        // through the previous unvalidated write path.
+        for good in [
+            "#fff",
+            "#6366f1",
+            "red",
+            "transparent",
+            "rgb(10,20,30)",
+            "rgba(10,20,30,0.5)",
+            "rgb(0 0 0 / 50%)",
+            "hsl(200 50% 40%)",
+            "oklch(0.7 0.1 250)",
+            "color-mix(in srgb, #fff 30%, #000)",
+            "var(--accent)",
+            "linear-gradient(135deg,#667eea,#764ba2)",
+            "radial-gradient(circle at 30% 30%, rgb(0 0 0), #fff)",
+        ] {
+            assert!(is_safe_css_color(good), "rejected {good}");
+        }
+        for bad in [
+            "red;} body{background:url(evil)}", // the payload asserted above
+            "url(evil)",
+            "</style>",
+            "expression(alert(1))",
+            "var(--x, url(evil))", // fallback smuggling a fetch
+            "-webkit-image-set(x)",
+            "\\75 rl(x)", // CSS escape — rejected because `\` is
+            "",
+        ] {
+            assert!(!is_safe_css_color(bad), "accepted {bad}");
+        }
     }
 }
