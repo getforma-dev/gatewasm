@@ -6,7 +6,7 @@ use chrono::Utc;
 use sqlx::Row;
 
 use crate::handlers::auth::extract_refresh_cookie;
-use crate::handlers::hosted_login::html_escape;
+use crate::handlers::hosted_login::{html_escape, safe_link_href};
 use crate::jwt::signing;
 use crate::middleware::csp::generate_csp_nonce;
 use crate::middleware::tenant::TenantContext;
@@ -44,7 +44,10 @@ pub async fn site_page(
 
     // Fetch hosted page content
     let page_data = sqlx::query(
-        "SELECT headline, body, cta_text, cta_link, custom_html FROM tenant_hosted_pages WHERE tenant_id = $1",
+        // `custom_html` is deliberately not selected. It is written, capped and
+    // exposed over the API but never rendered, so fetching it only puts
+    // operator-supplied raw HTML in scope inside a render function.
+    "SELECT headline, body, cta_text, cta_link FROM tenant_hosted_pages WHERE tenant_id = $1",
     )
     .bind(&tenant.tenant_id)
     .fetch_optional(&state.db)
@@ -113,14 +116,23 @@ h1{{font-size:2rem;font-weight:500;margin-bottom:1rem;color:{color}}}
                 html_escape(&body_text)
             )
         },
-        cta_html = if cta_text.is_empty() {
-            String::new()
-        } else {
-            format!(
+        // `html_escape` handles `& < > " '` and says nothing about schemes, so
+        // `javascript:` used to pass straight through. Inert today only because
+        // this page's CSP has no `script-src` and falls back to
+        // `default-src 'none'` — one CSP edit away from live.
+        cta_html = match (cta_text.is_empty(), safe_link_href(&cta_link)) {
+            (false, Some(href)) => format!(
                 "<a class=\"cta\" href=\"{}\">{}</a>",
-                html_escape(&cta_link),
+                html_escape(&href),
                 html_escape(&cta_text)
-            )
+            ),
+            // Render the label without a link rather than dropping the CTA, so
+            // the tenant sees their copy instead of a silently missing button.
+            (false, None) => format!(
+                "<span class=\"cta cta-disabled\">{}</span>",
+                html_escape(&cta_text)
+            ),
+            (true, _) => String::new(),
         },
     );
 

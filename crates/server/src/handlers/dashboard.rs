@@ -4,7 +4,7 @@ use axum::{
 };
 
 use crate::frontend::FrontendSnapshot;
-use crate::handlers::hosted_login::{html_escape, json_for_script};
+use crate::handlers::hosted_login::json_for_script;
 use crate::html_template::{render_page, PageConfig};
 use crate::middleware::tenant::TenantContext;
 use crate::{AppState, RenderMode};
@@ -56,9 +56,9 @@ fn render_dashboard_page(
     );
 
     let page_title = if admin_console_mode {
-        format!("{} — Admin Console", html_escape(app_name))
+        format!("{} — Admin Console", app_name)
     } else {
-        format!("{} — Dashboard", html_escape(app_name))
+        format!("{} — Dashboard", app_name)
     };
 
     let route_pattern = if admin_console_mode {

@@ -1,3 +1,11 @@
+// Byte-slicing a `&str` (`&s[a..b]`) panics when an index is not on a UTF-8
+// char boundary. The release profile sets `panic = "abort"`, which is the right
+// posture for an auth server — a panic mid-way through a security state machine
+// leaves invariants undefined, and continuing to serve is the more dangerous
+// choice — but it also means one such slice takes down every tenant.
+// `sanitize_custom_css` shipped exactly that bug. This lint catches the class.
+#![warn(clippy::string_slice)]
+
 pub mod assets;
 pub mod compliance;
 pub mod config;

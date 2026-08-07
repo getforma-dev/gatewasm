@@ -202,6 +202,11 @@ pub fn is_safe_css_color(s: &str) -> bool {
 ///
 /// Nesting is handled, so `linear-gradient(135deg, rgb(0 0 0), #fff)` passes
 /// while `linear-gradient(red, url(evil))` does not.
+// Every slice below is boundary-safe by construction: `i` is the position of an
+// ASCII `(`, and `start` comes from `char_indices`. Justified rather than
+// rewritten because this function exists to fix a byte-slicing panic, and the
+// reasoning is the point.
+#[allow(clippy::string_slice)]
 fn is_safe_css_value(value: &str) -> bool {
     // Comments could hide a declaration split across sanitizer passes.
     if value.contains("/*") || value.contains("*/") {
