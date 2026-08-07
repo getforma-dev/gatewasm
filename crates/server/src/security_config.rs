@@ -10,8 +10,6 @@ pub struct TenantSecurityConfig {
     #[serde(default = "default_true")]
     pub host_prefix_cookies: bool,
     #[serde(default = "default_true")]
-    pub csp_enabled: bool,
-    #[serde(default = "default_true")]
     pub client_fingerprint: bool,
     #[serde(default = "default_max_sessions")]
     pub max_sessions_per_user: u32,
@@ -72,7 +70,6 @@ impl Default for TenantSecurityConfig {
         Self {
             idle_timeout_minutes: 30,
             host_prefix_cookies: true,
-            csp_enabled: true,
             client_fingerprint: true,
             max_sessions_per_user: 10,
             mfa_policy: "off".to_string(),
@@ -154,7 +151,6 @@ mod tests {
         let config = TenantSecurityConfig::default();
         assert_eq!(config.idle_timeout_minutes, 30);
         assert!(config.host_prefix_cookies);
-        assert!(config.csp_enabled);
         assert!(config.client_fingerprint);
         assert!(!config.webauthn_enabled);
         assert!(!config.dpop_required);
@@ -167,7 +163,6 @@ mod tests {
         let config = TenantSecurityConfig::from_json(&val);
         assert_eq!(config.idle_timeout_minutes, 30);
         assert!(config.host_prefix_cookies);
-        assert!(config.csp_enabled);
         assert!(config.client_fingerprint);
     }
 

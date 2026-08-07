@@ -8412,7 +8412,6 @@ async fn test_tenant_security_config_defaults() {
     // Foundation defaults (all ON)
     assert_eq!(sc["idle_timeout_minutes"], 30);
     assert_eq!(sc["host_prefix_cookies"], true);
-    assert_eq!(sc["csp_enabled"], true);
     assert_eq!(sc["client_fingerprint"], true);
 
     // Pro defaults (all OFF)
@@ -8450,7 +8449,6 @@ async fn test_manage_config_includes_security_config() {
     let sc = &body["security_config"];
     assert_eq!(sc["idle_timeout_minutes"], 30);
     assert_eq!(sc["host_prefix_cookies"], true);
-    assert_eq!(sc["csp_enabled"], true);
     assert_eq!(sc["client_fingerprint"], true);
     assert_eq!(sc["webauthn_enabled"], false);
     assert_eq!(sc["dpop_required"], false);
@@ -8481,7 +8479,6 @@ async fn test_update_tenant_security_config() {
     assert_eq!(sc["idle_timeout_minutes"], 15);
     // Foundation defaults preserved for unset fields
     assert_eq!(sc["host_prefix_cookies"], true);
-    assert_eq!(sc["csp_enabled"], true);
     assert_eq!(sc["client_fingerprint"], true);
     // Pro/Enterprise/Compliance defaults preserved
     assert_eq!(sc["webauthn_enabled"], false);
@@ -8702,7 +8699,6 @@ async fn test_compliance_tenant_can_enable_everything() {
 
     // Foundation defaults still preserved
     assert_eq!(sc["host_prefix_cookies"], true);
-    assert_eq!(sc["csp_enabled"], true);
     assert_eq!(sc["client_fingerprint"], true);
 }
 
@@ -8807,7 +8803,6 @@ async fn test_security_config_partial_update() {
 
     // Foundation defaults still intact
     assert_eq!(sc["host_prefix_cookies"], true);
-    assert_eq!(sc["csp_enabled"], true);
     assert_eq!(sc["client_fingerprint"], true);
 
     // Unset fields still at defaults
@@ -12593,5 +12588,84 @@ async fn manage_config_sanitizes_branding_custom_css_on_write() {
     assert!(
         !stored.to_ascii_lowercase().contains("url"),
         "management write path stored a fetching notation: {stored:?}"
+    );
+}
+
+#[tokio::test]
+async fn every_html_route_carries_a_csp() {
+    // CSP used to be per-handler opt-in, which is how /docs, /internal/docs and
+    // the verify-email page each shipped with none. The middleware floor makes
+    // it a property of the server; this asserts the floor is actually reached.
+    let app = test_app().await;
+    for uri in [
+        "/docs",
+        "/platform/login",
+        "/platform/onboarding",
+        "/platform/benchmark",
+        "/platform/console",
+        "/no-such-page-404",
+        &format!("/t/{}/login", TEST_TENANT_SLUG),
+        &format!("/t/{}/site", TEST_TENANT_SLUG),
+    ] {
+        let res = app.clone().oneshot(get_request(uri)).await.unwrap();
+        let ct = res
+            .headers()
+            .get("content-type")
+            .and_then(|v| v.to_str().ok())
+            .unwrap_or("");
+        if !ct.starts_with("text/html") {
+            continue;
+        }
+        let csp = res
+            .headers()
+            .get("content-security-policy")
+            .unwrap_or_else(|| panic!("{uri} returned HTML with no CSP"))
+            .to_str()
+            .unwrap();
+        assert!(
+            csp.contains("frame-ancestors 'none'"),
+            "{uri} CSP does not forbid framing: {csp}"
+        );
+        assert!(
+            !csp_directive(csp, "script-src")
+                .unwrap_or("")
+                .contains("unsafe-inline"),
+            "{uri} allows inline script: {csp}"
+        );
+        assert_eq!(
+            res.headers()
+                .get("x-content-type-options")
+                .and_then(|v| v.to_str().ok()),
+            Some("nosniff"),
+            "{uri} is missing nosniff"
+        );
+    }
+}
+
+#[tokio::test]
+async fn docs_pins_swagger_ui_and_ships_its_own_policy() {
+    let app = test_app().await;
+    let res = app.oneshot(get_request("/docs")).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let csp = res
+        .headers()
+        .get("content-security-policy")
+        .expect("/docs must have a CSP")
+        .to_str()
+        .unwrap()
+        .to_string();
+    let body = body_string(res).await;
+
+    // Third-party script is pinned by hash, not merely by URL.
+    assert!(body.contains("integrity=\"sha384-"), "no SRI on /docs");
+    assert!(!body.contains("swagger-ui-dist@5/"), "unpinned version range");
+    // The page's own policy names the host it loads from, and nothing looser.
+    assert!(csp.contains("https://unpkg.com"), "{csp}");
+    assert!(!csp.contains("unsafe-eval"), "{csp}");
+    assert!(
+        !csp_directive(&csp, "script-src")
+            .expect("script-src")
+            .contains("unsafe-inline"),
+        "{csp}"
     );
 }

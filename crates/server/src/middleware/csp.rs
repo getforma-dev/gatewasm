@@ -2,6 +2,59 @@
 // All call sites (`crate::middleware::csp::generate_csp_nonce()`, etc.) continue working.
 pub use forma_server::csp::{build_csp_header, generate_csp_nonce, CspNonce};
 
+use axum::{
+    extract::Request,
+    http::{header, HeaderName, HeaderValue},
+    middleware::Next,
+    response::Response,
+};
+
+/// Fallback CSP for HTML responses whose handler did not set one, plus two
+/// cheap global headers.
+///
+/// CSP attachment used to be entirely per-handler opt-in — `main.rs` applied
+/// only CORS, tracing and request-id — which is how `/docs`, `/internal/docs`
+/// and the verify-email page each shipped with no policy at all. This makes
+/// "has a CSP" a property of the server instead of something every new handler
+/// has to remember.
+///
+/// It is a floor, not a replacement. Handlers that mint a nonce still set their
+/// own stricter, nonce-bearing header and this leaves it untouched. The
+/// fallback cannot carry a nonce — it runs after the body is built — so it is
+/// deliberately script-free: a page that forgets its own policy breaks
+/// visibly in development rather than silently serving unprotected.
+pub async fn default_csp(req: Request, next: Next) -> Response {
+    let mut res = next.run(req).await;
+
+    let is_html = res
+        .headers()
+        .get(header::CONTENT_TYPE)
+        .and_then(|v| v.to_str().ok())
+        .is_some_and(|v| v.starts_with("text/html"));
+
+    if is_html && !res.headers().contains_key("content-security-policy") {
+        res.headers_mut().insert(
+            HeaderName::from_static("content-security-policy"),
+            HeaderValue::from_static(
+                "default-src 'none'; img-src 'self' data:; style-src 'self'; \
+                 frame-ancestors 'none'; base-uri 'none'; form-action 'none'",
+            ),
+        );
+    }
+
+    // Only /_assets sets nosniff today. `entry().or_insert` so a handler with
+    // a deliberate value keeps it.
+    res.headers_mut()
+        .entry(HeaderName::from_static("x-content-type-options"))
+        .or_insert(HeaderValue::from_static("nosniff"));
+    res.headers_mut()
+        .entry(HeaderName::from_static("referrer-policy"))
+        .or_insert(HeaderValue::from_static("strict-origin-when-cross-origin"));
+
+    res
+}
+
+
 #[cfg(test)]
 mod tests {
     use super::*;

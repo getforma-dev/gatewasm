@@ -119,11 +119,6 @@ export function SecurityConfigView() {
                 () => patch('host_prefix_cookies', !config()!.host_prefix_cookies),
               ),
               ToggleRow(
-                'Content Security Policy',
-                () => config()!.csp_enabled,
-                () => patch('csp_enabled', !config()!.csp_enabled),
-              ),
-              ToggleRow(
                 'Client Fingerprint',
                 () => config()!.client_fingerprint,
                 () => patch('client_fingerprint', !config()!.client_fingerprint),

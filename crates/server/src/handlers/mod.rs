@@ -727,7 +727,14 @@ fn create_router_inner(state: AppState, rate_limit_enabled: bool) -> Router {
         }
     });
 
-    main_router.nest("/t", slug_handler)
+    main_router
+        .nest("/t", slug_handler)
+        // Applied here rather than in main.rs so it is part of the router
+        // itself: every construction of the app gets the floor, and the
+        // integration harness — which builds the router directly — actually
+        // exercises it. A security default that lives only in main.rs is the
+        // same opt-in problem one level up.
+        .layer(middleware::from_fn(crate::middleware::csp::default_csp))
 }
 
 /// Serves the fAuth bridge.js client library (~3.4KB minified).
