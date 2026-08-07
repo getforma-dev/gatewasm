@@ -54,6 +54,13 @@ jobs:
           npm ci
           npx tsc --noEmit
           npx tsx build.ts --ssr
+      # The compiler prints one diagnostic per construct it cannot render
+      # server-side. They scrolled past unread for months while /platform/login
+      # served its "New here?" link with no href. This does not fix them; it
+      # stops the count rising.
+      - name: SSR degradations have not regressed
+        working-directory: admin
+        run: npm run check:ssr
 
   unit-tests:
     name: Rust unit tests

@@ -26,34 +26,65 @@ their server-rendered markup is wrong and they are held on Phase 1:
 Both were caught by `admin/e2e/smoke.spec.ts` and `login.spec.ts` the first time
 the e2e suite was able to run. Fix the SSR output before opting either route in.
 
-### Root cause of the missing link: reactive attributes are dropped in SSR
+### Why attributes go missing, and why the compiler is not the thing to change
 
-The SSR markup emits the element and its text but not the attribute:
+An earlier note here claimed forma-ir was missing a `DYN_ATTR` path for closure
+attributes. That was wrong. `@getforma/compiler` Rule 6 already emits `DYN_ATTR`
+for a function-valued prop, reuses the signal's own slot when the binding is
+`() => sig()`, and tries to fold an SSR default. It then **warns, per site, with
+the fix**, and has been doing so on every build:
 
-```html
-<div class="new-here …">New here? <a>Start onboarding</a></div>
+```
+IR: attribute 'href' on <a> binds `() => a bare '+' expression`, which the
+compiler cannot evaluate in .../platform/login/LoginPage.ts — the attribute is
+OMITTED server-side and only appears once the client hydrates — initialize the
+signals it reads with literal defaults, or fold the value into a module-level const
 ```
 
-`LoginPage.ts:93-96` writes the href as a reactive closure, because it appends
-an optional `?owner_invite=` parameter:
+The attribute vanishes because the expression genuinely cannot be evaluated:
+`() => '/platform/onboarding' + (ownerInviteToken ? … : '')` reads a mutable
+`let` derived from `window.location.search`. Nothing the compiler could do makes
+that renderable without the server supplying the value.
 
-```ts
-h('a', { href: () => '/platform/onboarding' + (ownerInviteToken ? … : '') }, 'Start onboarding')
+**Decision: fix the source, not the compiler.** This is the faster path as well
+as the correct one:
+
+| | per-request SSR cost | IR size |
+|---|---|---|
+| folded / static attribute | none — a string-table entry copied during the walk | one string |
+| `DYN_ATTR` + server-supplied slot | slot lookup + write, and the handler must thread the value | slot + default |
+| `DYN_ATTR`, no default (today) | none, because the attribute is omitted — and the output is wrong | slot |
+
+Teaching the compiler to guess would push every attribute onto the slot path:
+larger IR, a slower walk, and wrong output whenever the guess is wrong. The
+fast path and the correct path are the same path.
+
+### The actual problem: 158 diagnostics nobody reads
+
+`npm run check:ssr` counts them and fails if the total rises, with a committed
+baseline in `admin/scripts/ir-degradations.json`. It runs in CI. It fixes
+nothing; it makes the count only able to go down.
+
+Distribution at the time of writing — the two visible e2e failures are the tip:
+
+```
+ 24  platform/console/helpers.ts          17  platform/login/AuthCard.ts
+ 21  platform/console/OnboardingWizard.ts 16  platform/onboarding/RegistrationForm.ts
+ 19  platform/console/ConsoleApp.ts       12  platform/login/MfaPanel.ts
 ```
 
-A closure cannot be evaluated at compile time, so the attribute is emitted
-neither as a static value nor as a dynamic-attribute opcode — it simply
-disappears. With JS on, hydration fills it in and the page looks fine, which is
-why this went unnoticed; the no-JS shell and the first paint have a dead link.
+`/platform/login` alone carries 33 across its three files. Every one is a place
+the server-rendered HTML differs from what the client shows.
 
-**This is a constraint on the whole migration, not a one-off.** Anything in a
-static shell whose attribute is a function will be lost. Either give the
-element a static attribute and adjust it during hydration, or move it inside an
-island. Audit each page for reactive attributes in shell markup before opting
-it in, and check whether `forma-ir` should be emitting `DYN_ATTR` here — if it
-should, this belongs upstream rather than being worked around per page.
+### Worked example: the missing href
 
----
+`ownerInviteToken` is a mutable `let` in `platform/login/store.ts`. Make it a
+signal with a literal `''` default and the ternary resolves at compile time, so
+the compiler folds `/platform/onboarding` as the SSR default while the client
+still appends `?owner_invite=` when there is one. The query parameter is
+load-bearing — `platform/onboarding/store.ts:47` reads it from its own URL, not
+from sessionStorage — so dropping it for a plain static attribute would break
+the owner-invite flow.
 
 ## Migration Order
 

@@ -1,0 +1,22 @@
+{
+  "total": 158,
+  "files": {
+    "platform/login/LoginPage.ts": 4,
+    "platform/login/AuthCard.ts": 17,
+    "platform/login/MfaPanel.ts": 12,
+    "platform/console/helpers.ts": 24,
+    "tenant/login/TenantLoginCard.ts": 12,
+    "platform/benchmark/BenchmarkFilterBar.ts": 4,
+    "platform/benchmark/PerfPanel.ts": 8,
+    "platform/benchmark/BenchmarkDataTable.ts": 5,
+    "platform/onboarding/RegistrationForm.ts": 16,
+    "tenant/dashboard/TenantDashboard.ts": 2,
+    "core/components/ui/LoadingBar.ts": 4,
+    "core/components/ui/Toast.ts": 4,
+    "tenant/admin/TenantAdmin.ts": 2,
+    "admin/dashboard/OwnerApp.ts": 3,
+    "admin/dashboard/views/CustomerDrawer.ts": 1,
+    "platform/console/ConsoleApp.ts": 19,
+    "platform/console/OnboardingWizard.ts": 21
+  }
+}
