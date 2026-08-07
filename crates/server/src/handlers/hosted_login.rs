@@ -225,6 +225,7 @@ else{{b.style.opacity='';b.style.pointerEvents='';}}
         route_pattern: "/t/:slug/login",
         manifest: frontend.manifest(),
         config_script: Some(&config_script),
+        config_json: None,
         body_class: None,
         personality_css: Some(&personality_css),
         body_prefix: if logo_html.is_empty() { None } else { Some(&logo_html) },

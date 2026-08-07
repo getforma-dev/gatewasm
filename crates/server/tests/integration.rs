@@ -5424,6 +5424,14 @@ async fn test_slug_in_url_nonexistent_tenant() {
 // ══════════════════════════════════════════════════════════════════════════
 
 /// Helper: extract response body as String.
+/// Extract one directive's value from a Content-Security-Policy string.
+fn csp_directive<'a>(csp: &'a str, name: &str) -> Option<&'a str> {
+    csp.split(';')
+        .map(str::trim)
+        .find_map(|d| d.strip_prefix(name).filter(|rest| rest.starts_with(' ')))
+        .map(str::trim)
+}
+
 async fn body_string(response: axum::response::Response) -> String {
     let bytes = axum::body::to_bytes(response.into_body(), 1_000_000)
         .await
@@ -8849,9 +8857,22 @@ async fn test_csp_header_on_login_page() {
         csp.contains("'self'"),
         "CSP style-src must include 'self' for stylesheets"
     );
+    // Directive-scoped, not a substring match. forma-server 0.2.0 adds
+    // `style-src-attr 'unsafe-inline'`, which permits `style=""` attributes in
+    // markup while leaving `style-src` nonce-only and scripts untouched — a
+    // bare `!contains("unsafe-inline")` cannot tell that scoped relaxation
+    // apart from a blanket one, and would fail on a stronger policy.
     assert!(
-        !csp.contains("unsafe-inline"),
-        "CSP must NOT allow unsafe-inline anywhere"
+        !csp_directive(csp, "script-src")
+            .expect("script-src")
+            .contains("unsafe-inline"),
+        "script-src must NOT allow unsafe-inline: {csp}"
+    );
+    assert!(
+        !csp_directive(csp, "style-src")
+            .expect("style-src")
+            .contains("unsafe-inline"),
+        "style-src must NOT allow unsafe-inline: {csp}"
     );
     assert!(
         csp.contains("frame-ancestors 'none'"),
@@ -8954,10 +8975,18 @@ async fn test_csp_header_on_dashboard_page() {
         csp.contains("script-src 'nonce-"),
         "Dashboard CSP must have nonce-based script-src"
     );
-    // No unsafe-inline anywhere — all styles moved to CSS classes
+    // Directive-scoped — see the note in test_csp_header_on_login_page.
     assert!(
-        !csp.contains("unsafe-inline"),
-        "Dashboard CSP must NOT allow unsafe-inline"
+        !csp_directive(csp, "script-src")
+            .expect("script-src")
+            .contains("unsafe-inline"),
+        "Dashboard script-src must NOT allow unsafe-inline: {csp}"
+    );
+    assert!(
+        !csp_directive(csp, "style-src")
+            .expect("style-src")
+            .contains("unsafe-inline"),
+        "Dashboard style-src must NOT allow unsafe-inline: {csp}"
     );
 
     // Clone CSP before consuming res

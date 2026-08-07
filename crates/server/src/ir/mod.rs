@@ -10,15 +10,18 @@ use std::collections::HashMap;
 
 use crate::{assets, AssetManifest, RenderMode};
 
-// Re-export the shared compatibility check from forma-server.
-pub use forma_server::ir_compat::check_ir_compatibility;
-
 /// Load and parse all IR modules from the active asset source.
 ///
 /// In development we read `.ir` files from `admin/dist` on the filesystem so
 /// the SSR walker, hydration manifest, and emitted JS/CSS stay in sync.
 /// In production the same helper reads from embedded assets through
-/// `crate::assets::asset_bytes`, preserving single-binary delivery.
+/// `crate::assets::asset_bytes`, preserving single-binary delivery. This is
+/// why we do not call `forma_server::ir_compat::load_ir_modules`: that reads
+/// embedded assets only, and would break the dev filesystem path.
+///
+/// Version compatibility is no longer checked separately — since forma-ir
+/// 0.2.0 `IrModule::parse` rejects an incompatible header itself, so a
+/// successful parse *is* the compatibility guarantee.
 pub fn load_ir_modules(
     manifest: &AssetManifest,
 ) -> (HashMap<String, RenderMode>, HashMap<String, IrModule>) {
@@ -26,40 +29,47 @@ pub fn load_ir_modules(
     let mut ir_modules = HashMap::new();
 
     for (route_pattern, route_assets) in &manifest.routes {
-        if let Some(ref ir_filename) = route_assets.ir {
-            if let Some(ir_bytes) = assets::asset_bytes(ir_filename) {
-                match IrModule::parse(&ir_bytes) {
-                    Ok(module) => match check_ir_compatibility(&module) {
-                        Ok(()) => {
-                            tracing::info!(
-                                route = %route_pattern,
-                                ir_file = %ir_filename,
-                                source = if assets::use_filesystem_assets() { "filesystem" } else { "embedded" },
-                                "Loaded IR module for SSR"
-                            );
-                            render_modes
-                                .insert(route_pattern.clone(), RenderMode::Phase2SsrReconcile);
-                            ir_modules.insert(route_pattern.clone(), module);
-                        }
-                        Err(e) => {
-                            tracing::warn!(
-                                route = %route_pattern,
-                                error = %e,
-                                "IR compatibility check failed — Phase 1 fallback"
-                            );
-                            render_modes
-                                .insert(route_pattern.clone(), RenderMode::Phase1ClientMount);
-                        }
-                    },
-                    Err(e) => {
-                        tracing::warn!(
-                            route = %route_pattern,
-                            error = %e,
-                            "Failed to parse IR module — Phase 1 fallback"
-                        );
-                        render_modes.insert(route_pattern.clone(), RenderMode::Phase1ClientMount);
-                    }
-                }
+        let Some(ref ir_filename) = route_assets.ir else {
+            continue;
+        };
+        let source = if assets::use_filesystem_assets() {
+            "filesystem"
+        } else {
+            "embedded"
+        };
+
+        let Some(ir_bytes) = assets::asset_bytes(ir_filename) else {
+            // The manifest named an .ir file that is not present. Previously
+            // this fell through with no log and no render_modes entry, which
+            // was indistinguishable from a route that legitimately has no IR.
+            tracing::warn!(
+                route = %route_pattern,
+                ir_file = %ir_filename,
+                source,
+                "Manifest declares an IR file that is not available — Phase 1 fallback"
+            );
+            render_modes.insert(route_pattern.clone(), RenderMode::Phase1ClientMount);
+            continue;
+        };
+
+        match IrModule::parse(&ir_bytes) {
+            Ok(module) => {
+                tracing::info!(
+                    route = %route_pattern,
+                    ir_file = %ir_filename,
+                    source,
+                    "Loaded IR module for SSR"
+                );
+                render_modes.insert(route_pattern.clone(), RenderMode::Phase2SsrReconcile);
+                ir_modules.insert(route_pattern.clone(), module);
+            }
+            Err(e) => {
+                tracing::warn!(
+                    route = %route_pattern,
+                    error = %e,
+                    "Failed to parse IR module — Phase 1 fallback"
+                );
+                render_modes.insert(route_pattern.clone(), RenderMode::Phase1ClientMount);
             }
         }
     }
@@ -67,7 +77,6 @@ pub fn load_ir_modules(
     if !ir_modules.is_empty() {
         tracing::info!(
             ssr_routes = ir_modules.len(),
-            source = if assets::use_filesystem_assets() { "filesystem" } else { "embedded" },
             "Phase 2 SSR enabled for {} route(s)",
             ir_modules.len()
         );
@@ -76,91 +85,27 @@ pub fn load_ir_modules(
     (render_modes, ir_modules)
 }
 
-/// Validate all IR modules against the current runtime version.
-/// Returns a map of route -> render mode decisions.
-/// Routes with valid IR get `true` (SSR capable), invalid get `false` (fall back to Phase 1).
-///
-/// NOTE: This is an fAuth-specific helper not present in forma-server.
-/// It provides a simpler bool-based API used by some test code.
-pub fn validate_ir_modules(ir_modules: &HashMap<String, IrModule>) -> HashMap<String, bool> {
-    let mut results = HashMap::new();
-    for (route, module) in ir_modules {
-        match check_ir_compatibility(module) {
-            Ok(()) => {
-                results.insert(route.clone(), true);
-            }
-            Err(msg) => {
-                tracing::warn!(route = %route, error = %msg, "IR compatibility check failed");
-                results.insert(route.clone(), false);
-            }
-        }
-    }
-    results
-}
-
 #[cfg(test)]
-mod compatibility_tests {
+mod tests {
     use super::*;
-    use forma_ir::format::{IrHeader, IR_VERSION};
-    use forma_ir::parser::test_helpers::build_minimal_ir;
-    use forma_ir::parser::IrModule;
+    use forma_ir::parser::test_helpers::{build_minimal_ir, encode_text};
 
-    /// Parse a valid minimal IR, then override the header version.
-    fn make_ir_module_with_version(version: u16) -> IrModule {
-        // Build a minimal valid IR binary with a TEXT opcode referencing string 0.
-        let opcodes = forma_ir::parser::test_helpers::encode_text(0);
-        let data = build_minimal_ir(&["hello"], &[], &opcodes, &[]);
-        let mut module = IrModule::parse(&data).unwrap();
-        module.header = IrHeader {
-            version,
-            flags: 0,
-            source_hash: 0,
-        };
-        module
+    #[test]
+    fn parse_accepts_a_current_version_module() {
+        let data = build_minimal_ir(&["hello"], &[], &encode_text(0), &[]);
+        assert!(IrModule::parse(&data).is_ok());
     }
 
     #[test]
-    fn compatibility_passes_for_current_version() {
-        let module = make_ir_module_with_version(IR_VERSION);
-        assert!(check_ir_compatibility(&module).is_ok());
-    }
-
-    #[test]
-    fn compatibility_fails_for_future_version() {
-        let module = make_ir_module_with_version(99);
-        let err = check_ir_compatibility(&module).unwrap_err();
-        assert!(err.contains("99"));
-        assert!(err.contains(&IR_VERSION.to_string()));
-    }
-
-    #[test]
-    fn compatibility_fails_for_version_zero() {
-        let module = make_ir_module_with_version(0);
-        let err = check_ir_compatibility(&module).unwrap_err();
-        assert!(err.contains("0"));
-        assert!(err.contains(&IR_VERSION.to_string()));
-    }
-
-    #[test]
-    fn validate_ir_modules_mixed() {
-        let valid_module = make_ir_module_with_version(IR_VERSION);
-        let invalid_module = make_ir_module_with_version(99);
-
-        let mut ir_modules = HashMap::new();
-        ir_modules.insert("/valid-route".to_string(), valid_module);
-        ir_modules.insert("/invalid-route".to_string(), invalid_module);
-
-        let results = validate_ir_modules(&ir_modules);
-
-        assert_eq!(results.len(), 2);
-        assert_eq!(results["/valid-route"], true);
-        assert_eq!(results["/invalid-route"], false);
-    }
-
-    #[test]
-    fn validate_ir_modules_empty() {
-        let ir_modules: HashMap<String, IrModule> = HashMap::new();
-        let results = validate_ir_modules(&ir_modules);
-        assert!(results.is_empty());
+    fn parse_rejects_an_incompatible_header_version() {
+        // The version lives in the header, immediately after the 4-byte magic.
+        // Corrupting it is the only way to exercise this now that the check is
+        // inside `parse` rather than a separate pass over an already-parsed
+        // module. `validate_ir_modules` and `check_ir_compatibility` went away
+        // with that change; both were only ever reachable from these tests.
+        let mut data = build_minimal_ir(&["hello"], &[], &encode_text(0), &[]);
+        data[4] = 0xFF;
+        data[5] = 0xFF;
+        assert!(IrModule::parse(&data).is_err());
     }
 }

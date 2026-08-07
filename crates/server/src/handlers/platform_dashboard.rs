@@ -21,6 +21,7 @@ pub async fn dashboard_page(State(state): State<AppState>) -> impl IntoResponse 
         route_pattern: "/platform/console",
         manifest: frontend.manifest(),
         config_script: Some(&config_script),
+        config_json: None,
         body_class: None,
         personality_css: Some("body{background:#0a0a0c;color:#e8e6e3;}"),
         body_prefix: None,

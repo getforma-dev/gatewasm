@@ -63,18 +63,18 @@ fn populate_onboarding_slots(state: &AppState, ir_module: &ir::parser::IrModule)
 
     let mut providers = Vec::new();
     if google {
-        providers.push(ir::slot::SlotValue::Object(vec![
+        providers.push(ir::slot::SlotValue::Object(std::sync::Arc::from(vec![
             ("provider".into(), ir::slot::SlotValue::Text("google".into())),
             ("label".into(), ir::slot::SlotValue::Text("Continue with Google".into())),
-        ]));
+        ])));
     }
     if github {
-        providers.push(ir::slot::SlotValue::Object(vec![
+        providers.push(ir::slot::SlotValue::Object(std::sync::Arc::from(vec![
             ("provider".into(), ir::slot::SlotValue::Text("github".into())),
             ("label".into(), ir::slot::SlotValue::Text("Continue with GitHub".into())),
-        ]));
+        ])));
     }
-    slots.set(SLOT_OAUTH_PROVIDERS, ir::slot::SlotValue::Array(providers));
+    slots.set(SLOT_OAUTH_PROVIDERS, ir::slot::SlotValue::Array(providers.into()));
 
     slots
 }
@@ -112,6 +112,7 @@ fn render_get_started_page_html(state: &AppState) -> PageOutput {
         route_pattern,
         manifest: frontend.manifest(),
         config_script: Some(&config_script),
+        config_json: None,
         body_class: None,
         personality_css: Some("body{background:#0a0a0c;color:#e8e6e3;--grid-opacity:0.15;--glow-size:1100px;--glow-intensity:0.10;}"),
         body_prefix: None,
@@ -154,6 +155,7 @@ fn render_platform_login_page_html(state: &AppState) -> PageOutput {
         route_pattern,
         manifest: frontend.manifest(),
         config_script: Some(&config_script),
+        config_json: None,
         body_class: None,
         personality_css: Some("body{background:#0a0a0c;color:#e8e6e3;--grid-opacity:0.25;--glow-size:900px;--glow-intensity:0.07;}"),
         body_prefix: None,

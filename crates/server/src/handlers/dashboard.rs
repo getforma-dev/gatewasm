@@ -79,6 +79,7 @@ fn render_dashboard_page(
         route_pattern,
         manifest: frontend.manifest(),
         config_script: Some(&config_script),
+        config_json: None,
         body_class: None,
         personality_css: Some(&personality_css),
         body_prefix: None,

@@ -149,6 +149,7 @@ pub async fn benchmark_page(
         route_pattern,
         manifest: frontend.manifest(),
         config_script: Some(&config_script),
+        config_json: None,
         body_class: None,
         personality_css: Some(
             "body{background:#0a0a0c;color:#e8e6e3;--grid-opacity:0.12;--glow-size:1000px;--glow-intensity:0.08;}",

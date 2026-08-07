@@ -9,8 +9,8 @@ license = "MIT OR Apache-2.0"
 repository = "https://github.com/getforma-dev/gatewasm"
 
 [workspace.dependencies]
-forma-ir = "0.1.4"
-forma-server = "0.1.4"
+forma-ir = "0.2.0"
+forma-server = "0.2.0"
 
 [profile.release]
 opt-level = "z"

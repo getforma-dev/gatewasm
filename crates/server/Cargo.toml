@@ -47,3 +47,5 @@ rust-embed = "8"
 [dev-dependencies]
 tower = { version = "0.5", features = ["util"] }
 chrono = "0.4"
+# `parser::test_helpers` moved behind a non-default feature in forma-ir 0.2.0.
+forma-ir = { workspace = true, features = ["test-helpers"] }
