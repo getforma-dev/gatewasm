@@ -4,15 +4,27 @@ Convert all CSR (`mount()`) pages to the island architecture (SSR page component
 
 ---
 
-## Already Done (3 pages)
+## Status
 
-| Route | Page Component | Islands |
-|-------|---------------|---------|
-| `/platform/login` | `LoginPage.ts` | AuthCard, MfaPanel |
-| `/platform/onboarding` | `OnboardingPage.ts` | RegistrationForm |
-| `/platform/benchmark` | `BenchmarkPage.ts` | FilterBar, BenchmarkDataTable, PerfPanel, PerfStat |
+| Route | Page Component | Islands | Serving SSR? |
+|-------|---------------|---------|---|
+| `/platform/benchmark` | `BenchmarkPage.ts` | FilterBar, BenchmarkDataTable, PerfPanel, PerfStat | **Yes** |
+| `/platform/login` | `LoginPage.ts` | AuthCard, MfaPanel | No — see below |
+| `/platform/onboarding` | `OnboardingPage.ts` | RegistrationForm | No — see below |
 
 These use the dual-mode `app.ts` pattern: `activateIslands` when SSR markers exist, `mount()` fallback for dev mode.
+
+**The island work being done is not the same as the route serving correct SSR.**
+`/platform/login` and `/platform/onboarding` have their components split, but
+their server-rendered markup is wrong and they are held on Phase 1:
+
+- `/platform/login` renders without its `a[href="/platform/onboarding"]` link.
+  The client render produces it; the SSR walk does not.
+- `/platform/onboarding` emits `<svg width="">`, which the browser reports as
+  `Unexpected end of attribute. Expected length, ""`.
+
+Both were caught by `admin/e2e/smoke.spec.ts` and `login.spec.ts` the first time
+the e2e suite was able to run. Fix the SSR output before opting either route in.
 
 ---
 
@@ -123,22 +135,43 @@ Start with the simplest page, build confidence with the pattern, then tackle com
 
 4. Run `npm run build:ssr` to generate IR bytecode
 
-5. Restart server — it loads IR modules and enables Phase 2 for the route
+5. Wire the handler: copy the `frontend.render_mode()` / `ir_module()` / slots
+   lookup from `benchmark.rs`
+
+6. Verify the SSR output is correct BEFORE opting in — diff it against the
+   client render, and run the route's e2e specs
+
+7. Add the route to `SSR_ROUTES` in `crates/server/src/ir/mod.rs`, then restart
 ```
 
 ---
 
 ## Prerequisites
 
-- All pages already use `render_page` in their Rust handlers — no server changes needed
-- The `render_mode` in each handler defaults to Phase1 and auto-upgrades to Phase2 when IR exists
-- The `@getforma/compiler` traces `PageComponent` imports to emit IR
+- The `@getforma/compiler` traces `PageComponent` imports to emit IR.
+- **Each handler needs a server change.** Calling `render_page` is not enough:
+  `hosted_login.rs`, `dashboard.rs` (which covers two routes), `owner/dashboard.rs`
+  and `platform_dashboard.rs` pass a literal `RenderMode::Phase1ClientMount` with
+  `ir_module: None, slots: None` and never consult `frontend.render_mode()`. Copy
+  the three-line lookup from `benchmark.rs`. An earlier version of this document
+  claimed no server changes were needed, and that is why the frontend work in
+  steps 1-3 appears to do nothing.
+- **Phase 2 is opt-in per route**, via `SSR_ROUTES` in `crates/server/src/ir/mod.rs`.
+  It does *not* auto-upgrade when IR exists. It used to, and that was the bug:
+  `@getforma/compiler` 0.3.1 emits IR for every configured route where 0.1.8 did
+  not, so upgrading the compiler silently switched server rendering on for pages
+  that had never been migrated, and they served broken markup.
 
 ## Testing
 
 - `npm run build:ssr` — verify IR files generated for each page
 - Restart server — verify "Phase 2 SSR enabled for N route(s)" log message
 - Check page source — should contain full HTML, not empty `<div id="app">`
+- **Diff the SSR markup against the client render.** Missing elements are the
+  failure mode seen so far, and they are invisible once JS hydrates: the page
+  looks right in a browser while the no-JS shell and the first paint are wrong.
+- Watch the browser console — a malformed attribute in the SSR output (e.g.
+  `width=""`) shows up there and nowhere else
 - Refresh spam test — no white flash
 - Dev mode (`npm run dev` without `--ssr`) — verify fallback `mount()` still works
 
