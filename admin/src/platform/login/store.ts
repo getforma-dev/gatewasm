@@ -61,11 +61,17 @@ export let accessToken: string | null = null;
 // ── Query params ──────────────────────────────────────────────────────
 const params = new URLSearchParams(window.location.search);
 const code = params.get('code');
-let ownerInviteToken = params.get('owner_invite') || '';
+// A signal with a literal '' default rather than a mutable `let`. The compiler
+// folds that default, so `LoginPage`'s "New here?" href resolves to
+// `/platform/onboarding` in the server-rendered HTML instead of being omitted
+// — a `let` derived from `window.location.search` is not evaluable at build
+// time, so the attribute vanished and the no-JS shell shipped a dead link.
+const [ownerInviteToken, setOwnerInviteToken] = createSignal('');
+setOwnerInviteToken(params.get('owner_invite') || '');
 if (code) {
   try {
-    if (!ownerInviteToken)
-      ownerInviteToken = sessionStorage.getItem('platform_owner_invite_token') || '';
+    if (!ownerInviteToken())
+      setOwnerInviteToken(sessionStorage.getItem('platform_owner_invite_token') || '');
   } catch { /* noop */ }
 }
 
@@ -87,16 +93,16 @@ export const [inviteInfo, setInviteInfo] = createSignal<{
 } | null>(null);
 export const [inviteLoading, setInviteLoading] = createSignal(false);
 
-if (ownerInviteToken) {
+if (ownerInviteToken()) {
   setInviteLoading(true);
-  fetch(serverUrl + '/platform/admin/invites/resolve?token=' + encodeURIComponent(ownerInviteToken))
+  fetch(serverUrl + '/platform/admin/invites/resolve?token=' + encodeURIComponent(ownerInviteToken()))
     .then((r) => r.ok ? r.json() : null)
     .then((data: any) => {
       if (data) {
         setInviteInfo(data);
         // If user doesn't have an account, redirect straight to onboarding
         if (!data.user_exists) {
-          window.location.href = '/platform/onboarding?owner_invite=' + encodeURIComponent(ownerInviteToken);
+          window.location.href = '/platform/onboarding?owner_invite=' + encodeURIComponent(ownerInviteToken());
           return;
         }
         // Auto-fill email after DOM is ready
@@ -423,7 +429,7 @@ export function getMfaSetupUri(): string { return mfaSetupUri; }
 // ── Route after auth ──────────────────────────────────────────────────
 
 function routeAfterAuth() {
-  if (ownerInviteToken) {
+  if (ownerInviteToken()) {
     // Post-auth: uses accessToken set during login flow.
     // Uses raw fetch (not createApi) because this store has no createAuth
     // instance — it manages its own token as the auth orchestrator.
@@ -434,7 +440,7 @@ function routeAfterAuth() {
         Authorization: 'Bearer ' + accessToken,
       },
       credentials: 'include',
-      body: JSON.stringify({ token: ownerInviteToken }),
+      body: JSON.stringify({ token: ownerInviteToken() }),
     })
       .then((response) =>
         response.json().then((data: any) => ({ ok: response.ok, data: data || {} })),
@@ -443,7 +449,7 @@ function routeAfterAuth() {
         if (!result.ok) {
           throw new Error(result.data?.message || 'invite_accept_failed');
         }
-        ownerInviteToken = '';
+        setOwnerInviteToken('');
         try { sessionStorage.removeItem('platform_owner_invite_token'); } catch { /* noop */ }
         // Pre-auth: refresh token via httpOnly cookie to get updated claims
         return fetch(serverUrl + '/t/platform/auth/token', {
@@ -521,7 +527,7 @@ export function startOAuth(provider: 'google' | 'github') {
     .then((pkce) => {
       try {
         sessionStorage.setItem('platform_pkce_verifier', pkce.verifier);
-        sessionStorage.setItem('platform_owner_invite_token', ownerInviteToken || '');
+        sessionStorage.setItem('platform_owner_invite_token', ownerInviteToken() || '');
       } catch { /* noop */ }
 
       const state = randomState();

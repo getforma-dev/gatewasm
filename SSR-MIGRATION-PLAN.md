@@ -76,15 +76,35 @@ Distribution at the time of writing — the two visible e2e failures are the tip
 `/platform/login` alone carries 33 across its three files. Every one is a place
 the server-rendered HTML differs from what the client shows.
 
-### Worked example: the missing href
+### Worked example: the missing href, and the blocker it exposed
 
-`ownerInviteToken` is a mutable `let` in `platform/login/store.ts`. Make it a
-signal with a literal `''` default and the ternary resolves at compile time, so
-the compiler folds `/platform/onboarding` as the SSR default while the client
-still appends `?owner_invite=` when there is one. The query parameter is
-load-bearing — `platform/onboarding/store.ts:47` reads it from its own URL, not
-from sessionStorage — so dropping it for a plain static attribute would break
-the owner-invite flow.
+`ownerInviteToken` was a mutable `let` in `platform/login/store.ts`, so it is
+now a signal with a literal `''` default, and the href is a ternary whose
+else-branch is a plain literal rather than one unresolvable concatenation.
+Both are prerequisites for the attribute ever folding, and both are better code.
+
+**It still does not fold**, and the reason is the real blocker for this whole
+migration. `ir-walk.ts:676` in `@getforma/compiler`:
+
+```js
+callerScope: sub.filePath === walkCtx.sourceFile ? walkCtx.signalScope ?? null : null
+```
+
+Signal scope is nulled across a file boundary. The compiler resolves imported
+*constants* (`resolveImportedConstant`) but not imported *signal defaults*, so
+`lookupSignal` fails for anything declared in `store.ts` — which is every signal
+in this app, and the architecture Forma's own docs recommend.
+
+The compiler's advice, "initialize the signals it reads with literal defaults",
+is therefore unactionable here: the default exists and is literal, and the
+compiler cannot see it from the consuming file.
+
+**This is the upstream change worth making** — narrow, and it makes output
+strictly faster rather than slower. Resolving an imported signal's default lets
+the attribute fold to a string-table entry with no per-request cost, instead of
+being omitted and left to hydration. Until then, an attribute can only fold if
+the signal it reads is declared in the same file, so migrating a route means
+either colocating its signals or accepting a degraded no-JS shell.
 
 ## Migration Order
 

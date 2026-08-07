@@ -92,8 +92,16 @@ export function LoginPage() {
         },
           'New here? ',
           h('a', {
-            href: () => '/platform/onboarding' +
-              (ownerInviteToken ? '?owner_invite=' + encodeURIComponent(ownerInviteToken) : ''),
+            // Ternary with a literal else-branch, not a concatenation: the
+            // compiler folds the branch it can evaluate (the signal defaults to
+            // '') into the server-rendered href. Written as
+            // `'/platform/onboarding' + (tok ? … : '')` the whole expression is
+            // one unresolvable concat, so the attribute was omitted entirely
+            // and the no-JS shell shipped a dead link.
+            href: () =>
+              ownerInviteToken()
+                ? '/platform/onboarding?owner_invite=' + encodeURIComponent(ownerInviteToken())
+                : '/platform/onboarding',
           }, 'Start onboarding'),
         ),
       ),
