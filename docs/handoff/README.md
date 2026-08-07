@@ -9,7 +9,7 @@ All four Forma repos are committed and pushed; nothing is in flight.
 | doc | what it is |
 |---|---|
 | [`MACHINE-SETUP.md`](MACHINE-SETUP.md) | Clone → running stack on a new machine. Where the e2e suite lives, the two traps a fresh clone cannot infer, what to prove by hand. Named to avoid colliding with the repo's own `LOCAL-DEV.md`. |
-| [`COMPILER-imported-signal-defaults.md`](COMPILER-imported-signal-defaults.md) | The compiler gap blocking SSR fidelity. Diagnosed, specified, not started. **Travelling copy** — canonical lives in `forma-tools/docs/`; delete this one once you have both repos. |
+| `forma-tools/docs/HANDOFF-imported-signal-defaults.md` | The compiler gap blocking SSR fidelity. Diagnosed, specified, not started. Lives in the repo the fix lands in; the travelling copy that used to sit here was deleted once both repos were cloned, per its own instruction. |
 
 ### The repo's own docs — read these too
 
@@ -63,8 +63,9 @@ three are fixed, but only ever demonstrated on one machine.
 
 ### 2. The compiler fix
 
-`COMPILER-imported-signal-defaults.md`. Self-contained: cause, the five existing
-APIs to reuse, six tests to write, hazards. Roughly 40–60 lines plus tests.
+`forma-tools/docs/HANDOFF-imported-signal-defaults.md`. Self-contained: cause,
+the five existing APIs to reuse, six tests to write, hazards. Roughly 40–60
+lines plus tests.
 
 Lands in `forma-tools`, which is platform infrastructure — `ksx` and `gatewasm`
 consume it today and more products are intended to, so keep it strictly
