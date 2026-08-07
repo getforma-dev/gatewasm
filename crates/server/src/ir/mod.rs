@@ -22,7 +22,7 @@ use crate::{assets, AssetManifest, RenderMode};
 ///
 /// Adding a route here is the last step of migrating it, after its islands are
 /// split out and its no-JS shell is verified. See SSR-MIGRATION-PLAN.md.
-const SSR_ROUTES: &[&str] = &["/platform/benchmark"];
+const SSR_ROUTES: &[&str] = &["/platform/benchmark", "/platform/login", "/platform/onboarding"];
 
 /// Load and parse all IR modules from the active asset source.
 ///
