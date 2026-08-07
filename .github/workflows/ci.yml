@@ -83,6 +83,15 @@ jobs:
           npx tsx build.ts --ssr
       - name: Run unit tests
         run: cargo test -p gatewasm-server --lib
+      # Every warning stream has a committed baseline that can only go down.
+      # clippy::string_slice found an unauthenticated process abort in the token
+      # endpoint only because its count was zero, so a new one stood out. This
+      # keeps that property for every lint, and for the bundle budgets.
+      # Second landing: a collector whose command fails or emits no evidence of
+      # a completed run now ABORTS the gate — the first landing read 0 in CI
+      # while `|| true` swallowed the reason (reverted in c7651c1).
+      - name: Warning budgets have not regressed
+        run: bash scripts/check-warning-budget.sh
 
   integration-tests:
     name: Integration tests
