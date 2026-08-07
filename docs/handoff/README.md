@@ -54,7 +54,14 @@ additive.
 Gated on (2). Both are held on Phase 1 by `SSR_ROUTES` in
 `crates/server/src/ir/mod.rs`. 158 IR degradations app-wide, 33 on login.
 
-### 4. Re-land the warning-budget ratchet
+### 4. Run the full regression suite once
+
+CI only runs `--grep @smoke` (44 tests). The `@regression` tag covers ~147 and
+**has never been run to completion on any machine** — the suite could not start
+at all until this branch fixed it. Run `npm run test:e2e` once the stack is up;
+expect to find genuine breakage, since nothing has been exercising those paths.
+
+### 5. Re-land the warning-budget ratchet
 
 Reverted in `c7651c1` because its clippy collector read 26 locally and 0 in CI
 while `|| true` swallowed the reason. The fix is in that commit message: fail
