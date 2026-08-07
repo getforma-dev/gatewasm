@@ -70,16 +70,17 @@ export function LoginPage() {
       h('div', { class: 'card' },
         // Card head (dynamic when invite present)
         h('div', { class: 'card-head' },
-          h('h2', null, () => {
-            const info = inviteInfo();
-            if (!info) return 'Platform Login';
-            return info.user_exists ? 'Sign in to accept invite' : 'Create an account to accept';
-          }),
-          h('p', null, () => {
-            const info = inviteInfo();
-            if (!info) return 'Sign in to manage your tenants and account settings.';
-            return 'You need a fAuth account to join the team.';
-          }),
+          // Expression bodies, not blocks: the compiler folds a ternary over
+          // the store's null default, so the server renders the real heading
+          // instead of an empty <h2> until hydration.
+          h('h2', null, () =>
+            !inviteInfo()
+              ? 'Platform Login'
+              : inviteInfo()!.user_exists ? 'Sign in to accept invite' : 'Create an account to accept'),
+          h('p', null, () =>
+            !inviteInfo()
+              ? 'Sign in to manage your tenants and account settings.'
+              : 'You need a fAuth account to join the team.'),
         ),
 
         // Islands: function calls trigger Rule 11 → ISLAND_START/END

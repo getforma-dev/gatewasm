@@ -31,20 +31,25 @@ export function RegistrationForm() {
     createShow(
       () => hasOAuth,
       () => h('div', { class: 'oauth-actions' },
-        hasGoogle
-          ? h('button', {
-              class: 'btn btn-ghost',
-              type: 'button',
-              onClick: () => startOAuth('google').catch(() => setError('Failed to start OAuth flow.')),
-            }, 'Continue with Google')
-          : null,
-        hasGithub
-          ? h('button', {
-              class: 'btn btn-ghost',
-              type: 'button',
-              onClick: () => startOAuth('github').catch(() => setError('Failed to start OAuth flow.')),
-            }, 'Continue with GitHub')
-          : null,
+        // createShow, not a bare ternary: the ternary degraded to an empty
+        // island shell server-side, and a SHOW_IF slot is what lets the
+        // server inject the branch it knows (config names the providers).
+        createShow(
+          () => hasGoogle,
+          () => h('button', {
+            class: 'btn btn-ghost',
+            type: 'button',
+            onClick: () => startOAuth('google').catch(() => setError('Failed to start OAuth flow.')),
+          }, 'Continue with Google'),
+        ),
+        createShow(
+          () => hasGithub,
+          () => h('button', {
+            class: 'btn btn-ghost',
+            type: 'button',
+            onClick: () => startOAuth('github').catch(() => setError('Failed to start OAuth flow.')),
+          }, 'Continue with GitHub'),
+        ),
         h('div', { class: 'divider' }, 'or use email'),
       ),
     ),
@@ -62,7 +67,7 @@ export function RegistrationForm() {
           type: 'email',
           placeholder: 'you@company.com',
           autocomplete: 'email',
-          value: email,
+          value: () => email(),
           onInput: (e: Event) => setEmail((e.target as HTMLInputElement).value),
         }),
       ),
@@ -75,7 +80,7 @@ export function RegistrationForm() {
             placeholder: 'At least 8 characters',
             autocomplete: 'new-password',
             class: 'input-pr',
-            value: password,
+            value: () => password(),
             onInput: (e: Event) => setPassword((e.target as HTMLInputElement).value),
           }),
           h('button', {
@@ -100,7 +105,7 @@ export function RegistrationForm() {
             placeholder: 'Re-enter password',
             autocomplete: 'new-password',
             class: 'input-pr',
-            value: confirm,
+            value: () => confirm(),
             onInput: (e: Event) => setConfirm((e.target as HTMLInputElement).value),
           }),
           h('button', {
@@ -119,7 +124,7 @@ export function RegistrationForm() {
       h('button', {
         class: 'btn btn-primary full-width mt-xs',
         type: 'submit',
-        disabled: submitting,
+        disabled: () => submitting(),
       }, () => submitting() ? 'Creating account...' : 'Create Account'),
     ),
   );

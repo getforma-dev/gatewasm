@@ -53,22 +53,27 @@ export function AuthCard() {
       () => hasOAuth,
       () =>
         h('div', { class: 'actions' },
-          hasGoogle
-            ? h('button', {
-                class: 'btn btn-ghost',
-                type: 'button',
-                disabled: () => !!busy(),
-                onClick: () => startOAuth('google'),
-              }, () => busy() === 'oauth-google' ? 'Redirecting to Google...' : 'Continue with Google')
-            : null,
-          hasGithub
-            ? h('button', {
-                class: 'btn btn-ghost',
-                type: 'button',
-                disabled: () => !!busy(),
-                onClick: () => startOAuth('github'),
-              }, () => busy() === 'oauth-github' ? 'Redirecting to GitHub...' : 'Continue with GitHub')
-            : null,
+          // createShow, not a bare ternary: the ternary degraded to an empty
+          // island shell server-side, and a SHOW_IF slot is what lets the
+          // server inject the branch it knows (config names the providers).
+          createShow(
+            () => hasGoogle,
+            () => h('button', {
+              class: 'btn btn-ghost',
+              type: 'button',
+              disabled: () => !!busy(),
+              onClick: () => startOAuth('google'),
+            }, () => busy() === 'oauth-google' ? 'Redirecting to Google...' : 'Continue with Google'),
+          ),
+          createShow(
+            () => hasGithub,
+            () => h('button', {
+              class: 'btn btn-ghost',
+              type: 'button',
+              disabled: () => !!busy(),
+              onClick: () => startOAuth('github'),
+            }, () => busy() === 'oauth-github' ? 'Redirecting to GitHub...' : 'Continue with GitHub'),
+          ),
           h('div', { class: 'divider' }, 'or use email'),
         ),
     ),

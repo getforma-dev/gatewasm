@@ -49,10 +49,18 @@ pub const RESERVED_SLUGS: &[&str] = &[
 const PLATFORM_LOGIN_CLIENT_ID: &str = "platform-login";
 const PLATFORM_ONBOARDING_CLIENT_ID: &str = "platform-onboarding";
 
-/// Slot ID constants — must match compiler output order.
-const SLOT_OAUTH_PROVIDERS: u16 = 0;
-
 /// Populate onboarding slot data from IR module defaults + server-side overrides.
+///
+/// Slots are addressed by NAME, never by index. The previous version wrote an
+/// oauth-provider array into a hardcoded slot 0 ("must match compiler output
+/// order") — and the compiler's output order moved, so the array landed in an
+/// svg's `attr:width` slot and the page server-rendered
+/// `width="[object Object],[object Object]"`. Resolving through the slot
+/// table means a slot that stops existing is skipped, not corrupted.
+///
+/// The injected conditions are the ones only the server knows at render time:
+/// which OAuth providers are configured. With them, the no-JS first paint
+/// carries the same provider buttons the hydrated page shows.
 fn populate_onboarding_slots(state: &AppState, ir_module: &ir::parser::IrModule) -> ir::slot::SlotData {
     let mut slots = ir::slot::SlotData::new_from_defaults(&ir_module.slots);
 
@@ -61,20 +69,23 @@ fn populate_onboarding_slots(state: &AppState, ir_module: &ir::parser::IrModule)
     let github = state.config.github_client_id.is_some()
         && state.config.github_client_secret.is_some();
 
-    let mut providers = Vec::new();
-    if google {
-        providers.push(ir::slot::SlotValue::Object(std::sync::Arc::from(vec![
-            ("provider".into(), ir::slot::SlotValue::Text("google".into())),
-            ("label".into(), ir::slot::SlotValue::Text("Continue with Google".into())),
-        ])));
-    }
-    if github {
-        providers.push(ir::slot::SlotValue::Object(std::sync::Arc::from(vec![
-            ("provider".into(), ir::slot::SlotValue::Text("github".into())),
-            ("label".into(), ir::slot::SlotValue::Text("Continue with GitHub".into())),
-        ])));
-    }
-    slots.set(SLOT_OAUTH_PROVIDERS, ir::slot::SlotValue::Array(providers.into()));
+    let mut set_bool = |name: &str, value: bool| {
+        for entry in ir_module.slots.entries() {
+            if ir_module
+                .strings
+                .get(entry.name_str_idx)
+                .map(|n| n == name)
+                .unwrap_or(false)
+            {
+                slots.set(entry.slot_id, ir::slot::SlotValue::Bool(value));
+                return;
+            }
+        }
+    };
+
+    set_bool("show:hasOAuth", google || github);
+    set_bool("show:hasGoogle", google);
+    set_bool("show:hasGithub", github);
 
     slots
 }
