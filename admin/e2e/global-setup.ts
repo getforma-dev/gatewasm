@@ -80,20 +80,45 @@ export default async function globalSetup() {
     detached: true,
   });
 
-  // Drain stdout/stderr to prevent pipe buffer from filling and blocking server
-  server.stdout?.resume();
-  server.stderr?.resume();
+  // Keep the tail of the server's output. The pipes still have to be drained
+  // or a full buffer blocks the server, but discarding them outright meant a
+  // startup failure — a bad DATABASE_URL, a failed migration, a cargo error —
+  // surfaced only as "failed to start within 30s", with the actual cause
+  // thrown away.
+  const tail: string[] = [];
+  const keep = (chunk: Buffer) => {
+    for (const line of chunk.toString().split('\n')) {
+      if (line.trim()) tail.push(line);
+    }
+    if (tail.length > 40) tail.splice(0, tail.length - 40);
+  };
+  server.stdout?.on('data', keep);
+  server.stderr?.on('data', keep);
+  server.on('error', (err) => tail.push(`spawn failed: ${err.message}`));
   server.unref();
 
-  writeFileSync(PID_FILE, String(server.pid));
+  if (server.pid) writeFileSync(PID_FILE, String(server.pid));
 
-  // Wait for health
-  for (let i = 0; i < 30; i++) {
+  // `cargo run` may still be compiling: the binary is prebuilt in CI, but a
+  // developer running this after touching Rust gets a full build here. 30s was
+  // shorter than a cold build, so the timeout fired before the server ever had
+  // a chance to listen.
+  const timeoutSecs = Number(process.env.E2E_SERVER_TIMEOUT_SECS || 300);
+  for (let i = 0; i < timeoutSecs; i++) {
+    if (server.exitCode !== null) {
+      throw new Error(
+        `Server exited with code ${server.exitCode} before becoming healthy.\n` +
+          `--- last output ---\n${tail.join('\n')}`,
+      );
+    }
     try {
       const res = await fetch(`http://127.0.0.1:${PORT}/health`);
       if (res.ok) return;
     } catch {}
     await new Promise(r => setTimeout(r, 1000));
   }
-  throw new Error('Server failed to start within 30s');
+  throw new Error(
+    `Server failed to start within ${timeoutSecs}s.\n` +
+      `--- last output ---\n${tail.join('\n')}`,
+  );
 }

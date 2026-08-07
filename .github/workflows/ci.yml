@@ -125,7 +125,7 @@ jobs:
   e2e-tests:
     name: E2E smoke tests
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    timeout-minutes: 25
     needs: frontend
     services:
       postgres:
@@ -163,6 +163,11 @@ jobs:
             sleep 2
           done
           exit 1
+      # Prebuild so globalSetup's `cargo run` starts the server instead of
+      # compiling it. Without this the e2e job pays for a second full build
+      # inside the health-check window and times out before any test runs.
+      - name: Build server
+        run: cargo build -p gatewasm-server
       - name: Run e2e smoke tests
         working-directory: admin
         run: npx playwright test --grep @smoke
