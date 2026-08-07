@@ -8,11 +8,32 @@ All four Forma repos are committed and pushed; nothing is in flight.
 
 | doc | what it is |
 |---|---|
-| [`LOCAL-DEV.md`](LOCAL-DEV.md) | Clone → running stack. Where the e2e suite lives, the two traps a fresh clone cannot infer, what to prove by hand. |
+| [`MACHINE-SETUP.md`](MACHINE-SETUP.md) | Clone → running stack on a new machine. Where the e2e suite lives, the two traps a fresh clone cannot infer, what to prove by hand. Named to avoid colliding with the repo's own `LOCAL-DEV.md`. |
 | [`COMPILER-imported-signal-defaults.md`](COMPILER-imported-signal-defaults.md) | The compiler gap blocking SSR fidelity. Diagnosed, specified, not started. **Travelling copy** — canonical lives in `forma-tools/docs/`; delete this one once you have both repos. |
 
-Also worth reading, in the repo root: `SSR-MIGRATION-PLAN.md` (corrected — three
-of its prerequisites were false and had sent earlier work down a dead end).
+### The repo's own docs — read these too
+
+These predate this work and are still accurate. The handoff deliberately does
+not duplicate them.
+
+| doc | why you want it |
+|---|---|
+| `GETTING-STARTED.md` | **The manual test script for task 1.** Four user types, four end-to-end flows (self-serve signup, tenant login, owner invite, admin user management), and a full route reference with credentials. |
+| `LOCAL-DEV.md` | The repo's own dev guide — env vars, creating tenants, API usage, troubleshooting. Longer than `MACHINE-SETUP.md`, which only covers what a *new machine* needs. |
+| `CONTRIBUTING.md` | Full command reference and when to reach for which reset. |
+| `BACKLOG.md` | Tracked debt that is not blocking. Two entries matter to you — see below. |
+| `SSR-MIGRATION-PLAN.md` | Corrected. Three of its prerequisites were false and had sent earlier work down a dead end. |
+| `RUNBOOK.md` | Deploy procedures. For later — the App Runner target is being sunset. |
+
+### Two backlog entries that will bite on a Mac
+
+`BACKLOG.md` flags that visual-regression baselines are named `*-darwin.png` —
+they were generated on macOS. That works in your favour locally and is exactly
+why `@visual` tests would fail on Linux CI; do not regenerate them to match a
+Linux runner without reading that entry first.
+
+It also flags every route shipping 310–424KB of JS against a 195KB budget,
+which is the source of the 16 "Budget exceeded" warnings on every build.
 
 ---
 
@@ -24,7 +45,7 @@ This is yours to do, not something already done for you. The Windows machine it
 came from used native Postgres on 5432; **use docker-compose instead** (dev on
 5434, test on 5433) — that is the repo's design and what CI matches.
 
-Follow `LOCAL-DEV.md`, then confirm all four suites pass: 97 rust unit, 274
+Follow `MACHINE-SETUP.md`, then confirm all four suites pass: 97 rust unit, 274
 integration, 44 e2e smoke, and the SSR degradation gate.
 
 Then exercise the product by hand, which no test covers: onboard a tenant, log
