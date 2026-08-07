@@ -69,6 +69,12 @@ collect() {
 #
 # `Finished` is the evidence: clippy that could not run (missing component,
 # broken workspace) never prints it, and that used to read as 0 warnings.
+#
+# `cargo clean -p` first: a warm cache (rust-cache on CI, a prior local run)
+# leaves the crate fingerprint-fresh and clippy prints NOTHING for it — 25
+# real warnings read as 0 with full completion evidence. Cleaning only the
+# primary crate forces the re-lint while every dependency stays cached.
+cargo clean -p gatewasm-server 2>/dev/null || true
 CLIPPY_OUT=$(collect clippy 'Finished|error\[' cargo clippy -p gatewasm-server --lib --message-format=short)
 CURRENT_clippy=$(grep -c "^.*: warning:" <<<"$CLIPPY_OUT" || true)
 
