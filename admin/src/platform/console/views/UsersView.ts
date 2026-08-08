@@ -147,7 +147,7 @@ export function UsersView() {
               },
                 h('div', { class: 'user-row-main' },
                   h('div', { class: 'user-email' },
-                    user.email,
+                    h('span', { class: 'truncate' }, user.email),
                     user.is_locked ? h('span', { class: 'badge badge-danger' }, 'Blocked') : null,
                   ),
                   h('div', { class: 'user-meta text-muted' },

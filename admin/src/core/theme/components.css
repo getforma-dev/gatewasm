@@ -960,6 +960,9 @@
   display: flex;
   align-items: center;
   gap: 12px;
+  /* Brand block shrinks before it spills: at 390px the product name and
+     domain painted past the header's edge on every workspace view. */
+  min-width: 0;
 }
 
 .plane-header-center {
@@ -997,12 +1000,17 @@
   font-size: 15px;
   letter-spacing: 1px;
   color: #c4a265;
+  white-space: nowrap;
 }
 
 .plane-domain {
   font-family: 'DM Mono', monospace;
   font-size: 11px;
   color: var(--text-muted);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .plane-status {
@@ -1079,6 +1087,7 @@
   top: calc(100% + 8px);
   right: 0;
   min-width: 200px;
+  max-width: calc(100vw - 2rem);
   background: var(--surface-raised);
   border: 1px solid var(--border);
   border-radius: 8px;
@@ -1573,6 +1582,9 @@
   top: calc(100% + 8px);
   left: 0;
   min-width: 240px;
+  /* Anchored to the switcher, which sits far right on narrow viewports:
+     without a clamp the 240px menu ran past the edge and cut items. */
+  max-width: calc(100vw - 2rem);
   max-height: 320px;
   overflow-y: auto;
   background: var(--surface-raised);
@@ -3099,7 +3111,7 @@
 
 .chart-grid {
   display: grid;
-  grid-template-columns: 2fr 1fr;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
   gap: var(--space-md, 1rem);
 }
 
@@ -3121,7 +3133,7 @@
 
 .page-detail {
   display: grid;
-  grid-template-columns: 1fr 300px;
+  grid-template-columns: minmax(0, 1fr) 300px;
   gap: 1.5rem;
   align-items: start;
   animation: page-enter 200ms var(--ease-out, ease);
@@ -3458,7 +3470,9 @@
 
 .wizard-actions {
   margin-top: 32px;
-  padding-bottom: 60px;
+  /* Reserves the strip .wizard-back is fixed into (24px offset + 36px
+     button + breathing room) so it never sits on top of step content. */
+  padding-bottom: 76px;
   display: flex;
   gap: 12px;
 }
@@ -4025,6 +4039,7 @@
   .wizard-step-dot { font-size: 0.55rem; padding-bottom: 6px; }
   .wizard-tenant-name { max-width: 120px; }
   .wizard-back { bottom: 16px; left: 16px; }
+  .wizard-actions { padding-bottom: 68px; }
   .wizard-url-display { flex-direction: column; align-items: flex-start; }
 }
 

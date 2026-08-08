@@ -796,7 +796,7 @@ svg.fauth-mark:not([width]) {
 
 .benchmark-layout {
   display: grid;
-  grid-template-columns: 1fr 260px;
+  grid-template-columns: minmax(0, 1fr) 260px;
   grid-template-rows: auto 1fr;
   gap: 1rem;
 }
@@ -836,7 +836,7 @@ svg.fauth-mark:not([width]) {
   padding: 0.4rem 0.6rem;
   font-size: 0.78rem;
   font-family: inherit;
-  min-width: 180px;
+  min-width: min(180px, 100%);
   transition: border-color var(--duration) ease;
 }
 
@@ -935,6 +935,12 @@ svg.fauth-mark:not([width]) {
   grid-column: 1;
   grid-row: 2;
   min-height: 200px;
+  /* The branch container scrolls too, not just .benchmark-table-wrap: a
+     stale SSR branch can nest the table outside its wrap (the empty-state
+     branch survives hydration), and then a 506px table escapes a 343px
+     column. Scrolling here contains it whichever branch is mounted. */
+  min-width: 0;
+  overflow-x: auto;
 }
 
 .benchmark-table-wrap {
@@ -1064,7 +1070,7 @@ svg.fauth-mark:not([width]) {
   }
 
   .filter-input {
-    min-width: 120px;
+    min-width: min(120px, 100%);
   }
 }
 
@@ -2397,6 +2403,9 @@ svg.fauth-mark:not([width]) {
 .user-row-main {
   display: grid;
   gap: var(--space-xs);
+  /* Grid/flex children default to min-content width; without this the row
+     refuses to shrink and a long email paints over .user-row-chevron. */
+  min-width: 0;
 }
 
 .user-email {
@@ -2405,7 +2414,12 @@ svg.fauth-mark:not([width]) {
   display: flex;
   align-items: center;
   gap: var(--space-sm);
+  min-width: 0;
 }
+
+/* The identifier truncates; the status badges beside it stay legible. */
+.user-email > .truncate { min-width: 0; }
+.user-email > .badge { flex: none; }
 
 .user-meta {
   font-size: 0.72rem;
@@ -3182,4 +3196,174 @@ svg.fauth-mark:not([width]) {
   background: var(--surface-raised);
   word-break: break-all;
   flex: 1;
+}
+
+
+/* ==========================================================================
+   Owner control plane — /platform/admin/dashboard
+   ==========================================================================
+   Route-scoped by the body class the handler sets (owner/dashboard.rs).
+   These rules used to live in src/styles/main.css, a second bundle loaded
+   only on this route; because its rules sat inside @layer while the
+   platform theme is unlayered, the platform theme won every collision and
+   this design never rendered. The shell, sidebar, nav, topbar and card
+   rules from that file are gone entirely — the platform theme owns them
+   now — and only what is genuinely specific to this route survives here. */
+
+body.owner-dashboard {
+  font-family: 'DM Mono', ui-monospace, monospace;
+  font-size: 14px;
+  font-weight: 300;
+}
+
+/* ── Customer 360 ──────────────────────────────────────────────────────── */
+body.owner-dashboard .customers-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
+  gap: 0.75rem;
+  align-items: start;
+}
+
+body.owner-dashboard .tenant-inventory-shell { margin-top: 0.75rem; }
+
+body.owner-dashboard .customer-detail-shell {
+  display: grid;
+  gap: 0.8rem;
+}
+
+body.owner-dashboard .customer-detail-meta {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.45rem;
+}
+
+body.owner-dashboard .meta-kv {
+  border: 1px solid var(--border);
+  background: var(--bg);
+  padding: 0.55rem 0.65rem;
+  min-height: 54px;
+  transition: border-color var(--duration) ease;
+}
+
+body.owner-dashboard .meta-kv:hover {
+  border-color: var(--border-accent);
+}
+
+body.owner-dashboard .meta-kv .k {
+  color: var(--text-muted);
+  display: block;
+  font-size: 0.55rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  margin-bottom: 0.2rem;
+  font-weight: 400;
+}
+
+body.owner-dashboard .meta-kv .v {
+  color: var(--text);
+  font-size: 0.8rem;
+  line-height: 1.4;
+  word-break: break-word;
+  font-weight: 400;
+}
+
+/* ── Dense data tables ─────────────────────────────────────────────────── */
+body.owner-dashboard .table-wrap table {
+  min-width: max(760px, 100%);
+}
+
+body.owner-dashboard .table-wrap table th,
+body.owner-dashboard .table-wrap table td {
+  white-space: nowrap;
+}
+
+body.owner-dashboard .table-wrap table td .muted {
+  white-space: normal;
+  word-break: break-word;
+}
+
+body.owner-dashboard tr.selected-row td {
+  background: var(--accent-glow);
+}
+
+/* ── Customer drawer ───────────────────────────────────────────────────── */
+body.owner-dashboard .drawer-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(10, 10, 12, 0.7);
+  backdrop-filter: blur(4px);
+  z-index: 120;
+  animation: owner-drawer-fade 0.2s ease;
+}
+
+body.owner-dashboard .customer-drawer {
+  position: fixed;
+  top: 0;
+  right: 0;
+  height: 100vh;
+  width: min(780px, 92vw);
+  background: var(--bg);
+  border-left: 1px solid var(--border);
+  box-shadow: -24px 0 64px rgba(0, 0, 0, 0.6);
+  z-index: 121;
+  display: flex;
+  flex-direction: column;
+  animation: owner-drawer-in 0.25s ease;
+}
+
+body.owner-dashboard .customer-drawer-header {
+  padding: 1.1rem 1.25rem;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 0.7rem;
+  flex-wrap: wrap;
+}
+
+body.owner-dashboard .customer-drawer-body {
+  padding: 1rem 1.25rem 1.5rem;
+  overflow: auto;
+  display: grid;
+  gap: 0.75rem;
+}
+
+body.owner-dashboard .customer-drawer-grid,
+body.owner-dashboard .stat-grid-2 {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.65rem;
+}
+
+@keyframes owner-drawer-fade {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@keyframes owner-drawer-in {
+  from { transform: translateX(28px); opacity: 0; }
+  to   { transform: translateX(0);    opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body.owner-dashboard .drawer-backdrop,
+  body.owner-dashboard .customer-drawer {
+    animation: none;
+  }
+}
+
+@media (max-width: 1120px) {
+  body.owner-dashboard .customers-layout,
+  body.owner-dashboard .customer-detail-meta,
+  body.owner-dashboard .customer-drawer-grid,
+  body.owner-dashboard .stat-grid-2 {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 760px) {
+  /* 100vw includes the scrollbar gutter and overflowed the viewport. */
+  body.owner-dashboard .customer-drawer {
+    width: 100%;
+  }
 }

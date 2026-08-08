@@ -67,7 +67,7 @@ function AuditRow(entry: AuditLogEntry) {
     h('div', { class: 'user-row-summary' },
       h('div', { class: 'user-row-main' },
         h('div', { class: 'user-email' },
-          entry.email,
+          h('span', { class: 'truncate' }, entry.email),
           entry.success
             ? h('span', { class: 'badge badge-subtle' }, 'Success')
             : h('span', { class: 'badge badge-danger' }, 'Failed'),

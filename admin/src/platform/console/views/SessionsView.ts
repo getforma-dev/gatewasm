@@ -55,7 +55,7 @@ function SessionRow(s: TenantSession) {
     h('div', { class: 'user-row-summary' },
       h('div', { class: 'user-row-main' },
         h('div', { class: 'user-email' },
-          s.email,
+          h('span', { class: 'truncate' }, s.email),
           h('span', { class: 'badge badge-subtle' }, (s.auth_provider || s.auth_method) + (s.mfa_verified ? ' + MFA' : '')),
         ),
         h('div', { class: 'user-meta text-muted' },
