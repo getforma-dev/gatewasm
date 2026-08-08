@@ -1,6 +1,7 @@
 // fAuth build script — config-driven via @getforma/build
 import { build } from '@getforma/build';
-import { cpSync, readdirSync } from 'node:fs';
+import { cpSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 
 const result = await build({
   entryPoints: [
@@ -44,3 +45,18 @@ for (const f of readdirSync(assetDir)) {
 // @getforma/build already printed each warning as it was found \u2014 re-printing
 // result.warnings here doubled every line, which put the bundle warning
 // baseline at 2x reality (16 recorded for 8 over-budget routes).
+
+// Record the build's warnings as a STRUCTURED artifact next to the output
+// they describe. The warning-budget gate reads this instead of re-running
+// the build and scraping console text \u2014 the count is taken once, at the
+// source, and manifest_sha256 ties the report to the exact dist it measured
+// so a torn or stale report/manifest pairing is detectable.
+const manifestSha = createHash('sha256')
+  .update(readFileSync('dist/manifest.json'))
+  .digest('hex')
+  .slice(0, 16);
+writeFileSync('dist/build-report.json', JSON.stringify({
+  manifest_sha256: manifestSha,
+  budget_exceeded: result.warnings.filter((w: string) => w.includes('Budget exceeded')).length,
+  warnings: result.warnings,
+}, null, 2) + '\n');
