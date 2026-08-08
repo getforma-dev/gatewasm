@@ -25,9 +25,26 @@ changing its character is not a refactor you make in passing.
 
 All of them live in `admin/src/core/theme/tokens.css` (dark at `:root`,
 light under `:root[data-theme='light']`). **Never hardcode a hex in a
-component or a page stylesheet — use the token.** Type roles: Instrument
-Serif for headings, DM Mono for data/labels/eyebrows, Rajdhani for
-PlaneNav, Orbitron for numerals and the logo mark.
+component or a page stylesheet — use the token.** The light theme is not a
+copy of the dark one: the plane hues are darkened there because the dark
+values sit near 2:1 on white.
+
+**Type is addressed by role, never by family** — `--font-display`
+(headings), `--font-body`, `--font-data` (labels, eyebrows, identifiers,
+code), `--font-nav`, `--font-numeral` (wordmark and display numerals).
+Writing `font-family: 'DM Mono'` in a component is the bug; a role can be
+re-cast in one line, a scattered family name cannot. Rajdhani was retired
+this way — it dressed nav labels and nothing else — so `--font-nav` is
+currently the data face.
+
+**Breakpoints are a 4-stop scale**: 480 / 768 / 1024 / 1360. Sidebar rails
+become top bands at 768; multi-column layouts collapse at 1024. Adding a
+fifth stop is how the sidebar ended up responding at a different width than
+the grid beside it.
+
+**Theme selection**: a stored choice wins, otherwise `prefers-color-scheme`
+(`initThemeMode()` in `core/utils.ts` — call it in every entrypoint). The
+Playwright config pins `colorScheme: 'dark'` so the suite is deterministic.
 
 ## Where CSS lives
 
@@ -76,6 +93,12 @@ step. Owner dashboard needs a `platform` user in `PLATFORM_OWNER_EMAILS`
 
 ## Layout rules this codebase learned the hard way
 
+- **The element-level `button` rule leaks.** `base.css` gives every button
+  `min-height: 36px`, `align-items: center`, and `white-space: nowrap`. A
+  card built as a `<button>` (`.mode-card`, `.intent-card`, `.tenant-card`)
+  must reset `align-items: stretch` and `white-space: normal`, or its copy
+  is centred, unwrappable, and clipped at both ends by `overflow: hidden`.
+  Anything meant to be a small tab must reset `min-height`.
 - **Clamp every track and flex child.** `minmax(0, 1fr)` not `1fr`;
   `min(180px, 100%)` not `min-width: 180px`; `min-width: 0` on any flex or
   grid child holding text that can be long.

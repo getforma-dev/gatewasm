@@ -48,7 +48,7 @@ CREATE TABLE tenants (
     created_at timestamp with time zone DEFAULT now(),
     updated_at timestamp with time zone DEFAULT now(),
     branding_logo_url text,
-    branding_primary_color text DEFAULT '#6366f1'::text,
+    branding_primary_color text DEFAULT '#c4a265'::text,
     branding_app_name text,
     branding_custom_css text,
     login_redirect_url text,

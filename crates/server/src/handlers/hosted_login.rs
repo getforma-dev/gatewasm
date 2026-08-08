@@ -83,7 +83,7 @@ async fn login_page_render(
     let primary_color: &str = if is_valid_css_color(&tenant.branding_primary_color) {
         &tenant.branding_primary_color
     } else {
-        "#6366f1"
+        "#c4a265"
     };
     let logo_html = tenant
         .branding_logo_url

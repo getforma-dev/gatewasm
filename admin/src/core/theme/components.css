@@ -17,7 +17,7 @@
 /* ── Serif utility ────────────────────────────────────────────────────── */
 
 .serif {
-  font-family: 'Instrument Serif', Georgia, serif;
+  font-family: var(--font-display);
   font-weight: 400;
 }
 
@@ -361,7 +361,7 @@
 .stat-grid .stat-card:nth-child(6) { animation-delay: 120ms; }
 
 .stat-value {
-  font-family: 'Orbitron', sans-serif;
+  font-family: var(--font-numeral);
   font-weight: 700;
   font-size: 1.35rem;
   color: var(--accent);
@@ -678,7 +678,7 @@
 
 .mfa-secret-code {
   display: block;
-  font-family: 'DM Mono', monospace;
+  font-family: var(--font-data);
   font-size: 0.85rem;
   color: var(--accent);
   margin-bottom: 0.4rem;
@@ -725,7 +725,7 @@
 /* ── Onboarding hero text ───────────────────────────────────────────────── */
 
 .hero-heading {
-  font-family: 'Instrument Serif', Georgia, serif;
+  font-family: var(--font-display);
   font-size: 2.25rem;
   font-weight: 400;
   letter-spacing: -0.03em;
@@ -747,7 +747,7 @@
 /* ── Onboarding auth card heading ───────────────────────────────────────── */
 
 .card-heading {
-  font-family: 'Instrument Serif', Georgia, serif;
+  font-family: var(--font-display);
   font-size: 1.25rem;
   font-weight: 400;
   letter-spacing: -0.02em;
@@ -995,7 +995,7 @@
 }
 
 .plane-product-name {
-  font-family: 'Orbitron', sans-serif;
+  font-family: var(--font-numeral);
   font-weight: 700;
   font-size: 15px;
   letter-spacing: 1px;
@@ -1004,7 +1004,7 @@
 }
 
 .plane-domain {
-  font-family: 'DM Mono', monospace;
+  font-family: var(--font-data);
   font-size: 11px;
   color: var(--text-muted);
   min-width: 0;
@@ -1036,7 +1036,7 @@
 }
 
 .plane-tenant-indicator {
-  font-family: Rajdhani, sans-serif;
+  font-family: var(--font-nav);
   font-size: 13px;
   font-weight: 600;
   color: var(--text);
@@ -1047,7 +1047,7 @@
 }
 
 .plane-version {
-  font-family: Rajdhani, sans-serif;
+  font-family: var(--font-nav);
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.06em;
@@ -1075,7 +1075,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  font-family: 'DM Mono', monospace;
+  font-family: var(--font-data);
   font-size: 12px;
   color: var(--text-dim);
   cursor: pointer;
@@ -1109,7 +1109,7 @@
 .plane-avatar-menu-email {
   font-size: 11px;
   color: var(--text-muted);
-  font-family: 'DM Mono', monospace;
+  font-family: var(--font-data);
 }
 
 .plane-avatar-menu-divider {
@@ -1179,7 +1179,7 @@
   height: 24px;
   padding: 0 6px;
   clip-path: polygon(5px 0, 100% 0, calc(100% - 5px) 100%, 0 100%);
-  font-family: 'Orbitron', sans-serif;
+  font-family: var(--font-numeral);
   font-weight: 700;
   font-size: 12px;
   background: var(--surface-raised);
@@ -1201,7 +1201,7 @@
 }
 
 .plane-label > :first-child {
-  font-family: Rajdhani, sans-serif;
+  font-family: var(--font-nav);
   font-size: 14px;
   font-weight: 500;
   color: var(--text-dim);
@@ -1213,7 +1213,7 @@
 }
 
 .plane-sector {
-  font-family: 'DM Mono', monospace;
+  font-family: var(--font-data);
   font-size: 10px;
   letter-spacing: 0.1em;
   color: var(--text-muted);
@@ -1223,13 +1223,24 @@
   color: var(--plane);
 }
 
+/* A tab hanging off the nav's bottom edge — NOT a flow row. In flow the
+   element-level button min-height gave it a 36px band of its own: with the
+   nav transparent, that painted a full-width strip of page background
+   between the header and the bar, with the 42px button marooned in the
+   middle of it. Absolute keeps the handle a handle. */
 .plane-collapse-toggle {
+  position: absolute;
+  left: 50%;
+  bottom: 0;
+  transform: translate(-50%, 100%);
+  z-index: 12;
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 4px;
-  margin: 0 auto;
-  padding: 2px 16px;
+  min-height: 0;
+  padding: 3px 18px;
+  line-height: 1;
   border: 1px solid var(--border);
   border-top: none;
   border-radius: 0 0 6px 6px;
@@ -1293,7 +1304,7 @@
 }
 
 .plane-tab > span {
-  font-family: Rajdhani, sans-serif;
+  font-family: var(--font-nav);
   font-size: 13px;
   font-weight: 500;
   color: var(--text-muted);
@@ -1306,7 +1317,7 @@
 }
 
 .plane-tab-shortcut {
-  font-family: 'DM Mono', monospace;
+  font-family: var(--font-data);
   font-size: 9px;
   color: var(--text-muted);
 }
@@ -1344,7 +1355,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  font-family: Rajdhani, sans-serif;
+  font-family: var(--font-nav);
   font-size: 13px;
   font-weight: 600;
   color: var(--text);
@@ -1369,7 +1380,7 @@
   align-items: center;
   justify-content: center;
   clip-path: polygon(4px 0, 100% 0, calc(100% - 4px) 100%, 0 100%);
-  font-family: 'Orbitron', sans-serif;
+  font-family: var(--font-numeral);
   font-weight: 700;
   font-size: 11px;
   background: var(--surface-raised);
@@ -1562,7 +1573,7 @@
 }
 
 .plane-tenant-name {
-  font-family: Rajdhani, sans-serif;
+  font-family: var(--font-nav);
   font-size: 14px;
   font-weight: 600;
   color: var(--text);
@@ -1621,7 +1632,7 @@
 }
 
 .plane-tenant-menu-slug {
-  font-family: 'DM Mono', monospace;
+  font-family: var(--font-data);
   font-size: 11px;
   color: var(--text-muted);
 }
@@ -1686,7 +1697,7 @@
   border: 1px solid rgba(16, 185, 129, 0.35);
   background: linear-gradient(135deg, rgba(16, 185, 129, 0.12), rgba(196, 162, 101, 0.08));
   color: #34d399;
-  font-family: 'DM Mono', monospace;
+  font-family: var(--font-data);
   font-size: 14px;
   font-weight: 400;
   flex-shrink: 0;
@@ -1695,7 +1706,7 @@
 }
 
 .brand-text {
-  font-family: 'Instrument Serif', Georgia, serif;
+  font-family: var(--font-display);
   font-size: 1.15rem;
   font-weight: 400;
   letter-spacing: -0.01em;
@@ -1893,7 +1904,7 @@
 }
 
 .sidebar-context-meta {
-  font-family: 'DM Mono', monospace;
+  font-family: var(--font-data);
   font-size: 0.68rem;
   color: var(--text-dim);
   overflow-wrap: anywhere;
@@ -2295,7 +2306,7 @@
 }
 
 .header h1 {
-  font-family: 'Instrument Serif', Georgia, serif;
+  font-family: var(--font-display);
   font-size: 1.75rem;
   font-weight: 400;
   letter-spacing: -0.02em;
@@ -2377,7 +2388,7 @@
    Responsive — Mobile (max-width: 680px)
    ========================================================================== */
 
-@media (max-width: 680px) {
+@media (max-width: 768px) {
   /* Stacked layout: the rail becomes a full-width header band, so the
      rail shell returns to the column axis it uses nowhere else. */
   .shell:has(> .sidebar-rail) {
@@ -2440,10 +2451,15 @@
   .nav button {
     border-left: none;
     border-bottom: 2px solid transparent;
-    flex: 1 1 auto;
+    /* Without this the desktop rule's width:100% survives and every item
+       claims its own row, stranding the icon at the far left with the label
+       centred a third of a screen away. Tabs, not rows. */
+    width: auto;
+    flex: 0 1 auto;
     justify-content: center;
     text-align: center;
-    padding: 0.4rem 0.5rem;
+    gap: 0.35rem;
+    padding: 0.4rem 0.6rem;
     font-size: 0.7rem;
   }
 
@@ -2954,7 +2970,7 @@
   border-radius: 0.55rem;
   background: var(--surface-raised);
   color: var(--text);
-  font-family: 'DM Mono', monospace;
+  font-family: var(--font-data);
   font-size: 0.68rem;
 }
 
@@ -2997,7 +3013,7 @@
 }
 
 .topbar-chip-mono {
-  font-family: 'DM Mono', monospace;
+  font-family: var(--font-data);
 }
 
 .topbar-chip-button {
@@ -3049,7 +3065,7 @@
   border-radius: 999px;
   background: var(--surface);
   color: var(--text-muted);
-  font-family: 'DM Mono', monospace;
+  font-family: var(--font-data);
   font-size: 0.62rem;
   letter-spacing: 0.04em;
 }
@@ -3186,7 +3202,7 @@
 
 /* ── Tablet (768–1023px) ─────────────────────────────────────────────── */
 
-@media (max-width: 1023px) {
+@media (max-width: 1024px) {
   .stat-grid  { grid-template-columns: repeat(2, 1fr); }
   .chart-grid { grid-template-columns: 1fr; }
   .page-detail { grid-template-columns: 1fr; }
@@ -3195,7 +3211,7 @@
 
 /* ── Mobile (<768px) ─────────────────────────────────────────────────── */
 
-@media (max-width: 767px) {
+@media (max-width: 768px) {
   .sidebar-backdrop {
     position: fixed;
     inset: 0;
@@ -3307,7 +3323,7 @@
   color: #fff;
   border: none;
   padding: 0.45rem 1.25rem;
-  font-family: Rajdhani, sans-serif;
+  font-family: var(--font-nav);
   font-weight: 700;
   font-size: 0.78rem;
   letter-spacing: 0.04em;
@@ -3560,6 +3576,9 @@
   gap: 6px;
   overflow: hidden;
   min-width: 0;
+  /* Same leak as .mode-card — see the note there. */
+  align-items: stretch;
+  white-space: normal;
 }
 
 .intent-card:hover {
@@ -4057,6 +4076,11 @@
   gap: 4px;
   overflow: hidden;
   min-width: 0;
+  /* The element-level button rule sets align-items:center and
+     white-space:nowrap. In a column card that centres an unwrappable line
+     wider than the card, so overflow:hidden clipped the copy at BOTH ends. */
+  align-items: stretch;
+  white-space: normal;
 }
 
 .mode-card:hover {
@@ -4341,7 +4365,7 @@
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
-  font-family: 'DM Mono', monospace;
+  font-family: var(--font-data);
 }
 
 .lp-chrome-lock { font-size: 0.5rem; }
@@ -4403,7 +4427,7 @@
 .lp-logo-broken { display: none; }
 
 .lp-app-name {
-  font-family: 'Instrument Serif', Georgia, serif;
+  font-family: var(--font-display);
   font-size: 1.35rem;
   font-weight: 400;
   letter-spacing: -0.02em;
@@ -4526,7 +4550,7 @@
   text-align: center;
   margin-top: 1.5rem;
   font-size: 0.68rem;
-  font-family: 'DM Mono', monospace;
+  font-family: var(--font-data);
   letter-spacing: 0.05em;
   color: var(--lp-text-muted);
 }
@@ -4609,7 +4633,7 @@
   border-radius: 8px;
   padding: 12px;
   color: var(--text);
-  font-family: 'DM Mono', monospace;
+  font-family: var(--font-data);
   font-size: 0.75rem;
   line-height: 1.6;
   resize: vertical;
@@ -4632,7 +4656,7 @@
   color: var(--text-muted);
   text-align: right;
   margin-top: 4px;
-  font-family: 'DM Mono', monospace;
+  font-family: var(--font-data);
 }
 
 /* ── Wizard Pro section (gated features) ─────────────────────────── */

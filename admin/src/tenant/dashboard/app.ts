@@ -11,7 +11,10 @@ import { createApi } from '../../core/hooks/createApi';
 import { createToast } from '../../core/hooks/createToast';
 import { TenantDashboard } from './TenantDashboard';
 import { createTenantDashboardStore } from './store';
+import { initThemeMode } from '../../core/utils';
 
+
+initThemeMode();
 const config = (window as any).__TENANT__;
 
 const auth = createAuth({ serverUrl: '', tenant: config?.slug || 'default' });

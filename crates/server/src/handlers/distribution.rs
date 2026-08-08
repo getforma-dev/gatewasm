@@ -10,7 +10,7 @@ pub async fn get_started_page() -> impl IntoResponse {
 <title>fAuth — Get Started</title>
 <style>
 :root {
-  --primary: #6366f1;
+  --primary: #c4a265;
   --primary-hover: #4f46e5;
   --bg: #f8fafc;
   --card-bg: #ffffff;

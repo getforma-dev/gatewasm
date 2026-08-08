@@ -156,8 +156,8 @@ test.describe('Branding step @regression', () => {
       const colorRow = page.locator('.wizard-pane-left .wizard-color-row').first();
       const colorTextInput = colorRow.locator('input[type="text"]');
 
-      // Default: #6366f1 — no Reset button visible
-      await expect(colorTextInput).toHaveValue('#6366f1');
+      // Default: #c4a265 — no Reset button visible
+      await expect(colorTextInput).toHaveValue('#c4a265');
       await expect(colorRow.getByRole('button', { name: 'Reset' })).toHaveCount(0);
 
       // Change color
@@ -167,7 +167,7 @@ test.describe('Branding step @regression', () => {
 
       // Click Reset
       await colorRow.getByRole('button', { name: 'Reset' }).click();
-      await expect(colorTextInput).toHaveValue('#6366f1');
+      await expect(colorTextInput).toHaveValue('#c4a265');
       await expect(colorRow.getByRole('button', { name: 'Reset' })).toHaveCount(0);
     } finally {
       await close();
@@ -214,7 +214,7 @@ test.describe('Branding step @regression', () => {
     if (!tenantId) return;
     await patchWithRetry(request, BASE + '/platform/self-serve/tenants/' + tenantId, {
       headers: { Authorization: 'Bearer ' + platformToken, 'Content-Type': 'application/json' },
-      data: { onboarding_step: 4, branding_primary_color: '#6366f1' },
+      data: { onboarding_step: 4, branding_primary_color: '#c4a265' },
     });
   });
 });

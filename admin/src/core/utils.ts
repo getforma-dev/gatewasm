@@ -127,6 +127,19 @@ export function getStoredThemeMode(): ThemeMode | null {
   }
 }
 
+/** The OS preference, for visitors who have not chosen a theme here yet. */
+export function getSystemThemeMode(): ThemeMode {
+  if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
+    return 'dark';
+  }
+
+  try {
+    return window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+  } catch {
+    return 'dark';
+  }
+}
+
 export function getThemeMode(): ThemeMode {
   if (typeof document !== 'undefined') {
     const applied = document.documentElement.getAttribute('data-theme');
@@ -135,7 +148,7 @@ export function getThemeMode(): ThemeMode {
     }
   }
 
-  return getStoredThemeMode() || 'dark';
+  return getStoredThemeMode() || getSystemThemeMode();
 }
 
 export function applyThemeMode(theme: ThemeMode, persist = true): ThemeMode {
@@ -161,8 +174,28 @@ export function applyThemeMode(theme: ThemeMode, persist = true): ThemeMode {
   return theme;
 }
 
+/**
+ * A stored choice always wins; otherwise follow the OS. Not persisted, so a
+ * visitor who never picks a theme keeps tracking their system setting —
+ * including when it changes while the page is open.
+ */
 export function initThemeMode(): ThemeMode {
-  return applyThemeMode(getStoredThemeMode() || 'dark', false);
+  const stored = getStoredThemeMode();
+  const applied = applyThemeMode(stored || getSystemThemeMode(), false);
+
+  if (!stored && typeof window !== 'undefined' && typeof window.matchMedia === 'function') {
+    try {
+      window.matchMedia('(prefers-color-scheme: light)').addEventListener('change', (event) => {
+        if (!getStoredThemeMode()) {
+          applyThemeMode(event.matches ? 'light' : 'dark', false);
+        }
+      });
+    } catch {
+      // Older browsers without addEventListener on MediaQueryList.
+    }
+  }
+
+  return applied;
 }
 
 export function toggleThemeMode(currentTheme?: ThemeMode): ThemeMode {

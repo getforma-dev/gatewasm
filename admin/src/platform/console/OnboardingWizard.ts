@@ -690,7 +690,7 @@ function StepAuthMethods(): ReturnType<typeof h> {
   // Derive branding from tenant for preview
   const previewAppName = () => tenant.branding_app_name || tenant.name;
   const previewLogoUrl = () => tenant.branding_logo_url || "";
-  const previewPrimaryColor = () => tenant.branding_primary_color || "#6366f1";
+  const previewPrimaryColor = () => tenant.branding_primary_color || "#c4a265";
   const previewDarkMode = () => tenant.branding_dark_mode ?? true;
   const previewButtonText = () => tenant.branding_button_text || "Sign in";
 
@@ -966,7 +966,7 @@ function StepBranding(): ReturnType<typeof h> {
   );
   const [logoUrl, setLogoUrl] = createSignal(tenant.branding_logo_url || "");
   const [buttonColor, setButtonColor] = createSignal(
-    tenant.branding_primary_color || "#6366f1",
+    tenant.branding_primary_color || "#c4a265",
   );
   const [buttonText, setButtonText] = createSignal(
     tenant.branding_button_text || "Sign in",
@@ -1198,7 +1198,7 @@ function StepBranding(): ReturnType<typeof h> {
       ),
 
       // ── Button Color (was "Primary color") ──
-      ColorRow("Button color", buttonColor, setButtonColor, "#6366f1"),
+      ColorRow("Button color", buttonColor, setButtonColor, "#c4a265"),
 
       // ── Button Text ──
       h(
@@ -1780,9 +1780,9 @@ function StepLaunch(): ReturnType<typeof h> {
             null,
             h("span", {
               class: "wizard-color-swatch",
-              style: { background: tenant.branding_primary_color || "#6366f1" },
+              style: { background: tenant.branding_primary_color || "#c4a265" },
             }),
-            " " + (tenant.branding_primary_color || "#6366f1"),
+            " " + (tenant.branding_primary_color || "#c4a265"),
           ),
         ),
         h(
@@ -2133,7 +2133,7 @@ export function OnboardingWizard(): ReturnType<typeof h> {
                 appName: previewName,
                 logoUrl: () => t?.branding_logo_url || "",
                 primaryColor: () =>
-                  t?.branding_primary_color || "#6366f1",
+                  t?.branding_primary_color || "#c4a265",
                 darkMode: () => t?.branding_dark_mode ?? true,
                 buttonText: () => t?.branding_button_text || "Sign in",
                 providers: previewProviders,

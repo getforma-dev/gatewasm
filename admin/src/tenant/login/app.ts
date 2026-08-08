@@ -8,7 +8,10 @@
 import { mount } from 'formajs';
 import { TenantLoginCard } from './TenantLoginCard';
 import { init } from './store';
+import { initThemeMode } from '../../core/utils';
 
+
+initThemeMode();
 // Dev mode: clear stale service workers
 if (location.hostname === 'localhost') {
   navigator.serviceWorker?.getRegistrations().then(rs => rs.forEach(r => r.unregister()));

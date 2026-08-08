@@ -67,7 +67,7 @@
 }
 
 .hero-content h1 {
-  font-family: 'Instrument Serif', Georgia, serif;
+  font-family: var(--font-display);
   font-size: 2rem;
   font-weight: 400;
   letter-spacing: -0.03em;
@@ -87,7 +87,7 @@
 
 .hero-badge {
   display: inline-block;
-  font-family: 'DM Mono', monospace;
+  font-family: var(--font-data);
   font-size: 0.6rem;
   text-transform: uppercase;
   letter-spacing: 0.12em;
@@ -229,13 +229,13 @@
 }
 
 .footer-brand-forma {
-  font-family: Rajdhani, sans-serif;
+  font-family: var(--font-nav);
   font-weight: 700;
   color: var(--text);
 }
 
 .footer-brand-auth {
-  font-family: Rajdhani, sans-serif;
+  font-family: var(--font-nav);
   font-weight: 700;
   color: #c4a265;
 }
@@ -436,7 +436,7 @@ svg.fauth-mark:not([width]) {
 
 /* ── Onboarding — Responsive ──────────────────────────────────────────── */
 
-@media (max-width: 520px) {
+@media (max-width: 480px) {
   .onboarding-page {
     padding: 1.5rem 1rem;
     gap: 1.5rem;
@@ -491,7 +491,7 @@ svg.fauth-mark:not([width]) {
 }
 
 .tl-app-name {
-  font-family: 'Instrument Serif', Georgia, serif;
+  font-family: var(--font-display);
   font-size: 1.35rem;
   font-weight: 400;
   letter-spacing: -0.02em;
@@ -741,7 +741,7 @@ svg.fauth-mark:not([width]) {
   margin-top: 1.5rem;
   font-size: 0.68rem;
   color: var(--text-muted);
-  font-family: 'DM Mono', monospace;
+  font-family: var(--font-data);
   letter-spacing: 0.05em;
 }
 
@@ -871,7 +871,7 @@ svg.fauth-mark:not([width]) {
   color: var(--text-dim);
   padding: 0.4rem 0.75rem;
   font-size: 0.78rem;
-  font-family: 'DM Mono', monospace;
+  font-family: var(--font-data);
   cursor: pointer;
   letter-spacing: 0.06em;
   transition: all var(--duration) ease;
@@ -924,7 +924,7 @@ svg.fauth-mark:not([width]) {
 
 .perf-stat-value {
   font-size: 0.75rem;
-  font-family: 'DM Mono', monospace;
+  font-family: var(--font-data);
   color: var(--text);
 }
 
@@ -1150,7 +1150,7 @@ svg.fauth-mark:not([width]) {
   background: var(--bg);
   border: 1px solid var(--border);
   padding: 0.75rem 0.85rem;
-  font-family: 'DM Mono', monospace;
+  font-family: var(--font-data);
   font-size: 0.72rem;
   font-weight: 300;
   color: var(--text-dim);
@@ -1224,7 +1224,7 @@ svg.fauth-mark:not([width]) {
   background: var(--bg);
   border: 1px solid var(--border);
   padding: 0.65rem 0.75rem;
-  font-family: 'DM Mono', monospace;
+  font-family: var(--font-data);
   font-size: 0.68rem;
   font-weight: 300;
   color: var(--text-dim);
@@ -1282,7 +1282,7 @@ svg.fauth-mark:not([width]) {
 
 .sandbox-expiry-live {
   color: var(--success);
-  font-family: 'DM Mono', monospace;
+  font-family: var(--font-data);
   font-size: 0.78rem;
 }
 
@@ -1371,7 +1371,7 @@ svg.fauth-mark:not([width]) {
 }
 
 .view-eyebrow {
-  font-family: 'DM Mono', monospace;
+  font-family: var(--font-data);
   font-size: 0.6rem;
   text-transform: uppercase;
   letter-spacing: 0.12em;
@@ -1388,7 +1388,7 @@ svg.fauth-mark:not([width]) {
 }
 
 .view-subtitle {
-  font-family: 'DM Mono', monospace;
+  font-family: var(--font-data);
   font-size: 0.85rem;
   color: var(--text-dim);
   margin: var(--space-xs) 0 0;
@@ -1431,7 +1431,7 @@ svg.fauth-mark:not([width]) {
 }
 
 .header-metric-value {
-  font-family: 'DM Mono', monospace;
+  font-family: var(--font-data);
   font-size: 0.95rem;
   color: var(--text);
 }
@@ -1580,7 +1580,7 @@ svg.fauth-mark:not([width]) {
   font-size: 2rem;
   font-weight: 600;
   color: var(--text);
-  font-family: 'DM Mono', monospace;
+  font-family: var(--font-data);
   letter-spacing: -0.02em;
 }
 
@@ -1669,7 +1669,7 @@ svg.fauth-mark:not([width]) {
 }
 
 .overview-summary-value {
-  font-family: 'DM Mono', monospace;
+  font-family: var(--font-data);
   font-size: 0.95rem;
   color: var(--text);
 }
@@ -2211,6 +2211,7 @@ svg.fauth-mark:not([width]) {
   justify-content: flex-start;
   gap: var(--space-lg);
   text-align: left;
+  white-space: normal;
   transition: border-color var(--duration) ease, transform var(--duration-fast) ease, background var(--duration) ease;
 }
 
@@ -2241,7 +2242,7 @@ svg.fauth-mark:not([width]) {
 .tenant-card-path {
   font-size: 0.78rem;
   color: var(--text-dim);
-  font-family: 'DM Mono', monospace;
+  font-family: var(--font-data);
 }
 
 .tenant-card-badge {
@@ -2342,9 +2343,18 @@ svg.fauth-mark:not([width]) {
   width: 100%;
 }
 
+/* Three children in a two-column grid put the sort control alone on row 2,
+   with a row of dead space beside it. A wrapping row keeps the filters
+   together and parks the sort at the far end, wherever it lands. */
 .list-shell-head-users .users-filter-groups {
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: start;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-sm) var(--space-md);
+}
+
+.list-shell-head-users .users-sort-select {
+  margin-left: auto;
 }
 
 .list-shell-head-users .users-filter-group {
@@ -2352,8 +2362,7 @@ svg.fauth-mark:not([width]) {
 }
 
 .list-shell-head-users .users-sort-select {
-  justify-self: end;
-  align-self: start;
+  align-self: center;
 }
 
 .list-empty-state {
@@ -2772,7 +2781,7 @@ svg.fauth-mark:not([width]) {
 /* ── Auth Reference ──────────────────────────────────────────────── */
 
 .auth-ref-field {
-  font-family: 'DM Mono', monospace;
+  font-family: var(--font-data);
   font-size: 0.72rem;
   text-transform: none;
   letter-spacing: 0;
@@ -2933,7 +2942,7 @@ svg.fauth-mark:not([width]) {
   width: fit-content;
 }
 
-@media (max-width: 960px) {
+@media (max-width: 1024px) {
   .view-header-split,
   .zone-head-split,
   .overview-insights-grid,
@@ -3119,7 +3128,7 @@ svg.fauth-mark:not([width]) {
 }
 
 .activity-time {
-  font-family: 'DM Mono', monospace;
+  font-family: var(--font-data);
   font-size: 0.68rem;
   white-space: nowrap;
   padding-top: 2px;
@@ -3137,25 +3146,25 @@ svg.fauth-mark:not([width]) {
 }
 
 .slug-status-checking {
-  font-family: 'DM Mono', monospace;
+  font-family: var(--font-data);
   font-size: 0.68rem;
   color: var(--text-muted);
 }
 
 .slug-status-available {
-  font-family: 'DM Mono', monospace;
+  font-family: var(--font-data);
   font-size: 0.68rem;
   color: var(--success);
 }
 
 .slug-status-hint {
-  font-family: 'DM Mono', monospace;
+  font-family: var(--font-data);
   font-size: 0.65rem;
   color: var(--warning);
 }
 
 .slug-status-invalid {
-  font-family: 'DM Mono', monospace;
+  font-family: var(--font-data);
   font-size: 0.68rem;
   color: var(--danger);
 }
@@ -3164,7 +3173,7 @@ svg.fauth-mark:not([width]) {
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  font-family: 'DM Mono', monospace;
+  font-family: var(--font-data);
   font-size: 0.68rem;
   color: var(--danger);
   flex-wrap: wrap;
@@ -3175,7 +3184,7 @@ svg.fauth-mark:not([width]) {
   border: 1px solid var(--border);
   border-radius: 4px;
   padding: 2px 8px;
-  font-family: 'DM Mono', monospace;
+  font-family: var(--font-data);
   font-size: 0.65rem;
   color: var(--accent);
   cursor: pointer;
@@ -3211,7 +3220,7 @@ svg.fauth-mark:not([width]) {
    now — and only what is genuinely specific to this route survives here. */
 
 body.owner-dashboard {
-  font-family: 'DM Mono', ui-monospace, monospace;
+  font-family: var(--font-data);
   font-size: 14px;
   font-weight: 300;
 }
@@ -3352,7 +3361,7 @@ body.owner-dashboard .stat-grid-2 {
   }
 }
 
-@media (max-width: 1120px) {
+@media (max-width: 1024px) {
   body.owner-dashboard .customers-layout,
   body.owner-dashboard .customer-detail-meta,
   body.owner-dashboard .customer-drawer-grid,
@@ -3361,7 +3370,7 @@ body.owner-dashboard .stat-grid-2 {
   }
 }
 
-@media (max-width: 760px) {
+@media (max-width: 768px) {
   /* 100vw includes the scrollbar gutter and overflowed the viewport. */
   body.owner-dashboard .customer-drawer {
     width: 100%;

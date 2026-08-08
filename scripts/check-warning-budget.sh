@@ -121,7 +121,10 @@ CURRENT_bundle=$(node -e '
   const sha = createHash("sha256").update(fs.readFileSync("admin/dist/manifest.json")).digest("hex").slice(0, 16);
   if (r.manifest_sha256 !== sha) { console.error("report is for a different manifest (" + r.manifest_sha256 + " vs " + sha + ")"); process.exit(1); }
   if (!Number.isInteger(r.budget_exceeded)) { console.error("budget_exceeded is not an integer"); process.exit(1); }
-  console.log(r.budget_exceeded);
+  // String(), not the raw number: console.log colourises numeric values on a
+  // TTY, and those escapes reach the shell arithmetic below. CI is not a TTY,
+  // so this only ever broke the local rehearsal the gate exists to support.
+  process.stdout.write(String(r.budget_exceeded));
 ' 2> >(sed 's/^/::error::bundle report: /' >&2)) || {
   echo "::error::bundle report missing, garbled, or mispaired with dist — infrastructure failure, not zero warnings" >&2
   exit 1

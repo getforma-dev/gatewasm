@@ -12,7 +12,10 @@ import { createToast } from '../../core/hooks/createToast';
 import { createSocket } from '../../core/hooks/createSocket';
 import { TenantAdmin } from './TenantAdmin';
 import { createTenantAdminStore } from './store';
+import { initThemeMode } from '../../core/utils';
 
+
+initThemeMode();
 const config = (window as any).__TENANT__;
 
 const auth = createAuth({ serverUrl: '', tenant: config?.slug || 'default' });

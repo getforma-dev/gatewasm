@@ -41,38 +41,6 @@
 }
 
 @font-face {
-  font-family: 'Rajdhani';
-  font-style: normal;
-  font-weight: 400;
-  font-display: swap;
-  src: url('/_assets/rajdhani-400.woff2') format('woff2');
-}
-
-@font-face {
-  font-family: 'Rajdhani';
-  font-style: normal;
-  font-weight: 500;
-  font-display: swap;
-  src: url('/_assets/rajdhani-500.woff2') format('woff2');
-}
-
-@font-face {
-  font-family: 'Rajdhani';
-  font-style: normal;
-  font-weight: 600;
-  font-display: swap;
-  src: url('/_assets/rajdhani-600.woff2') format('woff2');
-}
-
-@font-face {
-  font-family: 'Rajdhani';
-  font-style: normal;
-  font-weight: 700;
-  font-display: swap;
-  src: url('/_assets/rajdhani-700.woff2') format('woff2');
-}
-
-@font-face {
   font-family: 'Orbitron';
   font-style: normal;
   font-weight: 500;
@@ -174,6 +142,17 @@
   --glow-size:      900px;
   --glow-intensity: 0.07;
 
+  /* ── Breakpoints ────────────────────────────────────────────────────
+     Media queries cannot read custom properties, so these are documentation
+     for the four stops every @media in this theme uses. Nine ad-hoc values
+     (480/520/680/760/767/768/960/1023/1120) collapsed into them; adding a
+     tenth is how the sidebar ended up responding at a different width than
+     the grid it sits beside.
+       480px  phone
+       768px  tablet portrait — sidebar rails become top bands here
+      1024px  tablet landscape — multi-column layouts collapse here
+      1360px  wide desktop — only for max-width containers          */
+
   /* ── Spacing ───────────────────────────────────────────────────────── */
   --radius-sm:      4px;
   --radius-md:      8px;
@@ -182,6 +161,26 @@
   --space-md:       1rem;
   --space-lg:       1.5rem;
   --space-xl:       2rem;
+
+  /* ── Type roles ──────────────────────────────────────────────────────
+     Four faces ship; each needs a job, or it reads as drift. Address the
+     role, never the family name, so a role can be re-cast in one line.
+
+       --font-display  headings and page titles
+       --font-body     prose and controls
+       --font-data     labels, eyebrows, identifiers, code, tabular data
+       --font-nav      navigation chrome
+       --font-numeral  the wordmark and display numerals
+
+     Rajdhani was the only face without a role of its own — it dressed the
+     console's nav labels and nothing else, in a voice neither the serif nor
+     the mono shares. Navigation labels ARE labels, so --font-nav is cast as
+     the data face; re-point this one line to bring Rajdhani back. */
+  --font-display: 'Instrument Serif', Georgia, serif;
+  --font-body:    system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-data:    'DM Mono', ui-monospace, monospace;
+  --font-nav:     var(--font-data);
+  --font-numeral: 'Orbitron', sans-serif;
 
   /* ── Typography ─────────────────────────────────────────────────────── */
   --text-xs:   11px;
@@ -226,18 +225,20 @@
 
   /* ── Plane Accents ─────────────────────────────────────────────── */
   /* Plane 1 intentionally matches --accent: Operator is the 'home' plane */
-  --plane1: #c4a265;
-  --plane1-glow: rgba(196, 162, 101, 0.25);
-  --plane1-muted: rgba(196, 162, 101, 0.08);
-  --plane1-border: rgba(196, 162, 101, 0.25);
-  --plane2: #2E9BFF;
-  --plane2-glow: rgba(46, 155, 255, 0.25);
-  --plane2-muted: rgba(46, 155, 255, 0.08);
-  --plane2-border: rgba(46, 155, 255, 0.25);
-  --plane3: #1EDC82;
-  --plane3-glow: rgba(30, 220, 130, 0.25);
-  --plane3-muted: rgba(30, 220, 130, 0.08);
-  --plane3-border: rgba(30, 220, 130, 0.25);
+  /* Same three hues as dark, darkened to stay legible on a light ground:
+     the dark values sit near 2:1 against #ffffff (the green near 1.7:1). */
+  --plane1: #b8860b;
+  --plane1-glow: rgba(184, 134, 11, 0.22);
+  --plane1-muted: rgba(184, 134, 11, 0.10);
+  --plane1-border: rgba(184, 134, 11, 0.32);
+  --plane2: #1668c9;
+  --plane2-glow: rgba(22, 104, 201, 0.22);
+  --plane2-muted: rgba(22, 104, 201, 0.10);
+  --plane2-border: rgba(22, 104, 201, 0.32);
+  --plane3: #0b7a45;
+  --plane3-glow: rgba(11, 122, 69, 0.22);
+  --plane3-muted: rgba(11, 122, 69, 0.10);
+  --plane3-border: rgba(11, 122, 69, 0.32);
   --plane: var(--plane1);
   --plane-glow: var(--plane1-glow);
   --plane-muted: var(--plane1-muted);

@@ -3,6 +3,17 @@ import { build } from '@getforma/build';
 import { cpSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 
+// Font files by type role (see --font-* in core/theme/tokens.css). The
+// numeral face is only preloaded where stat values or plane pips render.
+const TEXT_FONTS = [
+  'instrument-serif-regular.woff2',
+  'instrument-serif-italic.woff2',
+  'dm-mono-300.woff2',
+  'dm-mono-400.woff2',
+  'dm-mono-500.woff2',
+];
+const NUMERAL_FONTS = [...TEXT_FONTS, 'orbitron-500.woff2', 'orbitron-700.woff2'];
+
 const result = await build({
   entryPoints: [
     { entry: 'src/platform/login/app.ts', outfile: 'platform-login.js' },
@@ -14,15 +25,20 @@ const result = await build({
     { entry: 'src/tenant/dashboard/app.ts', outfile: 'tenant-dashboard.js' },
     { entry: 'src/tenant/admin/app.ts', outfile: 'tenant-admin.js' },
   ],
+  // Every route used to preload all 11 font files, which is most of why all
+  // 8 blew the 195KB budget. Fonts are declared per route by the type roles
+  // the route's markup actually reaches: TEXT_FONTS is display + data (every
+  // route), and only surfaces rendering stat values or plane pips also pull
+  // the numeral face.
   routes: {
-    '/platform/login':           { js: ['platform-login'],      css: ['forma-platform'] },
-    '/platform/onboarding':      { js: ['platform-onboarding'], css: ['forma-platform'] },
-    '/platform/console':         { js: ['platform-console'],    css: ['forma-platform'] },
-    '/platform/benchmark':       { js: ['platform-benchmark'],  css: ['forma-platform'] },
-    '/platform/admin/dashboard': { js: ['admin-dashboard'],     css: ['forma-platform'] },
-    '/t/:slug/login':            { js: ['tenant-login'],        css: ['forma-platform'] },
-    '/t/:slug/dashboard':        { js: ['tenant-dashboard'],    css: ['forma-platform'] },
-    '/t/:slug/admin':            { js: ['tenant-admin'],        css: ['forma-platform'] },
+    '/platform/login':           { js: ['platform-login'],      css: ['forma-platform'], fonts: TEXT_FONTS },
+    '/platform/onboarding':      { js: ['platform-onboarding'], css: ['forma-platform'], fonts: TEXT_FONTS },
+    '/platform/console':         { js: ['platform-console'],    css: ['forma-platform'], fonts: NUMERAL_FONTS },
+    '/platform/benchmark':       { js: ['platform-benchmark'],  css: ['forma-platform'], fonts: NUMERAL_FONTS },
+    '/platform/admin/dashboard': { js: ['admin-dashboard'],     css: ['forma-platform'], fonts: NUMERAL_FONTS },
+    '/t/:slug/login':            { js: ['tenant-login'],        css: ['forma-platform'], fonts: TEXT_FONTS },
+    '/t/:slug/dashboard':        { js: ['tenant-dashboard'],    css: ['forma-platform'], fonts: NUMERAL_FONTS },
+    '/t/:slug/admin':            { js: ['tenant-admin'],        css: ['forma-platform'], fonts: NUMERAL_FONTS },
   },
   cssEntries: [
     { input: 'src/core/theme/platform.css', outfile: 'forma-platform.css', tailwind: true },

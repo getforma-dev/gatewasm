@@ -39,7 +39,7 @@
   flex-wrap: wrap;
   gap: 0.5rem;
   margin-bottom: 1rem;
-  font-family: 'Instrument Serif', Georgia, serif;
+  font-family: var(--font-display);
   font-weight: 400;
   font-size: 0.95rem;
   letter-spacing: -0.005em;
@@ -47,7 +47,7 @@
 
 .panel-title .muted,
 .panel-title .badge {
-  font-family: 'DM Mono', monospace;
+  font-family: var(--font-data);
 }
 
 /* ── Pills ─────────────────────────────────────────────────────────────── */
@@ -268,7 +268,7 @@ form.inline {
 }
 
 .mono {
-  font-family: 'DM Mono', ui-monospace, monospace;
+  font-family: var(--font-data);
 }
 
 /* ── Bar charts ────────────────────────────────────────────────────────── */

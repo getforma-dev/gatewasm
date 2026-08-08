@@ -4,10 +4,13 @@ import { userDisplayName, userInitials, FAuthMark } from '../helpers';
 
 // ── Accent colors per plane ────────────────────────────────────────────────
 
+// Token references, not literals: the plane hues differ per theme (the dark
+// values are far too light to read on the light ground), and a hardcoded
+// copy here would ignore that.
 const PLANE_ACCENTS: Record<Plane, string> = {
-  operator: '#c4a265',
-  organization: '#2E9BFF',
-  enduser: '#1EDC82',
+  operator: 'var(--plane1)',
+  organization: 'var(--plane2)',
+  enduser: 'var(--plane3)',
 };
 
 // ── Props ───────────────────────────────────────────────────────────────────
@@ -344,7 +347,12 @@ export function PlaneNav(props: PlaneNavProps) {
       () => !collapsed(),
       () => h('div', { class: 'plane-nav-expanded' }, tier1, tier2),
     ),
-    // Drawer handle — always visible, centered
+    createShow(
+      collapsed,
+      () => collapsedBar,
+    ),
+    // Drawer handle — last child so it reads (and tabs) as the bottom
+    // edge of whichever nav is showing; CSS hangs it off that edge.
     h('button', {
       type: 'button',
       class: 'plane-collapse-toggle',
@@ -352,10 +360,6 @@ export function PlaneNav(props: PlaneNavProps) {
       onClick: () => setCollapsed(!collapsed()),
     },
       h('span', { class: 'plane-collapse-chevron' }, () => collapsed() ? '\u25BC' : '\u25B2'),
-    ),
-    createShow(
-      collapsed,
-      () => collapsedBar,
     ),
     flashOverlay,
   );

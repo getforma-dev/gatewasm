@@ -44,6 +44,11 @@ async fn run_migrations(pool: &PgPool) -> Result<(), sqlx::Error> {
             "branding bg_color + card_color",
             include_str!("pg_migrations/003_branding_colors.sql"),
         ),
+        (
+            4,
+            "gold branding default for new tenants",
+            include_str!("pg_migrations/004_gold_branding_default.sql"),
+        ),
     ];
 
     for &(version, label, sql) in migrations {

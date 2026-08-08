@@ -91,7 +91,7 @@ impl TenantContext {
             branding_logo_url: row.get("branding_logo_url"),
             branding_primary_color: row
                 .get::<Option<String>, _>("branding_primary_color")
-                .unwrap_or_else(|| "#6366f1".to_string()),
+                .unwrap_or_else(|| "#c4a265".to_string()),
             branding_app_name: row.get("branding_app_name"),
             branding_custom_css: row.get("branding_custom_css"),
             branding_bg_color: row.get("branding_bg_color"),
@@ -272,7 +272,7 @@ mod tests {
             trial_ends_at: None,
             owner_user_id: None,
             branding_logo_url: None,
-            branding_primary_color: "#6366f1".into(),
+            branding_primary_color: "#c4a265".into(),
             branding_app_name: None,
             branding_custom_css: None,
             branding_bg_color: None,
