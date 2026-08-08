@@ -94,13 +94,38 @@ CURRENT_clippy=$(grep -c "^.*: warning:" <<<"$CLIPPY_OUT" || true)
 
 # ── bundle size budgets ───────────────────────────────────────────────────
 # Emitted per route by @getforma/build. Over budget means a slower first paint
-# for every visitor to that route. `Manifest written` is the build's own
-# completion line — no manifest, no build, no count.
-# (Yes, this repeats a build CI already ran in the same job. The gate must be
-# self-contained so a dev can rehearse it locally with one command; the ~30s
-# duplicate build is the price of that, accepted deliberately.)
-BUNDLE_OUT=$(collect bundle 'Manifest written' bash -c 'cd admin && npx tsx build.ts --ssr') || exit 1
-CURRENT_bundle=$(grep -c "Budget exceeded" <<<"$BUNDLE_OUT" || true)
+# for every visitor to that route.
+#
+# The count comes from dist/build-report.json — a structured artifact
+# admin/build.ts writes at build time — NOT from re-running the build and
+# scraping console text. Console scraping produced two real lies (a 2x
+# double-print, and a count of 0 under CARGO_TERM_COLOR-style mangling has
+# an exact analog here); the artifact records result.warnings once, at the
+# source, and carries the sha of the manifest it shipped with.
+#
+# Freshness: if any input is newer than the report, the build runs here and
+# regenerates it — locally the gate stays one self-contained command, and in
+# CI the build step moments earlier makes this the no-build fast path.
+REPORT="admin/dist/build-report.json"
+if [[ ! -f "$REPORT" ]] \
+  || [[ -n "$(find admin/src admin/build.ts admin/package-lock.json -newer "$REPORT" -print -quit 2>/dev/null)" ]]; then
+  BUNDLE_OUT=$(collect bundle 'Manifest written' bash -c 'cd admin && npx tsx build.ts --ssr') || exit 1
+fi
+# Evidence is structural: the report must exist, parse, carry an integer
+# count, and its manifest sha must match the manifest actually in dist —
+# a missing, torn, or mispaired report aborts, it never reads as zero.
+CURRENT_bundle=$(node -e '
+  const fs = require("node:fs");
+  const { createHash } = require("node:crypto");
+  const r = JSON.parse(fs.readFileSync("admin/dist/build-report.json", "utf8"));
+  const sha = createHash("sha256").update(fs.readFileSync("admin/dist/manifest.json")).digest("hex").slice(0, 16);
+  if (r.manifest_sha256 !== sha) { console.error("report is for a different manifest (" + r.manifest_sha256 + " vs " + sha + ")"); process.exit(1); }
+  if (!Number.isInteger(r.budget_exceeded)) { console.error("budget_exceeded is not an integer"); process.exit(1); }
+  console.log(r.budget_exceeded);
+' 2> >(sed 's/^/::error::bundle report: /' >&2)) || {
+  echo "::error::bundle report missing, garbled, or mispaired with dist — infrastructure failure, not zero warnings" >&2
+  exit 1
+}
 
 # `admin/scripts/check-ir-degradations.mjs` owns the SSR stream — it needs
 # per-file granularity rather than a single count, so it is not folded in here.
@@ -123,7 +148,10 @@ fi
 lines_of() {
   case "$1" in
     clippy) grep "^.*: warning:" <<<"$CLIPPY_OUT" || true ;;
-    bundle) grep "Budget exceeded" <<<"$BUNDLE_OUT" || true ;;
+    bundle) node -e '
+      const r = JSON.parse(require("node:fs").readFileSync("admin/dist/build-report.json", "utf8"));
+      for (const w of r.warnings) if (w.includes("Budget exceeded")) console.log(w);
+    ' 2>/dev/null || true ;;
   esac
 }
 
