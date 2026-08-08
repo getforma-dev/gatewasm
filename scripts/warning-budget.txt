@@ -1,2 +1,2 @@
-bundle=16
+bundle=8
 clippy=25

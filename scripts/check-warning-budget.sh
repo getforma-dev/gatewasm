@@ -78,15 +78,28 @@ collect() {
 # through the middle of every ': warning:' — the count read 0 against 25 real
 # warnings while the 'Finished' evidence (an intact word) still passed. The
 # counter and the evidence check must see the same bytes a plain pipe sees.
-cargo clean -p gatewasm-server 2>/dev/null || true
-CLIPPY_OUT=$(collect clippy 'Finished|error\[' env CARGO_TERM_COLOR=never cargo clippy -p gatewasm-server --lib --message-format=short)
+# A failed clean means the re-lint cannot be guaranteed — abort rather than
+# risk counting a warm cache's silence as zero.
+cargo clean -p gatewasm-server 2>/dev/null || {
+  echo "::error::cargo clean -p failed — cannot force an honest clippy re-lint" >&2
+  exit 1
+}
+# `|| exit 1` is THE load-bearing character of this script: collect() runs in
+# a command-substitution SUBSHELL, so its own `exit 1` cannot stop the parent
+# — without this, a dead collector left an empty variable that counted as 0,
+# which is green once a baseline reaches 0. The first landing shipped exactly
+# that hole; a review caught this one before it did.
+CLIPPY_OUT=$(collect clippy 'Finished|error\[' env CARGO_TERM_COLOR=never cargo clippy -p gatewasm-server --lib --message-format=short) || exit 1
 CURRENT_clippy=$(grep -c "^.*: warning:" <<<"$CLIPPY_OUT" || true)
 
 # ── bundle size budgets ───────────────────────────────────────────────────
 # Emitted per route by @getforma/build. Over budget means a slower first paint
 # for every visitor to that route. `Manifest written` is the build's own
 # completion line — no manifest, no build, no count.
-BUNDLE_OUT=$(collect bundle 'Manifest written' bash -c 'cd admin && npx tsx build.ts --ssr')
+# (Yes, this repeats a build CI already ran in the same job. The gate must be
+# self-contained so a dev can rehearse it locally with one command; the ~30s
+# duplicate build is the price of that, accepted deliberately.)
+BUNDLE_OUT=$(collect bundle 'Manifest written' bash -c 'cd admin && npx tsx build.ts --ssr') || exit 1
 CURRENT_bundle=$(grep -c "Budget exceeded" <<<"$BUNDLE_OUT" || true)
 
 # `admin/scripts/check-ir-degradations.mjs` owns the SSR stream — it needs
@@ -116,6 +129,14 @@ lines_of() {
 
 while IFS='=' read -r key was; do
   [[ -z "$key" ]] && continue
+  was="${was%$'\r'}"
+  # A baseline that is not a clean integer (CRLF residue, a bad merge) would
+  # make both (( )) comparisons ERROR, both read false, and the run fall
+  # through to the passing branch — a corrupt file must fail, not pass.
+  if [[ ! "$was" =~ ^[0-9]+$ ]]; then
+    echo "::error::malformed baseline for '$key' in $BASELINE_FILE: '$was' is not an integer" >&2
+    exit 1
+  fi
   now="$(current_of "$key")"
   now="${now:-0}"
   if (( now > was )); then

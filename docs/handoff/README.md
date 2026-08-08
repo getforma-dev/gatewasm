@@ -1,5 +1,13 @@
 # Start here
 
+> **Status (2026-08-07): every task below is DONE.** The transition this
+> document was written for was executed the same day it landed: PR #1 merged
+> after second-machine verification, the compiler fix shipped as
+> `@getforma/compiler` 0.3.2/0.3.3, both platform routes serve SSR, the full
+> regression suite had its first clean run (165/165), and the warning-budget
+> ratchet is live and Linux-verified. The task list is kept as the record of
+> what was asked; the open thread is distribution (App Runner is sunset).
+
 You are picking up `gatewasm` on a new machine. Everything needed is in this
 repo — clone it, read this page, then work the tasks in order.
 
@@ -9,7 +17,7 @@ All four Forma repos are committed and pushed; nothing is in flight.
 | doc | what it is |
 |---|---|
 | [`MACHINE-SETUP.md`](MACHINE-SETUP.md) | Clone → running stack on a new machine. Where the e2e suite lives, the two traps a fresh clone cannot infer, what to prove by hand. Named to avoid colliding with the repo's own `LOCAL-DEV.md`. |
-| `forma-tools/docs/HANDOFF-imported-signal-defaults.md` | The compiler gap blocking SSR fidelity. Diagnosed, specified, not started. Lives in the repo the fix lands in; the travelling copy that used to sit here was deleted once both repos were cloned, per its own instruction. |
+| `forma-tools/docs/HANDOFF-imported-signal-defaults.md` | The compiler gap that was blocking SSR fidelity — **shipped in 0.3.2/0.3.3**; the doc is kept as the diagnosis record. Lives in the repo the fix landed in; the travelling copy that used to sit here was deleted once both repos were cloned, per its own instruction. |
 
 ### The repo's own docs — read these too
 

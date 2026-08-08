@@ -313,10 +313,17 @@
    with NO width/height, hydration deliberately does not re-apply non-function
    props, and an unsized svg renders at its replaced-element default — a
    viewport-filling shield. Only the attribute-less (SSR-degraded) case is
-   sized here; a client-rendered mark keeps its per-call-site attributes. */
+   sized here; a client-rendered mark keeps its per-call-site attributes.
+   Sizes mirror the call sites: 18 (Math.round(18*34/28)=22) in headers,
+   16 (→19) inside .footer-badge — matching FAuthMark's own math so the
+   no-JS paint and the client render agree per context. */
 svg.fauth-mark:not([width]) {
   width: 18px;
   height: 22px;
+}
+.footer-badge svg.fauth-mark:not([width]) {
+  width: 16px;
+  height: 19px;
 }
 
 .brand-header .brand-mark {
