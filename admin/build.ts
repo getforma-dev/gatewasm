@@ -41,6 +41,6 @@ for (const f of readdirSync(assetDir)) {
   cpSync(`${assetDir}/${f}`, `dist/${f}`);
 }
 
-if (result.warnings.length > 0) {
-  for (const w of result.warnings) console.warn(`\u26a0\ufe0f  ${w}`);
-}
+// @getforma/build already printed each warning as it was found \u2014 re-printing
+// result.warnings here doubled every line, which put the bundle warning
+// baseline at 2x reality (16 recorded for 8 over-budget routes).

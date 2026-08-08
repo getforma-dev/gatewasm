@@ -12,12 +12,23 @@ set -euo pipefail
 
 BASE="${BASE:-http://localhost:${PORT:-3001}}"
 
-# The server reads PLATFORM_ADMIN_KEY from .env; this script runs in a shell
-# that usually has not exported it. Read it from .env so the two can't disagree.
+# The server reads PLATFORM_ADMIN_KEY from .env via dotenvy; this script runs
+# in a shell that usually has not exported it. Read it from .env so the two
+# can't disagree — accepting the dotenv spellings dotenvy accepts: an
+# optional `export ` prefix, surrounding single/double quotes, and CRLF line
+# endings. `|| true` on the pipeline matters: this script runs under
+# `set -euo pipefail`, and a bare grep miss would otherwise kill the script
+# silently before the fallback on the next line could apply.
 PLAT_KEY="${PLATFORM_ADMIN_KEY:-}"
 ENV_FILE="$(cd "$(dirname "$0")/.." && pwd)/.env"
 if [ -z "$PLAT_KEY" ] && [ -f "$ENV_FILE" ]; then
-  PLAT_KEY=$(grep -E '^PLATFORM_ADMIN_KEY=' "$ENV_FILE" | head -1 | cut -d= -f2-)
+  PLAT_KEY=$(grep -E '^(export[[:space:]]+)?PLATFORM_ADMIN_KEY=' "$ENV_FILE" | head -1 | sed -E 's/^(export[[:space:]]+)?PLATFORM_ADMIN_KEY=//' || true)
+  PLAT_KEY="${PLAT_KEY%$'\r'}"
+  # Strip one layer of surrounding quotes, the way dotenvy does.
+  case "$PLAT_KEY" in
+    \"*\") PLAT_KEY="${PLAT_KEY#\"}"; PLAT_KEY="${PLAT_KEY%\"}" ;;
+    \'*\') PLAT_KEY="${PLAT_KEY#\'}"; PLAT_KEY="${PLAT_KEY%\'}" ;;
+  esac
 fi
 PLAT_KEY="${PLAT_KEY:-plat_local_dev_key}"
 
@@ -50,10 +61,16 @@ api() {
 }
 
 # A tenant create that fails (e.g. wrong PLATFORM_ADMIN_KEY) must not be
-# reported as "already exists" — verify the tenant actually answers.
+# reported as "already exists" — verify the ROW exists. The login route is
+# deliberately not used here: it resolves slugs through a 5-minute in-memory
+# tenant cache, so right after a DB reset it can serve a 200 for a tenant
+# whose row is gone — exactly the do-nothing pass this guard exists to stop.
 ensure_tenant() {
   local slug="$1"
-  if ! curl -sf "$BASE/t/$slug/login" > /dev/null 2>&1; then
+  local count
+  count=$(docker compose exec -T db psql -U gatewasm -d gatewasm -tAc \
+    "SELECT count(*) FROM tenants WHERE slug = '$slug' AND status = 'active';" 2>/dev/null || echo 0)
+  if [ "${count//[[:space:]]/}" != "1" ]; then
     echo -e "  ${RED}FAILED:${NC} tenant '$slug' does not exist after seeding."
     echo "  Most likely PLATFORM_ADMIN_KEY does not match the server's key"
     echo "  (set it in .env, or export it before running this script)."
