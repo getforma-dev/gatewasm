@@ -41,7 +41,7 @@ function Modal(
       class: 'modal-overlay',
       onClick: (e: MouseEvent) => { if ((e.target as HTMLElement).classList.contains('modal-overlay')) onClose(); },
     },
-      h('div', { class: 'modal' },
+      h('div', { class: 'modal-content' },
         h('div', { class: 'modal-header' },
           h('h2', null, title),
           h('button', { class: 'btn small', onClick: onClose }, 'X'),
@@ -139,7 +139,7 @@ function UsersView(s: TenantAdminStore) {
     closeCreateUser,
     'Create User',
     h('div', { class: 'form-stack' },
-      createShow(() => formError() !== '', () => h('div', { class: 'alert alert-error' }, () => formError())),
+      createShow(() => formError() !== '', () => h('div', { class: 'alert error show' }, () => formError())),
       h('label', null, 'Email'),
       h('input', {
         type: 'email',
@@ -253,7 +253,7 @@ function RolesView(s: TenantAdminStore) {
     closeCreateRole,
     'Create Role',
     h('div', { class: 'form-stack' },
-      createShow(() => formError() !== '', () => h('div', { class: 'alert alert-error' }, () => formError())),
+      createShow(() => formError() !== '', () => h('div', { class: 'alert error show' }, () => formError())),
       h('label', null, 'Name'),
       h('input', {
         type: 'text',
@@ -380,7 +380,7 @@ function WebhooksView(s: TenantAdminStore) {
     closeCreateWebhook,
     'Create Webhook',
     h('div', { class: 'form-stack' },
-      createShow(() => formError() !== '', () => h('div', { class: 'alert alert-error' }, () => formError())),
+      createShow(() => formError() !== '', () => h('div', { class: 'alert error show' }, () => formError())),
       h('label', null, 'Endpoint URL'),
       h('input', {
         type: 'url',
