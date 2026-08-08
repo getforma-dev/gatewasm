@@ -1,0 +1,486 @@
+{
+  "total": 75,
+  "counts": {
+    "/platform/login": 8,
+    "/platform/onboarding": 4,
+    "/platform/console": 62,
+    "/platform/benchmark": 0,
+    "/platform/admin/dashboard": 0,
+    "/t/:slug/login": 0,
+    "/t/:slug/dashboard": 0,
+    "/t/:slug/admin": 1
+  },
+  "detail": {
+    "/platform/login": [
+      {
+        "class": "auth-card-island",
+        "sources": [
+          "src/platform/login/AuthCard.ts"
+        ]
+      },
+      {
+        "class": "invite-banner-slot",
+        "sources": [
+          "src/platform/login/InviteIslands.ts"
+        ]
+      },
+      {
+        "class": "mfa-head",
+        "sources": [
+          "src/platform/login/MfaPanel.ts"
+        ]
+      },
+      {
+        "class": "mini-row",
+        "sources": [
+          "src/platform/login/AuthCard.ts"
+        ]
+      },
+      {
+        "class": "new-here",
+        "sources": [
+          "src/platform/login/InviteIslands.ts"
+        ]
+      },
+      {
+        "class": "password-wrap",
+        "sources": [
+          "src/platform/login/AuthCard.ts",
+          "src/platform/login/MfaPanel.ts"
+        ]
+      },
+      {
+        "class": "remember-email",
+        "sources": [
+          "src/platform/login/AuthCard.ts"
+        ]
+      },
+      {
+        "class": "secondary",
+        "sources": [
+          "src/platform/login/AuthCard.ts"
+        ]
+      }
+    ],
+    "/platform/onboarding": [
+      {
+        "class": "card-subtitle",
+        "sources": [
+          "src/platform/onboarding/OnboardingPage.ts"
+        ]
+      },
+      {
+        "class": "password-wrap",
+        "sources": [
+          "src/platform/onboarding/RegistrationForm.ts"
+        ]
+      },
+      {
+        "class": "registration-form-island",
+        "sources": [
+          "src/platform/onboarding/RegistrationForm.ts"
+        ]
+      },
+      {
+        "class": "signin-link",
+        "sources": [
+          "src/platform/onboarding/OnboardingPage.ts"
+        ]
+      }
+    ],
+    "/platform/console": [
+      {
+        "class": "activity-feed-dot-",
+        "sources": [
+          "src/platform/console/views/OverviewView.ts"
+        ]
+      },
+      {
+        "class": "badge-dim",
+        "sources": [
+          "src/platform/console/views/OverviewView.ts"
+        ]
+      },
+      {
+        "class": "btn-accent",
+        "sources": [
+          "src/platform/console/OnboardingWizard.ts"
+        ]
+      },
+      {
+        "class": "btn-lg",
+        "sources": [
+          "src/platform/console/OnboardingWizard.ts"
+        ]
+      },
+      {
+        "class": "btn-outline",
+        "sources": [
+          "src/platform/console/views/OrganizationsView.ts"
+        ]
+      },
+      {
+        "class": "btn-xs",
+        "sources": [
+          "src/platform/console/views/IntegrateView.ts",
+          "src/platform/console/views/OrganizationsView.ts"
+        ]
+      },
+      {
+        "class": "card-head-row",
+        "sources": [
+          "src/platform/console/views/IntegrateView.ts"
+        ]
+      },
+      {
+        "class": "compact",
+        "sources": [
+          "src/platform/console/views/IntegrateView.ts"
+        ]
+      },
+      {
+        "class": "console-view-body",
+        "sources": [
+          "src/platform/console/views/SecurityConfigView.ts"
+        ]
+      },
+      {
+        "class": "data-table",
+        "sources": [
+          "src/platform/console/views/IntegrateView.ts"
+        ]
+      },
+      {
+        "class": "expanded-detail-row",
+        "sources": [
+          "src/platform/console/views/IntegrateView.ts"
+        ]
+      },
+      {
+        "class": "field-label",
+        "sources": [
+          "src/platform/console/views/TeamView.ts"
+        ]
+      },
+      {
+        "class": "form-group",
+        "sources": [
+          "src/platform/console/views/IntegrateView.ts"
+        ]
+      },
+      {
+        "class": "form-input",
+        "sources": [
+          "src/platform/console/views/IntegrateView.ts"
+        ]
+      },
+      {
+        "class": "form-label",
+        "sources": [
+          "src/platform/console/views/IntegrateView.ts"
+        ]
+      },
+      {
+        "class": "hosted-editor-card",
+        "sources": [
+          "src/platform/console/views/HostedPageView.ts"
+        ]
+      },
+      {
+        "class": "input",
+        "sources": [
+          "src/platform/console/OnboardingWizard.ts",
+          "src/platform/console/views/TeamView.ts"
+        ]
+      },
+      {
+        "class": "input-sm",
+        "sources": [
+          "src/platform/console/OnboardingWizard.ts"
+        ]
+      },
+      {
+        "class": "integrate-card",
+        "sources": [
+          "src/platform/console/views/IntegrateView.ts"
+        ]
+      },
+      {
+        "class": "integrate-summary-card",
+        "sources": [
+          "src/platform/console/views/IntegrateView.ts"
+        ]
+      },
+      {
+        "class": "invite-email",
+        "sources": [
+          "src/platform/console/views/UsersView.ts"
+        ]
+      },
+      {
+        "class": "invite-email-input",
+        "sources": [
+          "src/platform/console/views/UsersView.ts"
+        ]
+      },
+      {
+        "class": "invite-form",
+        "sources": [
+          "src/platform/console/views/UsersView.ts"
+        ]
+      },
+      {
+        "class": "invite-list",
+        "sources": [
+          "src/platform/console/views/UsersView.ts"
+        ]
+      },
+      {
+        "class": "invite-revoke-btn",
+        "sources": [
+          "src/platform/console/views/UsersView.ts"
+        ]
+      },
+      {
+        "class": "invite-role-badge",
+        "sources": [
+          "src/platform/console/views/UsersView.ts"
+        ]
+      },
+      {
+        "class": "invite-role-select",
+        "sources": [
+          "src/platform/console/views/UsersView.ts"
+        ]
+      },
+      {
+        "class": "invite-row",
+        "sources": [
+          "src/platform/console/views/UsersView.ts"
+        ]
+      },
+      {
+        "class": "invite-row-main",
+        "sources": [
+          "src/platform/console/views/UsersView.ts"
+        ]
+      },
+      {
+        "class": "invite-row-meta",
+        "sources": [
+          "src/platform/console/views/UsersView.ts"
+        ]
+      },
+      {
+        "class": "invites-panel",
+        "sources": [
+          "src/platform/console/views/UsersView.ts"
+        ]
+      },
+      {
+        "class": "invites-panel-body",
+        "sources": [
+          "src/platform/console/views/UsersView.ts"
+        ]
+      },
+      {
+        "class": "invites-panel-head",
+        "sources": [
+          "src/platform/console/views/UsersView.ts"
+        ]
+      },
+      {
+        "class": "invites-toggle",
+        "sources": [
+          "src/platform/console/views/UsersView.ts"
+        ]
+      },
+      {
+        "class": "list-empty-state-loading",
+        "sources": [
+          "src/platform/console/views/ActivityView.ts",
+          "src/platform/console/views/AuditLogView.ts",
+          "src/platform/console/views/OrganizationsView.ts",
+          "src/platform/console/views/PasskeysView.ts",
+          "src/platform/console/views/RolesView.ts",
+          "src/platform/console/views/SessionsView.ts",
+          "src/platform/console/views/UsersView.ts"
+        ]
+      },
+      {
+        "class": "overview-legend-swatch-",
+        "sources": [
+          "src/platform/console/views/OverviewView.ts"
+        ]
+      },
+      {
+        "class": "overview-provider-card",
+        "sources": [
+          "src/platform/console/views/OverviewView.ts"
+        ]
+      },
+      {
+        "class": "overview-shell",
+        "sources": [
+          "src/platform/console/views/OverviewView.ts"
+        ]
+      },
+      {
+        "class": "overview-trend-card",
+        "sources": [
+          "src/platform/console/views/OverviewView.ts"
+        ]
+      },
+      {
+        "class": "section-subtitle",
+        "sources": [
+          "src/platform/console/views/IntegrateView.ts"
+        ]
+      },
+      {
+        "class": "session-card-expiry-",
+        "sources": [
+          "src/platform/console/views/UsersView.ts"
+        ]
+      },
+      {
+        "class": "session-card-main",
+        "sources": [
+          "src/platform/console/views/OrganizationsView.ts"
+        ]
+      },
+      {
+        "class": "session-card-meta",
+        "sources": [
+          "src/platform/console/views/OrganizationsView.ts"
+        ]
+      },
+      {
+        "class": "session-card-method",
+        "sources": [
+          "src/platform/console/views/OrganizationsView.ts"
+        ]
+      },
+      {
+        "class": "status-badge",
+        "sources": [
+          "src/platform/console/views/IntegrateView.ts"
+        ]
+      },
+      {
+        "class": "team-tenants-section",
+        "sources": [
+          "src/platform/console/ConsoleApp.ts"
+        ]
+      },
+      {
+        "class": "tenant-access-item",
+        "sources": [
+          "src/platform/console/views/TeamView.ts"
+        ]
+      },
+      {
+        "class": "tenant-access-list",
+        "sources": [
+          "src/platform/console/views/TeamView.ts"
+        ]
+      },
+      {
+        "class": "tenant-assigner",
+        "sources": [
+          "src/platform/console/views/TeamView.ts"
+        ]
+      },
+      {
+        "class": "tenant-card-badge-role",
+        "sources": [
+          "src/platform/console/ConsoleApp.ts"
+        ]
+      },
+      {
+        "class": "tenant-checkbox-item",
+        "sources": [
+          "src/platform/console/views/TeamView.ts"
+        ]
+      },
+      {
+        "class": "tenant-checkbox-list",
+        "sources": [
+          "src/platform/console/views/TeamView.ts"
+        ]
+      },
+      {
+        "class": "toast-banner",
+        "sources": [
+          "src/platform/console/views/IntegrateView.ts"
+        ]
+      },
+      {
+        "class": "toast-success",
+        "sources": [
+          "src/platform/console/views/IntegrateView.ts"
+        ]
+      },
+      {
+        "class": "user-detail-footer-actions",
+        "sources": [
+          "src/platform/console/views/OrganizationsView.ts"
+        ]
+      },
+      {
+        "class": "user-detail-footer-meta",
+        "sources": [
+          "src/platform/console/views/OrganizationsView.ts"
+        ]
+      },
+      {
+        "class": "user-row-actions",
+        "sources": [
+          "src/platform/console/views/TeamView.ts"
+        ]
+      },
+      {
+        "class": "webhook-create-form",
+        "sources": [
+          "src/platform/console/views/IntegrateView.ts"
+        ]
+      },
+      {
+        "class": "webhook-deliveries",
+        "sources": [
+          "src/platform/console/views/IntegrateView.ts"
+        ]
+      },
+      {
+        "class": "webhook-detail",
+        "sources": [
+          "src/platform/console/views/IntegrateView.ts"
+        ]
+      },
+      {
+        "class": "webhook-event-check",
+        "sources": [
+          "src/platform/console/views/IntegrateView.ts"
+        ]
+      },
+      {
+        "class": "webhook-events-grid",
+        "sources": [
+          "src/platform/console/views/IntegrateView.ts"
+        ]
+      }
+    ],
+    "/platform/benchmark": [],
+    "/platform/admin/dashboard": [],
+    "/t/:slug/login": [],
+    "/t/:slug/dashboard": [],
+    "/t/:slug/admin": [
+      {
+        "class": "input",
+        "sources": [
+          "src/tenant/admin/TenantAdmin.ts"
+        ]
+      }
+    ]
+  }
+}

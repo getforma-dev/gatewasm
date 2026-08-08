@@ -224,6 +224,9 @@ form.inline {
 .btn.small {
   font-size: 0.65rem;
   padding: 0.25rem 0.45rem;
+  /* .btn's 36px floor is for standalone actions; the compact variant packs
+     several buttons into a table cell, where that floor stacks them. */
+  min-height: 26px;
   letter-spacing: 0.04em;
 }
 
@@ -236,6 +239,11 @@ form.inline {
 }
 
 .action-row > * { flex: 0 0 auto; }
+
+/* Inside a table cell the row must not wrap: the .table-wrap scrolls
+   horizontally, so wrapping only stacks the buttons and inflates row
+   height (six actions turned a customer row into a 224px block). */
+.table-wrap .action-row { flex-wrap: nowrap; }
 
 .view-section {
   margin-bottom: 1.25rem;
@@ -335,6 +343,20 @@ form.inline {
   color: var(--text-dim);
   font-size: 0.72rem;
   font-weight: 300;
+}
+
+.pager-info {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* StatCard's optional hint line — emitted by the shared component on every
+   route, so it needs a definition in the shared bundle. */
+.stat-hint {
+  display: block;
+  margin-top: 0.35rem;
+  font-size: 0.65rem;
+  color: var(--text-muted);
 }
 
 .pager .pager-actions {

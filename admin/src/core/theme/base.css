@@ -21,7 +21,6 @@ html, body {
   min-height: 100vh;
   background: var(--bg);
   color: var(--text);
-  overflow-x: hidden;
 }
 
 body {
@@ -141,6 +140,12 @@ th {
   padding-top: 0.5rem;
   padding-bottom: 0.5rem;
   background: var(--surface);
+}
+
+/* Sticky headers only inside a scroll container. Applied globally, the
+   sticky ancestor became the page scroller and headers floated over
+   unrelated content on every route that renders a bare table. */
+.table-wrap thead th {
   position: sticky;
   top: 0;
   z-index: 2;

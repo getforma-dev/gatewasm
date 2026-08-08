@@ -383,7 +383,7 @@ npx tsx build.ts --ssr  # + SSR IR files for server-side rendering
 | JS only | `npm run build:js` | Changed component code |
 | Full build | `npx tsx build.ts` | Before committing |
 | Full + SSR | `npx tsx build.ts --ssr` | Changed SSR page structure |
-| FormaJS rebuild | `cd npm-modules/formajs && npm run build` | Changed FormaJS source |
+| FormaJS upgrade | `npm i @getforma/core@<version>` | Picking up a new runtime release |
 | Rust rebuild | `cargo build -p gatewasm-server` | Changed Rust code OR dist/ |
 | Server restart | Kill + re-run cargo | After Rust rebuild or dist hash change |
 
@@ -397,7 +397,7 @@ npx tsx build.ts --ssr  # + SSR IR files for server-side rendering
 
 ## Rules That Will Break Things
 
-1. **FormaJS alias** — esbuild resolves `'formajs'` to `npm-modules/formajs/dist/index.js`. If you change FormaJS source, you MUST run `npm run build` in the formajs directory first, then rebuild admin.
+1. **FormaJS alias** — the build resolves `'formajs'` to the installed `@getforma/core` package (`formaAlias` in `build.ts`). There is no vendored copy; to move the runtime, bump the dependency and rebuild admin.
 
 2. **rust-embed watches dist/** — The Rust server embeds `dist/` at compile time. Changing dist files requires `cargo build` to pick them up. New files or renamed files require Rust rebuild.
 

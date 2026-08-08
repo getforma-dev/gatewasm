@@ -105,7 +105,7 @@ function RoleRow(role: Role, tenantId: string) {
     h('div', { class: 'user-row-summary' },
       h('div', { class: 'user-row-main' },
         h('div', { class: 'user-email' },
-          role.name,
+          h('span', { class: 'truncate' }, role.name),
           role.is_system
             ? h('span', { class: 'badge badge-subtle' }, 'System')
             : h('span', { class: 'badge badge-subtle' }, 'Custom'),

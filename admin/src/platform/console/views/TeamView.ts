@@ -125,7 +125,7 @@ export function TeamView() {
               h('div', { class: 'user-row-summary', style: 'cursor:default;' },
                 h('div', { class: 'user-row-main' },
                   h('div', { class: 'user-email' },
-                    invite.email,
+                    h('span', { class: 'truncate' }, invite.email),
                     h('span', { class: 'badge badge-subtle' }, invite.role),
                     h('span', { class: 'badge badge-warning' }, 'Pending'),
                   ),
@@ -211,7 +211,7 @@ export function TeamView() {
               },
                 h('div', { class: 'user-row-main' },
                   h('div', { class: 'user-email' },
-                    member.email || member.name,
+                    h('span', { class: 'truncate' }, member.email || member.name),
                     member.is_account_owner
                       ? h('span', { class: 'badge badge-subtle' }, 'Owner')
                       : member.tenant_assignments?.length > 0

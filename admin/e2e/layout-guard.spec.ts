@@ -14,7 +14,10 @@ const WIDTHS = [375, 768, 1280];
 const COVERED_ROUTES = [
   '/platform/login',
   '/platform/onboarding',
+  '/platform/benchmark',
   '/t/platform/login',
+  '/t/platform/login?mode=register',
+  '/t/platform/site',
   '/definitely-not-a-page',
 ];
 

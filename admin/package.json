@@ -17,6 +17,7 @@
     "test:dev": "playwright test --config=playwright-dev.config.ts",
     "typecheck": "tsc --noEmit && tsc --noEmit -p e2e/tsconfig.json",
     "check:ssr": "node scripts/check-ir-degradations.mjs",
+    "check:css": "node scripts/check-css-classes.mjs",
     "check:ssr:update": "node scripts/check-ir-degradations.mjs --update"
   },
   "dependencies": {

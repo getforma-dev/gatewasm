@@ -185,7 +185,7 @@ export function OrganizationsView() {
                 onClick: () => toggleExpand(org),
               },
                 h('div', { class: 'user-row-main' },
-                  h('div', { class: 'user-email' }, org.name),
+                  h('div', { class: 'user-email' }, h('span', { class: 'truncate' }, org.name)),
                   h('div', { class: 'user-meta text-muted' },
                     org.slug + ' \u00b7 ' + new Date(org.created_at).toLocaleDateString(),
                   ),

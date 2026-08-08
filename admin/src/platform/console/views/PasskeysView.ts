@@ -47,7 +47,7 @@ function PasskeyRow(pk: Passkey) {
     h('div', { class: 'user-row-summary' },
       h('div', { class: 'user-row-main' },
         h('div', { class: 'user-email' },
-          pk.name,
+          h('span', { class: 'truncate' }, pk.name),
           pk.is_synced
             ? h('span', { class: 'badge badge-subtle' }, 'Synced')
             : h('span', { class: 'badge badge-subtle' }, 'Device-bound'),
