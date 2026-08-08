@@ -295,7 +295,7 @@ function WebhooksPanel() {
       () => {
         const list = webhooks();
         if (list.length === 0) return null;
-        return h('div', { class: 'data-table-wrap' },
+        return h('div', { class: 'table-wrap' },
           h('table', { class: 'data-table' },
             h('thead', null,
               h('tr', null,

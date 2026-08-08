@@ -63,7 +63,7 @@ function ProfileView(dashStore: TenantDashboardStore, toast: ToastController, on
     });
   }
 
-  return h('div', { class: 'view' },
+  return h('div', { class: 'content' },
     Header({ title: 'Profile' }),
 
     // Profile card
@@ -159,7 +159,7 @@ function ProfileView(dashStore: TenantDashboardStore, toast: ToastController, on
 // -- History View ------------------------------------------------------------
 
 function HistoryView(dashStore: TenantDashboardStore) {
-  return h('div', { class: 'view' },
+  return h('div', { class: 'content' },
     Header({ title: 'Login History', subtitle: 'Recent authentication attempts' }),
     DataTable<LoginHistoryEntry>({
       headers: ['Date', 'Status', 'IP Address', 'User Agent'],
@@ -211,7 +211,7 @@ function IntegrationView() {
   bridge.login('google');  // or "github", "email"
 <\/script>`;
 
-  return h('div', { class: 'view' },
+  return h('div', { class: 'content' },
     Header({ title: 'Integration', subtitle: 'Add authentication to your app' }),
 
     h('div', { class: 'flex-col gap-lg' },

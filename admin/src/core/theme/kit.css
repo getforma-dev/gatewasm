@@ -1,0 +1,370 @@
+/* ==========================================================================
+   Shared component kit
+   ==========================================================================
+   Styles for the shared components in src/core/components/ui (Panel, Pill,
+   Pager, FilterBar, DataTable, charts) plus the button-variant spellings
+   those components emit. These rules previously lived only in
+   src/styles/main.css — loaded on a single route and wrapped in @layer —
+   so every other route rendered the shared kit unstyled. */
+
+/* ── Split layouts ─────────────────────────────────────────────────────── */
+.split {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(300px, 0.85fr);
+  gap: 0.75rem;
+  align-items: start;
+}
+
+.split.billing-split {
+  grid-template-columns: minmax(0, 1.25fr) minmax(340px, 1fr);
+}
+
+.split.invites-split {
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+}
+
+/* ── Panels ────────────────────────────────────────────────────────────── */
+.panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  padding: 1.25rem;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.panel-title {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+  font-family: 'Instrument Serif', Georgia, serif;
+  font-weight: 400;
+  font-size: 0.95rem;
+  letter-spacing: -0.005em;
+}
+
+.panel-title .muted,
+.panel-title .badge {
+  font-family: 'DM Mono', monospace;
+}
+
+/* ── Pills ─────────────────────────────────────────────────────────────── */
+.pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.15rem 0.45rem;
+  font-size: 0.65rem;
+  font-weight: 400;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  border: 1px solid transparent;
+}
+
+.pill.active, .pill.accepted, .pill.paid {
+  background: var(--success-dim);
+  color: var(--success);
+  border-color: var(--success-border);
+}
+
+.pill.pending, .pill.trial {
+  background: var(--warning-dim);
+  color: var(--warning);
+  border-color: var(--warning-border);
+}
+
+.pill.suspended, .pill.rejected, .pill.failed,
+.pill.revoked, .pill.refunded, .pill.expired {
+  background: var(--danger-dim);
+  color: var(--danger);
+  border-color: var(--danger-border);
+}
+
+.pill.unknown {
+  background: rgba(107, 106, 114, 0.08);
+  color: var(--text-dim);
+  border-color: rgba(107, 106, 114, 0.15);
+}
+
+/* ── Filter bar ────────────────────────────────────────────────────────── */
+.filters {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 0.55rem;
+  min-width: 0;
+  align-items: end;
+}
+
+form.filters > * { min-width: 0; }
+
+.filter-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+  align-items: end;
+  grid-column: 1 / -1;
+  min-width: 0;
+}
+
+.filter-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-width: 0;
+  flex: 1 1 150px;
+}
+
+.filter-field label {
+  font-size: 0.6rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+}
+
+.filter-total {
+  color: var(--text-dim);
+  font-size: 0.72rem;
+  align-self: center;
+  white-space: nowrap;
+}
+
+.filter-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  grid-column: 1 / -1;
+  justify-content: flex-end;
+}
+
+.filter-actions button {
+  flex: 1 1 100px;
+  max-width: 160px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-size: 0.68rem;
+}
+
+/* ── Forms ─────────────────────────────────────────────────────────────── */
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(175px, 1fr));
+  gap: 0.55rem;
+}
+
+.form-grid textarea { grid-column: 1 / -1; }
+
+.form-grid button[type="submit"] {
+  grid-column: 1 / -1;
+  justify-self: start;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+form.inline {
+  display: inline-flex;
+  gap: 0.5rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+/* ── Button-variant spellings the kit components emit ──────────────────────
+   Aliases of the canonical .btn-primary / .btn-danger / .btn-ghost /
+   .btn-sm declarations, for markup written as `btn primary`, `btn small`,
+   `btn small outline`, `btn danger`, `btn warning`. */
+.btn.primary {
+  background: var(--accent);
+  color: var(--bg);
+  border-color: var(--accent);
+  font-weight: 400;
+}
+
+.btn.primary:hover {
+  background: var(--accent-hover);
+  color: var(--bg);
+  border-color: var(--accent-hover);
+  box-shadow: 0 0 24px var(--accent-dim);
+}
+
+.btn.danger {
+  background: var(--danger-dim);
+  border-color: var(--danger-border);
+  color: var(--danger);
+}
+
+.btn.danger:hover {
+  background: rgba(248, 113, 113, 0.15);
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.btn.warning {
+  border-color: var(--warning-border);
+  background: var(--warning-dim);
+  color: var(--warning);
+}
+
+.btn.warning:hover {
+  background: rgba(251, 191, 36, 0.15);
+  border-color: var(--warning);
+}
+
+.btn.outline {
+  background: var(--surface-raised);
+  border-color: var(--border-accent);
+  color: var(--text-dim);
+}
+
+.btn.outline:hover {
+  background: var(--surface-overlay);
+  color: var(--text);
+  border-color: var(--border-strong);
+}
+
+.btn.small {
+  font-size: 0.65rem;
+  padding: 0.25rem 0.45rem;
+  letter-spacing: 0.04em;
+}
+
+/* ── Rows and sections ─────────────────────────────────────────────────── */
+.action-row {
+  display: flex;
+  gap: 0.3rem;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.action-row > * { flex: 0 0 auto; }
+
+.view-section {
+  margin-bottom: 1.25rem;
+}
+
+.view-section:last-child {
+  margin-bottom: 0;
+}
+
+.chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+}
+
+.empty {
+  color: var(--text-dim);
+  font-size: 0.8rem;
+  padding: 2rem 1.5rem;
+  text-align: center;
+  font-weight: 300;
+}
+
+.mono {
+  font-family: 'DM Mono', ui-monospace, monospace;
+}
+
+/* ── Bar charts ────────────────────────────────────────────────────────── */
+.chart-list {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.chart-row {
+  display: grid;
+  grid-template-columns: 82px 1fr 64px;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.75rem;
+}
+
+.chart-row span:first-child {
+  color: var(--text-dim);
+  font-size: 0.72rem;
+  font-weight: 300;
+}
+
+.chart-row strong {
+  text-align: right;
+  font-weight: 500;
+  font-size: 0.75rem;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.bar {
+  width: 100%;
+  background: rgba(196, 162, 101, 0.06);
+  border: 1px solid var(--border);
+  overflow: hidden;
+  height: 6px;
+}
+
+.bar > span {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent), var(--accent-hover));
+  transition: width 0.6s var(--ease);
+  box-shadow: 0 0 8px var(--accent-dim);
+}
+
+/* ── Tables ────────────────────────────────────────────────────────────── */
+.table-wrap {
+  width: 100%;
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  background: var(--bg);
+}
+
+.table-wrap table {
+  margin: 0;
+  border: 0;
+}
+
+.data-table-compact th,
+.data-table-compact td {
+  padding: 0.4rem 0.5rem;
+}
+
+/* ── Pager ─────────────────────────────────────────────────────────────── */
+.pager {
+  margin-top: 0.65rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  color: var(--text-dim);
+  font-size: 0.72rem;
+  font-weight: 300;
+}
+
+.pager .pager-actions {
+  display: inline-flex;
+  gap: 0.3rem;
+}
+
+.pager .pager-actions button {
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+/* ── Avatars ───────────────────────────────────────────────────────────── */
+.avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 999px;
+  border: 1px solid var(--border-accent);
+  background: linear-gradient(135deg, rgba(196, 162, 101, 0.18), rgba(16, 185, 129, 0.12));
+  color: var(--text);
+  font-size: 0.8rem;
+  letter-spacing: 0.04em;
+  flex: none;
+}
+
+.avatar.large {
+  width: 56px;
+  height: 56px;
+  font-size: 1.05rem;
+}
