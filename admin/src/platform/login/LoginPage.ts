@@ -4,11 +4,11 @@
 // as opaque calls and emits ISLAND_START/ISLAND_END opcodes.
 // ---------------------------------------------------------------------------
 
-import { h, createShow } from 'formajs';
+import { h } from 'formajs';
 import { AuthCard } from './AuthCard';
 import { MfaPanel } from './MfaPanel';
+import { InviteBanner, LoginCardHead, OnboardingCta } from './InviteIslands';
 import { FAuthMark } from '../console/helpers';
-import { inviteInfo, inviteLoading, ownerInviteToken } from './store';
 
 // ── Page component ──────────────────────────────────────────────────────
 // Static shell (hero, card head, footer) + island function calls.
@@ -48,63 +48,20 @@ export function LoginPage() {
     ),
 
     // ── Auth section ──────────────────────────────────────────────
+    // Everything invite-reactive is an ISLAND (InviteIslands.ts): the static
+    // shell is never adopted on the SSR route, so a reactive binding left
+    // out here is dead after load. Server output at the store defaults is
+    // identical either way; the islands are what make an arriving
+    // ?owner_invite token visibly do something.
     h('section', { class: 'auth' },
-      // Invite banner (shown when invite token resolves)
-      createShow(
-        () => inviteInfo() !== null && !inviteLoading(),
-        () => h('div', { class: 'invite-banner' },
-          h('p', { class: 'invite-banner-text' },
-            () => {
-              const info = inviteInfo()!;
-              const who = info.inviter_email || 'A team member';
-              const role = info.role.charAt(0).toUpperCase() + info.role.slice(1);
-              const where = info.tenant_names.length > 0
-                ? ' on ' + info.tenant_names.join(', ')
-                : '';
-              return who + ' invited you to join as ' + role + where;
-            },
-          ),
-        ),
-      ),
+      InviteBanner(),
 
       h('div', { class: 'card' },
-        // Card head (dynamic when invite present)
-        h('div', { class: 'card-head' },
-          // Expression bodies, not blocks: the compiler folds a ternary over
-          // the store's null default, so the server renders the real heading
-          // instead of an empty <h2> until hydration.
-          h('h2', null, () =>
-            !inviteInfo()
-              ? 'Platform Login'
-              : inviteInfo()!.user_exists ? 'Sign in to accept invite' : 'Create an account to accept'),
-          h('p', null, () =>
-            !inviteInfo()
-              ? 'Sign in to manage your tenants and account settings.'
-              : 'You need a fAuth account to join the team.'),
-        ),
-
         // Islands: function calls trigger Rule 11 → ISLAND_START/END
+        LoginCardHead(),
         AuthCard(),
         MfaPanel(),
-
-        // "New here?" footer
-        h('div', {
-          class: 'new-here mt-lg divider-top text-center text-sm text-muted-dim',
-        },
-          'New here? ',
-          h('a', {
-            // Ternary with a literal else-branch, not a concatenation: the
-            // compiler folds the branch it can evaluate (the signal defaults to
-            // '') into the server-rendered href. Written as
-            // `'/platform/onboarding' + (tok ? … : '')` the whole expression is
-            // one unresolvable concat, so the attribute was omitted entirely
-            // and the no-JS shell shipped a dead link.
-            href: () =>
-              ownerInviteToken()
-                ? '/platform/onboarding?owner_invite=' + encodeURIComponent(ownerInviteToken())
-                : '/platform/onboarding',
-          }, 'Start onboarding'),
-        ),
+        OnboardingCta(),
       ),
     ),
 

@@ -132,3 +132,32 @@ test('login: no DOM doubling after hydration @smoke @regression', async ({ page 
   await expect(page.locator('#password')).toHaveCount(1);
   await expect(page.locator('.card')).toHaveCount(1);
 });
+
+// --- Invite flow on the SSR route ---
+
+test('SSR page reacts to a resolved owner invite @regression', async ({ page }) => {
+  // Regression pin: when this route first entered SSR_ROUTES, the invite
+  // banner, card heading, and invite-carrying onboarding link lived in the
+  // static shell — which activateIslands never hydrates — so a resolved
+  // ?owner_invite token changed nothing on screen. They are islands now.
+  await page.route('**/platform/admin/invites/resolve*', (route) =>
+    route.fulfill({
+      json: {
+        invite_email: 'invitee@example.com',
+        inviter_email: 'boss@getforma.dev',
+        role: 'owner',
+        tenant_names: ['Acme'],
+        user_exists: true,
+      },
+    }));
+
+  await page.goto('/platform/login?owner_invite=TESTTOKEN', { waitUntil: 'networkidle' });
+
+  // The server folded 'Platform Login' into the shell; the hydrated island
+  // must swap in the invite copy once the token resolves.
+  await expect(page.locator('.card-head h2')).toHaveText('Sign in to accept invite');
+  await expect(page.locator('.invite-banner-text'))
+    .toContainText('boss@getforma.dev invited you to join as Owner on Acme');
+  await expect(page.locator('.new-here a'))
+    .toHaveAttribute('href', '/platform/onboarding?owner_invite=TESTTOKEN');
+});
