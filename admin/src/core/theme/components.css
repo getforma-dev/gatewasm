@@ -874,6 +874,14 @@
   position: relative;
 }
 
+/* The column axis suits the console (horizontal PlaneNav above the stage).
+   Rail layouts (owner dashboard, tenant admin/dashboard) put a 100vh
+   sidebar BESIDE the content — in a column the rail consumes the full
+   height and the content region renders at zero height. */
+.shell:has(> .sidebar-rail) {
+  flex-direction: row;
+}
+
 .shell-stage {
   min-width: 0;
   min-height: 0;
@@ -2358,9 +2366,16 @@
    ========================================================================== */
 
 @media (max-width: 680px) {
+  /* Stacked layout: the rail becomes a full-width header band, so the
+     rail shell returns to the column axis it uses nowhere else. */
+  .shell:has(> .sidebar-rail) {
+    flex-direction: column;
+  }
+
   .sidebar-rail,
   .sidebar-rail.collapsed {
     width: 100%;
+    height: auto;
     min-height: 0;
     border-right: 0;
     border-bottom: 1px solid var(--border);
