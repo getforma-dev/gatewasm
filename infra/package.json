@@ -4,6 +4,7 @@
   "private": true,
   "scripts": {
     "build": "tsc",
+    "test": "npm run build && node --test --test-concurrency=1 tests/*.test.cjs",
     "cdk": "cdk"
   },
   "dependencies": {

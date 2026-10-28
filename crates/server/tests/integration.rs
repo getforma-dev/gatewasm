@@ -132,6 +132,15 @@ async fn test_app_with_compliance(compliance: ComplianceConfig) -> (axum::Router
 /// Create a test app, returning both the router and the DB pool.
 /// Automatically creates a test tenant in the DB.
 async fn test_app_with_pool() -> (axum::Router, PgPool) {
+    test_app_with_keys(None).await
+}
+
+async fn test_app_with_keys(keys: Option<KeyPair>) -> (axum::Router, PgPool) {
+    let (state,pool)=test_state_with_keys(keys).await;
+    (handlers::create_router_without_rate_limit(state),pool)
+}
+
+async fn test_state_with_keys(keys: Option<KeyPair>) -> (AppState, PgPool) {
     let database_url = test_database_url();
 
     // Create a unique schema name for this test to avoid conflicts
@@ -213,7 +222,7 @@ async fn test_app_with_pool() -> (axum::Router, PgPool) {
         suppress_email: true,
     };
 
-    let keys = KeyPair::from_pem_or_generate(None);
+    let keys = keys.unwrap_or_else(||KeyPair::from_pem_or_generate(None));
 
     let (shutdown_tx, _) = tokio::sync::watch::channel(false);
     let state = AppState {
@@ -230,7 +239,7 @@ async fn test_app_with_pool() -> (axum::Router, PgPool) {
         shutdown_tx,
     };
 
-    (handlers::create_router_without_rate_limit(state), pool)
+    (state, pool)
 }
 
 /// Insert a test tenant directly into the DB.
@@ -11651,6 +11660,14 @@ async fn test_ssf_verify_stream() {
     let body = body_json(res).await;
     assert_eq!(body["message"], "Verification event queued");
     assert!(body["sequence_number"].as_i64().unwrap() > 0);
+    let set:String=sqlx::query_scalar("SELECT set_token FROM ssf_outbox WHERE stream_id=$1").bind(uuid::Uuid::parse_str(&stream_id).unwrap()).fetch_one(&pool).await.unwrap();
+    let header=jsonwebtoken::decode_header(&set).unwrap();assert_eq!(header.typ.as_deref(),Some("secevent+jwt"));
+    let jwks=body_json(app.clone().oneshot(get_request("/auth/jwks")).await.unwrap()).await;
+    let key=jwks["keys"].as_array().unwrap().iter().find(|key|key["kid"].as_str()==header.kid.as_deref()).unwrap();
+    let parts:Vec<_>=set.split('.').collect();let decoder=base64::engine::general_purpose::URL_SAFE_NO_PAD;
+    let claims:serde_json::Value=serde_json::from_slice(&decoder.decode(parts[1]).unwrap()).unwrap();assert!(claims.get("exp").is_none());
+    ring::signature::UnparsedPublicKey::new(&ring::signature::ED25519,decoder.decode(key["x"].as_str().unwrap()).unwrap()).verify(format!("{}.{}",parts[0],parts[1]).as_bytes(),&decoder.decode(parts[2]).unwrap()).unwrap();
+
 }
 
 #[tokio::test]
@@ -13037,4 +13054,295 @@ async fn hosted_code_refuses_mfa_expired_requests_and_pending_exhaustion() {
         .await
         .unwrap();
     assert_eq!(codes, 0);
+}
+
+
+struct SyntheticRemoteSigner(
+    ring::signature::Ed25519KeyPair,
+    std::sync::atomic::AtomicBool,
+);
+impl SyntheticRemoteSigner {
+    fn new() -> std::sync::Arc<Self> {
+        let doc = ring::signature::Ed25519KeyPair::generate_pkcs8(&ring::rand::SystemRandom::new())
+            .unwrap();
+        std::sync::Arc::new(Self(
+            ring::signature::Ed25519KeyPair::from_pkcs8(doc.as_ref()).unwrap(),
+            false.into(),
+        ))
+    }
+    fn public(&self, retire_after: Option<i64>) -> gatewasm_server::jwt::keys::PublicKey {
+        use ring::signature::KeyPair as _;
+        gatewasm_server::jwt::keys::PublicKey::new(
+            self.0.public_key().as_ref().to_vec(),
+            retire_after,
+        )
+    }
+}
+impl gatewasm_server::jwt::keys::RemoteSigner for SyntheticRemoteSigner {
+    fn sign<'a>(
+        &'a self,
+        message: &'a [u8],
+    ) -> futures_util::future::BoxFuture<'a, Result<Vec<u8>, String>> {
+        Box::pin(async move {
+            if self.1.load(std::sync::atomic::Ordering::SeqCst) {
+                Err("injected KMS denial/outage".into())
+            } else {
+                Ok(self.0.sign(message).as_ref().to_vec())
+            }
+        })
+    }
+}
+
+#[tokio::test]
+async fn kms_contract_refresh_survives_rotation_and_old_key_retires() {
+    let old = SyntheticRemoteSigner::new();
+    let next = SyntheticRemoteSigner::new();
+    let future = SyntheticRemoteSigner::new();
+    let ssf = SyntheticRemoteSigner::new();
+    let keys = KeyPair::remote(
+        old.clone(),
+        vec![old.public(None), next.public(None)],
+        ssf.clone(),
+        ssf.public(None),
+        900,
+    )
+    .unwrap();
+    let (mut state, _) = test_state_with_keys(Some(keys)).await;
+    let before = handlers::create_router_without_rate_limit(state.clone());
+    let (old_token, refresh, _) = register_user(
+        &before,
+        "kms-rotation@synthetic.invalid",
+        "Str0ngP@ss",
+        None,
+    )
+    .await;
+    let old_header = jsonwebtoken::decode_header(&old_token).unwrap();
+    assert_eq!(old_header.kid, Some(old.public(None).kid));
+    let now = chrono::Utc::now().timestamp();
+    state.keys = KeyPair::remote(
+        next.clone(),
+        vec![
+            next.public(None),
+            future.public(None),
+            old.public(Some(now + 960)),
+        ],
+        ssf.clone(),
+        ssf.public(None),
+        900,
+    )
+    .unwrap();
+    let after = handlers::create_router_without_rate_limit(state.clone());
+    // The verifier needs the tenant-scoped issuer/audience used by actual handlers.
+    let header = jsonwebtoken::decode_header(&old_token).unwrap();
+    let decoding = state
+        .keys
+        .verification_key(header.kid.as_deref().unwrap(), now)
+        .unwrap();
+    let mut validation = jsonwebtoken::Validation::new(jsonwebtoken::Algorithm::EdDSA);
+    validation.validate_aud = false;
+    jsonwebtoken::decode::<serde_json::Value>(&old_token, &decoding, &validation).unwrap();
+    next.1.store(true, std::sync::atomic::Ordering::SeqCst);
+    let denied = after
+        .clone()
+        .oneshot(json_request(
+            "POST",
+            "/auth/token",
+            serde_json::json!({"grant_type":"refresh_token","refresh_token":refresh}),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(denied.status(), StatusCode::INTERNAL_SERVER_ERROR);
+    let denied = body_json(denied).await;
+    assert!(denied.get("access_token").is_none());
+    assert!(denied.get("refresh_token").is_none());
+    next.1.store(false, std::sync::atomic::Ordering::SeqCst);
+    let response = after
+        .clone()
+        .oneshot(json_request(
+            "POST",
+            "/auth/token",
+            serde_json::json!({"grant_type":"refresh_token","refresh_token":refresh}),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let response = body_json(response).await;
+    let refreshed = response["access_token"].as_str().unwrap();
+    let header = jsonwebtoken::decode_header(refreshed).unwrap();
+    assert_eq!(header.kid, Some(next.public(None).kid));
+    jsonwebtoken::decode::<serde_json::Value>(
+        refreshed,
+        &state
+            .keys
+            .verification_key(header.kid.as_deref().unwrap(), now)
+            .unwrap(),
+        &validation,
+    )
+    .unwrap();
+    let retry_body =
+        serde_json::json!({"grant_type":"refresh_token","refresh_token":response["refresh_token"]});
+    let (one, two) = tokio::join!(
+        after
+            .clone()
+            .oneshot(json_request("POST", "/auth/token", retry_body.clone())),
+        after
+            .clone()
+            .oneshot(json_request("POST", "/auth/token", retry_body))
+    );
+    let statuses = [one.unwrap().status(), two.unwrap().status()];
+    assert_eq!(
+        statuses
+            .iter()
+            .filter(|status| **status == StatusCode::OK)
+            .count(),
+        1
+    );
+    assert_eq!(
+        statuses
+            .iter()
+            .filter(|status| **status == StatusCode::UNAUTHORIZED)
+            .count(),
+        1
+    );
+    assert!(state
+        .keys
+        .verification_key(old_header.kid.as_deref().unwrap(), now + 960)
+        .is_err());
+    assert!(!state
+        .keys
+        .public_keys(now + 960)
+        .iter()
+        .any(|key| Some(&key.kid) == old_header.kid.as_ref()));
+}
+
+#[tokio::test]
+async fn kms_manifest_persistence_stale_replica_restart_and_rollback_guards() {
+    use gatewasm_server::jwt::kms::{record_manifest, Manifest, PublicationReceipt};
+    let (mut state, pool) = test_state_with_keys(None).await;
+    let arn = |id: &str| format!("arn:aws:kms:us-east-1:123456789012:key/{id}");
+    let mut manifest = Manifest {
+        version: 1,
+        max_access_lifetime: 3600,
+        publication: None,
+        active: arn("a"),
+        next: arn("b"),
+        ssf: arn("s"),
+        previous: vec![],
+    };
+    record_manifest(&pool, &manifest, 900).await.unwrap();
+    record_manifest(&pool, &manifest, 900).await.unwrap();
+    state.keys = state.keys.with_manifest_guard(pool.clone(), 1);
+    let old_router = handlers::create_router_without_rate_limit(state.clone());
+    assert_eq!(
+        old_router
+            .clone()
+            .oneshot(get_request("/auth/jwks"))
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::OK
+    );
+    let now = chrono::Utc::now().timestamp();
+    manifest.version = 2;
+    manifest.publication = Some(PublicationReceipt {
+        next_key_id: manifest.next.clone(),
+        all_replicas_serving_since: now,
+        evidence: "synthetic-fleet-published".into(),
+    });
+    record_manifest(&pool, &manifest, 900).await.unwrap();
+    let stale = old_router
+        .clone()
+        .oneshot(get_request("/auth/jwks"))
+        .await
+        .unwrap();
+    assert_eq!(stale.status(), StatusCode::SERVICE_UNAVAILABLE);
+    assert_eq!(stale.headers()["cache-control"], "no-store");
+    assert_eq!(
+        old_router
+            .oneshot(get_request("/health"))
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::SERVICE_UNAVAILABLE
+    );
+    state.keys = state.keys.with_manifest_guard(pool.clone(), 2);
+    let new_router = handlers::create_router_without_rate_limit(state);
+    assert_eq!(
+        new_router
+            .oneshot(get_request("/auth/jwks"))
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::OK
+    );
+    // Restarting an identical generation is allowed; a conflicting/stale manifest is not.
+    record_manifest(&pool, &manifest, 900).await.unwrap();
+    let mut conflicting = manifest.clone();
+    conflicting.next = arn("c");
+    assert!(record_manifest(&pool, &conflicting, 900).await.is_err());
+    manifest.version = 1;
+    assert!(record_manifest(&pool, &manifest, 900).await.is_err());
+    manifest.version = 3;
+    manifest.next = arn("fresh-c");
+    manifest.publication = None;
+    record_manifest(&pool, &manifest, 900).await.unwrap();
+    manifest.version = 4;
+    manifest.next = arn("b");
+    assert!(record_manifest(&pool, &manifest, 900).await.unwrap_err().contains("fresh"), "removed next keys cannot return through manifest history");
+}
+
+#[tokio::test]
+async fn staged_management_rotation_is_retryable_audited_and_revokes_old_key() {
+    let (app, pool) = test_app_with_pool().await;
+    let (tenant, old) =
+        create_test_tenant_with_mgmt_key(&pool, "custody-rotation", "Synthetic Rotation").await;
+    let next = format!(
+        "mgmt_{}",
+        base64::engine::general_purpose::URL_SAFE_NO_PAD.encode([42; 32])
+    );
+    for _ in 0..2 {
+        let req = Request::builder()
+            .method("POST")
+            .uri(format!("/platform/tenants/{tenant}/rotate-key"))
+            .header("authorization", format!("Bearer {TEST_PLATFORM_KEY}"))
+            .header("content-type", "application/json")
+            .body(Body::from(serde_json::json!({"next_key":next}).to_string()))
+            .unwrap();
+        let res = app.clone().oneshot(req).await.unwrap();
+        assert_eq!(res.status(), StatusCode::OK);
+        let body = body_json(res).await;
+        assert_eq!(body["rotated"], true);
+        assert!(body.get("api_key").is_none());
+    }
+    for (key, expected) in [(&old, StatusCode::UNAUTHORIZED), (&next, StatusCode::OK)] {
+        let req = Request::builder()
+            .uri("/manage/config")
+            .header("authorization", format!("Bearer {key}"))
+            .body(Body::empty())
+            .unwrap();
+        assert_eq!(app.clone().oneshot(req).await.unwrap().status(), expected);
+    }
+    let uses:Vec<(String,String)>=sqlx::query_as("SELECT action,resource FROM audit_log WHERE action IN ('management.key.use','platform.key.use') ORDER BY action").fetch_all(&pool).await.unwrap();
+    assert_eq!(uses.len(), 3);
+    assert_eq!(
+        uses.iter()
+            .filter(|(action, _)| action == "management.key.use")
+            .count(),
+        1
+    );
+    assert!(!format!("{uses:?}").contains(&next));
+    sqlx::query("DROP TABLE audit_log")
+        .execute(&pool)
+        .await
+        .unwrap();
+    let req = Request::builder()
+        .uri("/manage/config")
+        .header("authorization", format!("Bearer {next}"))
+        .body(Body::empty())
+        .unwrap();
+    assert_eq!(
+        app.oneshot(req).await.unwrap().status(),
+        StatusCode::INTERNAL_SERVER_ERROR,
+        "privileged actions fail closed if durable auditing fails"
+    );
 }

@@ -46,7 +46,27 @@ async fn main() {
     bootstrap_platform_plane(&pool, &config).await;
 
     // JWT keys (EdDSA / Ed25519)
-    let keys = KeyPair::from_pem_or_generate(config.ed25519_private_key_pem.as_deref());
+    let require_kms =
+        gatewasm_server::jwt::kms::parse_required(match &std::env::var("FAUTH_REQUIRE_KMS") {
+            Ok(value) => Some(value.as_str()),
+            Err(std::env::VarError::NotPresent) => None,
+            Err(_) => panic!("Invalid FAUTH_REQUIRE_KMS encoding"),
+        })
+        .expect("Invalid FAUTH_REQUIRE_KMS");
+    let keys = match std::env::var("FAUTH_KMS_KEYRING_JSON") {
+        Ok(manifest) => {
+            if config.ed25519_private_key_pem.is_some() || config.ssf_signing_key_pem.is_some() {
+                panic!("KMS mode refuses process-readable signing key configuration");
+            }
+            gatewasm_server::jwt::kms::load(&manifest, &pool, config.access_token_expiry)
+                .await
+                .expect("KMS keyring initialization failed")
+        }
+        Err(std::env::VarError::NotPresent) if !require_kms => {
+            KeyPair::from_pem_or_generate(config.ed25519_private_key_pem.as_deref())
+        }
+        Err(_) => panic!("Required KMS keyring configuration is missing or invalid"),
+    };
 
     // Asset manifest (content-hashed filenames)
     let asset_manifest = assets::load_manifest();

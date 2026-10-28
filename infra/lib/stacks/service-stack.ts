@@ -3,7 +3,7 @@ import * as ec2 from 'aws-cdk-lib/aws-ec2';
 import * as rds from 'aws-cdk-lib/aws-rds';
 import * as secretsmanager from 'aws-cdk-lib/aws-secretsmanager';
 import { Construct } from 'constructs';
-import { Service } from '../constructs/service';
+import { Service, KmsKeyring } from '../constructs/service';
 import { Monitoring } from '../constructs/monitoring';
 import { OwnerSessionCanary } from '../constructs/owner-session-canary';
 
@@ -12,6 +12,7 @@ export interface ServiceStackProps extends cdk.StackProps {
   vpcConnectorSecurityGroup: ec2.SecurityGroup;
   rdsInstance: rds.DatabaseInstance;
   imageTag: string;
+  kmsKeyring?: KmsKeyring;
   repositoryName: string;
   serviceName: string;
   domainName: string;
@@ -28,6 +29,10 @@ export interface ServiceStackProps extends cdk.StackProps {
 export class ServiceStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props: ServiceStackProps) {
     super(scope, id, props);
+
+    if (props.kmsKeyring && (props.secretArns.Ed25519Key || props.secretArns.SsfSigningKey)) {
+      throw new Error('KMS custody forbids process-readable signing secret references');
+    }
 
     const authDomain = `${props.authSubdomain}.${props.domainName}`;
 
@@ -55,14 +60,15 @@ export class ServiceStack extends cdk.Stack {
       imageTag: props.imageTag,
       repositoryName: props.repositoryName,
       serviceName: props.serviceName,
-      ed25519Key: secret('Ed25519Key'),
+      ed25519Key: props.kmsKeyring ? undefined : secret('Ed25519Key'),
+      kmsKeyring: props.kmsKeyring,
       csrfSecret: secret('CsrfSecret'),
       platformAdminKey: secret('PlatformAdminKey'),
       oauthGoogle: secret('OAuthGoogle'),
       oauthGithub: secret('OAuthGithub'),
       smtp: smtpSecret,
       mfaEncryptionKey: mfaEncryptionKeySecret,
-      ssfSigningKey: ssfSigningKeySecret,
+      ssfSigningKey: props.kmsKeyring ? undefined : ssfSigningKeySecret,
       serverUrl: `https://${authDomain}`,
       platformDomain: props.domainName,
       platformOwnerEmails: props.platformOwnerEmails,

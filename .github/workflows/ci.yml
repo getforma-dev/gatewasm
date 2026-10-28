@@ -14,6 +14,24 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  custody-infrastructure:
+    name: Managed key custody infrastructure
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: infra/package-lock.json
+      - name: Validate synthesized key permissions and runtime configuration
+        run: |
+          npm ci --prefix infra
+          npm test --prefix infra
+      - name: Validate managed key rotation controls
+        run: python3 -m unittest discover -s handoff/forma-248 -p 'test_*.py'
+
   # Deliberately has no `needs:` and no admin build. The three cargo jobs all
   # gate on `frontend`, so when workspace resolution broke in March the failure
   # surfaced late and looked like a test failure. This fails in about a minute
@@ -25,6 +43,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: "1.93.1"
       - name: Workspace resolves against the committed lockfile
         run: cargo metadata --locked --format-version 1 > /dev/null
       - name: No path-sourced third-party crates
@@ -83,6 +103,8 @@ jobs:
           cache: npm
           cache-dependency-path: admin/package-lock.json
       - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: "1.93.1"
       - uses: Swatinem/rust-cache@v2
       - name: Build admin assets
         working-directory: admin
@@ -130,6 +152,8 @@ jobs:
           cache: npm
           cache-dependency-path: admin/package-lock.json
       - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: "1.93.1"
       - uses: Swatinem/rust-cache@v2
       - name: Build admin assets
         working-directory: admin
@@ -173,6 +197,8 @@ jobs:
           cache: npm
           cache-dependency-path: admin/package-lock.json
       - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: "1.93.1"
       - uses: Swatinem/rust-cache@v2
       - name: Build admin assets
         working-directory: admin

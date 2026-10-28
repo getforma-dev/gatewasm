@@ -50,6 +50,7 @@ async fn run_migrations(pool: &PgPool) -> Result<(), sqlx::Error> {
             include_str!("pg_migrations/004_gold_branding_default.sql"),
         ),
         (5, "hosted password authorization", include_str!("pg_migrations/005_hosted_authorization.sql")),
+        (6, "KMS keyring versions", include_str!("pg_migrations/006_keyring_versions.sql")),
     ];
 
     for &(version, label, sql) in migrations {

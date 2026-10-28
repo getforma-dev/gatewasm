@@ -226,7 +226,7 @@ pub async fn token_assertion(
         },
         &state.config,
         &state.keys,
-    )?;
+    ).await?;
 
     Ok((
         StatusCode::OK,

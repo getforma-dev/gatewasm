@@ -2,10 +2,13 @@
 name = "gatewasm-server"
 version.workspace = true
 edition.workspace = true
+rust-version = "1.93"
 license.workspace = true
 description = "Reference auth server implementation for the GateWASM protocol"
 
 [dependencies]
+aws-config = "=1.8.18"
+aws-sdk-kms = "=1.111.0"
 forma-ir = { workspace = true }
 forma-server = { workspace = true }
 axum = { version = "0.8", features = ["macros", "ws"] }

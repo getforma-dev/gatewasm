@@ -2,6 +2,7 @@
 import * as cdk from 'aws-cdk-lib';
 import { NetworkStack } from '../lib/stacks/network-stack';
 import { DatabaseStack } from '../lib/stacks/database-stack';
+import { KmsKeyring } from '../lib/constructs/service';
 import { ServiceStack } from '../lib/stacks/service-stack';
 import { CdnStack } from '../lib/stacks/cdn-stack';
 
@@ -14,6 +15,7 @@ interface EnvironmentConfig {
   authSubdomain: string;
   platformOwnerEmails: string;
   imageTag: string;
+  kmsKeyring?: KmsKeyring;
   serviceName: string;
   repositoryName: string;
   databaseName: string;
@@ -48,6 +50,7 @@ function readProdConfig(): EnvironmentConfig {
       (app.node.tryGetContext('gatewasm:platformOwnerEmails') as string | undefined) ??
       'victor@getforma.dev',
     imageTag,
+    kmsKeyring: app.node.tryGetContext('gatewasm:kmsKeyring') as KmsKeyring | undefined,
     serviceName: (app.node.tryGetContext('gatewasm:serviceName') as string | undefined) ?? 'gatewasm-server',
     repositoryName:
       (app.node.tryGetContext('gatewasm:repositoryName') as string | undefined) ?? 'gatewasm-server',
@@ -92,6 +95,7 @@ function readStagingConfig(baseImageTag: string): EnvironmentConfig | null {
       (app.node.tryGetContext('gatewasm:staging:platformOwnerEmails') as string | undefined) ??
       ((app.node.tryGetContext('gatewasm:platformOwnerEmails') as string | undefined) ??
         'victor@getforma.dev'),
+    kmsKeyring: app.node.tryGetContext('gatewasm:staging:kmsKeyring') as KmsKeyring | undefined,
     imageTag:
       (app.node.tryGetContext('gatewasm:staging:imageTag') as string | undefined) ?? baseImageTag,
     serviceName:
@@ -147,6 +151,7 @@ function createEnvironmentStacks(config: EnvironmentConfig): void {
     vpcConnectorSecurityGroup: networkStack.vpcConnectorSecurityGroup,
     rdsInstance: databaseStack.instance,
     imageTag: config.imageTag,
+    kmsKeyring: config.kmsKeyring,
     repositoryName: config.repositoryName,
     serviceName: config.serviceName,
     domainName: config.domainName,

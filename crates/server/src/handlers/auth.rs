@@ -783,7 +783,7 @@ pub async fn register(
         },
         &state.config,
         &state.keys,
-    )?;
+    ).await?;
 
     db::enforce_refresh_token_limit(&state.db, &user_id, tenant.as_ref().map_or(10, |t| t.security_config.max_sessions_per_user) as i64).await;
 
@@ -1355,7 +1355,7 @@ pub async fn login(
         },
         &state.config,
         &state.keys,
-    )?;
+    ).await?;
 
     let refresh_token = signing::create_refresh_token();
     let refresh_hash = signing::hash_token(&refresh_token);

@@ -5,7 +5,6 @@
 //! - `run_ssf_worker()`: spawned in main.rs, wakes on pg_notify or 1s fallback
 
 use hmac::{Hmac, Mac};
-use jsonwebtoken::{encode, Algorithm, Header};
 use serde::Serialize;
 use sha2::Sha256;
 use sqlx::PgPool;
@@ -92,12 +91,8 @@ pub async fn emit_ssf_event(
             seq_num: seq,
         };
 
-        // Sign with Ed25519 (same key used for access tokens)
-        let mut header = Header::new(Algorithm::EdDSA);
-        header.kid = Some(keys.kid.clone());
-        header.typ = Some("secevent+jwt".to_string());
-
-        let set_token = match encode(&header, &claims, &keys.encoding_key) {
+        // SETs use a dedicated KMS key with independent verification retention.
+        let set_token = match keys.sign_security_event(&claims).await {
             Ok(token) => token,
             Err(e) => {
                 tracing::error!(error = %e, stream_id = %stream_id, "Failed to sign SET token");

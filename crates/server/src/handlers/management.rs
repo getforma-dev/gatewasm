@@ -762,10 +762,18 @@ pub async fn delete_tenant(
     Ok(StatusCode::NO_CONTENT)
 }
 
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RotateManagedKeyRequest {
+    pub next_key: Option<String>,
+}
+
 /// POST /platform/tenants/:id/rotate-key — Rotate the management API key.
+/// Operators can stage next_key in Secrets Manager first, making retries recoverable.
 pub async fn rotate_api_key(
     State(state): State<AppState>,
     Path(tenant_id): Path<String>,
+    staged: Option<Json<RotateManagedKeyRequest>>,
 ) -> Result<impl IntoResponse, AppError> {
     let exists = sqlx::query_scalar::<_, String>("SELECT id FROM tenants WHERE id = $1")
         .bind(&tenant_id)
@@ -779,7 +787,22 @@ pub async fn rotate_api_key(
         });
     }
 
-    let new_key = format!("mgmt_{}", uuid::Uuid::new_v4());
+    let staged = staged.and_then(|Json(body)| body.next_key);
+    let externally_staged = staged.is_some();
+    let new_key = match staged {
+        Some(key) => {
+            let suffix = key.strip_prefix("mgmt_").unwrap_or("");
+            if suffix.len() != 43
+                || !suffix
+                    .bytes()
+                    .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
+            {
+                return Err(AppError::BadRequest{error:"invalid_management_key",message:"Staged keys require 32 random bytes encoded as unpadded base64url with mgmt_ prefix".into()});
+            }
+            key
+        }
+        None => format!("mgmt_{}", uuid::Uuid::new_v4()),
+    };
     let prefix = crate::text::truncate_chars(&new_key, 13);
     let hash = signing::hash_token(&new_key);
 
@@ -794,10 +817,14 @@ pub async fn rotate_api_key(
 
     Ok((
         StatusCode::OK,
-        Json(serde_json::json!({
-            "api_key": new_key,
-            "note": "Save this API key in backend secrets only — it will not be shown again. The old key is now invalid."
-        })),
+        Json(if externally_staged {
+            serde_json::json!({"rotated":true,"tenant_id":tenant_id})
+        } else {
+            serde_json::json!({
+                "api_key": new_key,
+                "note": "Save this API key in backend secrets only — it will not be shown again. The old key is now invalid."
+            })
+        }),
     ))
 }
 

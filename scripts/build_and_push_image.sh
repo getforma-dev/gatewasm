@@ -15,15 +15,16 @@ region="${AWS_REGION:-us-east-1}"
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$(cd "${script_dir}/.." && pwd)"
 
+source_revision="$(git -C "${repo_root}" rev-parse HEAD)"
+if [[ -n "$(git -C "${repo_root}" status --porcelain --untracked-files=normal)" ]]; then
+  echo "Refusing an image identity for a dirty source tree (including untracked files)." >&2
+  exit 1
+fi
+
 echo "Logging in to ECR (${repo_uri})..."
 aws ecr get-login-password --region "${region}" | \
   docker login --username AWS --password-stdin "$(dirname "${repo_uri}")"
 
-source_revision="$(git -C "${repo_root}" rev-parse HEAD)"
-if [[ -n "$(git -C "${repo_root}" status --porcelain --untracked-files=no)" ]]; then
-  echo "Refusing an image identity for a dirty source tree." >&2
-  exit 1
-fi
 echo "Building image ${repo_uri}:${tag}..."
 docker build \
   --platform linux/amd64 \
