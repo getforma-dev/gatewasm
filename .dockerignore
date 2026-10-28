@@ -1,0 +1,34 @@
+# Only build inputs enter the context, including for direct docker build callers.
+**
+!Cargo.toml
+!Cargo.lock
+!.cargo/
+!.cargo/config.toml
+!crates/
+!crates/**
+!bridge/
+!bridge/**
+!specs/
+!specs/**
+!admin/
+!admin/package.json
+!admin/package-lock.json
+!admin/build.ts
+!admin/tsconfig.json
+!admin/src/
+!admin/src/**
+!admin/scripts/
+!admin/scripts/write-build-identity.mjs
+# Never admit local caches, VCS state, environment files or private material.
+**/.git
+**/target
+**/node_modules
+**/dist
+**/__pycache__
+**/.env*
+**/*.pem
+**/*.key
+**/*.p12
+**/*.pfx
+**/*.db
+**/*.log

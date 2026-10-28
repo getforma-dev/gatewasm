@@ -15,24 +15,12 @@ region="${AWS_REGION:-us-east-1}"
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$(cd "${script_dir}/.." && pwd)"
 
-source_revision="$(git -C "${repo_root}" rev-parse HEAD)"
-if [[ -n "$(git -C "${repo_root}" status --porcelain --untracked-files=normal)" ]]; then
-  echo "Refusing an image identity for a dirty source tree (including untracked files)." >&2
-  exit 1
-fi
+# Finish and qualify the committed image before authenticating to the registry.
+"${script_dir}/build_local_image.sh" "${repo_uri}:${tag}"
 
 echo "Logging in to ECR (${repo_uri})..."
 aws ecr get-login-password --region "${region}" | \
   docker login --username AWS --password-stdin "$(dirname "${repo_uri}")"
-
-echo "Building image ${repo_uri}:${tag}..."
-docker build \
-  --platform linux/amd64 \
-  --build-arg "GATEWASM_SOURCE_REVISION=${source_revision}" \
-  --label "org.opencontainers.image.revision=${source_revision}" \
-  -f "${repo_root}/crates/server/Dockerfile" \
-  -t "${repo_uri}:${tag}" \
-  "${repo_root}"
 
 echo "Pushing immutable image tag ${tag}..."
 docker push "${repo_uri}:${tag}"
