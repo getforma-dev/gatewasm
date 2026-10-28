@@ -4,16 +4,207 @@ use ring::signature::{Ed25519KeyPair as RingEd25519, KeyPair as RingKeyPair};
 use sha2::{Digest, Sha256};
 use std::sync::Arc;
 
+use futures_util::future::BoxFuture;
+use jsonwebtoken::{
+    errors::{Error, ErrorKind},
+    Algorithm, Header,
+};
+use serde::Serialize;
+
+pub trait RemoteSigner: Send + Sync {
+    fn sign<'a>(&'a self, message: &'a [u8]) -> BoxFuture<'a, Result<Vec<u8>, String>>;
+}
+
+#[derive(Clone)]
+pub struct PublicKey {
+    pub kid: String,
+    pub bytes: Vec<u8>,
+    pub retire_after: Option<i64>,
+}
+impl PublicKey {
+    pub fn new(bytes: Vec<u8>, retire_after: Option<i64>) -> Self {
+        Self {
+            kid: KeyPair::compute_kid(&bytes),
+            bytes,
+            retire_after,
+        }
+    }
+}
+
+#[derive(Clone)]
+enum Signer {
+    Local(Arc<EncodingKey>),
+    Remote(Arc<dyn RemoteSigner>),
+}
+
 #[derive(Clone)]
 pub struct KeyPair {
     pub kid: String,
-    pub encoding_key: Arc<EncodingKey>,
-    pub decoding_key: Arc<DecodingKey>,
-    /// Raw 32-byte Ed25519 public key (for JWKS `x` field)
     pub public_key_bytes: Vec<u8>,
+    signer: Signer,
+    verification_keys: Arc<Vec<PublicKey>>,
+    ssf: Option<(Signer, PublicKey)>,
+    max_access_lifetime: u64,
+    manifest_guard: Option<(sqlx::PgPool, i64)>,
 }
 
 impl KeyPair {
+    pub fn remote(
+        signer: Arc<dyn RemoteSigner>,
+        keys: Vec<PublicKey>,
+        ssf_signer: Arc<dyn RemoteSigner>,
+        ssf_key: PublicKey,
+        max_access_lifetime: u64,
+    ) -> Result<Self, String> {
+        let mut ids = std::collections::HashSet::new();
+        if keys.len() < 2
+            || keys.len() > 10
+            || max_access_lifetime == 0
+            || keys.iter().chain(std::iter::once(&ssf_key)).any(|key| {
+                key.bytes.len() != 32
+                    || key.kid != Self::compute_kid(&key.bytes)
+                    || !ids.insert(&key.kid)
+            })
+        {
+            return Err(
+                "Remote keyring needs distinct valid current, next and dedicated SSF keys".into(),
+            );
+        }
+        let active = &keys[0];
+        Ok(Self {
+            kid: active.kid.clone(),
+            public_key_bytes: active.bytes.clone(),
+            signer: Signer::Remote(signer),
+            verification_keys: Arc::new(keys),
+            ssf: Some((Signer::Remote(ssf_signer), ssf_key)),
+            max_access_lifetime,
+            manifest_guard: None,
+        })
+    }
+
+    pub fn with_manifest_guard(mut self, pool: sqlx::PgPool, version: i64) -> Self {
+        self.manifest_guard = Some((pool, version));
+        self
+    }
+
+    pub async fn serving_current_generation(&self) -> bool {
+        match &self.manifest_guard {
+            None => true,
+            Some((pool, version)) => {
+                sqlx::query_scalar::<_, i64>("SELECT MAX(version) FROM signing_keyring_versions")
+                    .fetch_one(pool)
+                    .await
+                    .is_ok_and(|current| current == *version)
+            }
+        }
+    }
+
+    /// Keys that may verify access JWTs: current, next and unexpired previous.
+    /// The dedicated SSF signing key is deliberately excluded.
+    pub fn access_public_keys(&self, now: i64) -> Vec<PublicKey> {
+        self.verification_keys
+            .iter()
+            .filter(|key| key.retire_after.is_none_or(|t| t > now))
+            .cloned()
+            .collect()
+    }
+
+    /// Historical SETs have no expiry, so their signing key has a separate
+    /// public lifetime from the rotating access-token keys.
+    pub fn security_event_public_keys(&self) -> Vec<PublicKey> {
+        match &self.ssf {
+            Some((_, key)) => vec![key.clone()],
+            // Preserve the existing local-development signer contract. KMS
+            // custody always supplies a distinct dedicated SSF key.
+            None => vec![PublicKey::new(self.public_key_bytes.clone(), None)],
+        }
+    }
+
+    pub fn verification_key(&self, kid: &str, now: i64) -> Result<DecodingKey, Error> {
+        self.verification_keys
+            .iter()
+            .find(|key| key.kid == kid && key.retire_after.is_none_or(|t| t > now))
+            .map(|key| DecodingKey::from_ed_der(&key.bytes))
+            .ok_or_else(|| ErrorKind::InvalidToken.into())
+    }
+
+    pub async fn sign_access<T: Serialize>(&self, claims: &T) -> Result<String, Error> {
+        let value =
+            serde_json::to_value(claims).map_err(|_| Error::from(ErrorKind::InvalidToken))?;
+        let iat = value
+            .get("iat")
+            .and_then(|v| v.as_u64())
+            .ok_or(ErrorKind::InvalidToken)?;
+        let exp = value
+            .get("exp")
+            .and_then(|v| v.as_u64())
+            .ok_or(ErrorKind::InvalidToken)?;
+        if exp <= iat || exp - iat > self.max_access_lifetime {
+            return Err(ErrorKind::InvalidToken.into());
+        }
+        let mut header = Header::new(Algorithm::EdDSA);
+        header.kid = Some(self.kid.clone());
+        Self::sign_with(&self.signer, &self.public_key_bytes, &header, claims).await
+    }
+
+    pub async fn sign_security_event<T: Serialize>(&self, claims: &T) -> Result<String, Error> {
+        // SSF 1.0 section4.1.7 forbids exp. Its dedicated key is retained independently.
+        if serde_json::to_value(claims)
+            .map_err(|_| Error::from(ErrorKind::InvalidToken))?
+            .get("exp")
+            .is_some()
+        {
+            return Err(ErrorKind::InvalidToken.into());
+        }
+        let (signer, kid, bytes) = match &self.ssf {
+            Some((signer, key)) => (signer, key.kid.as_str(), key.bytes.as_slice()),
+            None => (
+                &self.signer,
+                self.kid.as_str(),
+                self.public_key_bytes.as_slice(),
+            ),
+        };
+        let mut header = Header::new(Algorithm::EdDSA);
+        header.kid = Some(kid.into());
+        header.typ = Some("secevent+jwt".into());
+        Self::sign_with(signer, bytes, &header, claims).await
+    }
+
+    async fn sign_with<T: Serialize>(
+        signer: &Signer,
+        public: &[u8],
+        header: &Header,
+        claims: &T,
+    ) -> Result<String, Error> {
+        match signer {
+            Signer::Local(key) => jsonwebtoken::encode(header, claims, key),
+            Signer::Remote(remote) => {
+                let header = URL_SAFE_NO_PAD.encode(
+                    serde_json::to_vec(header).map_err(|_| Error::from(ErrorKind::InvalidToken))?,
+                );
+                let payload = URL_SAFE_NO_PAD.encode(
+                    serde_json::to_vec(claims).map_err(|_| Error::from(ErrorKind::InvalidToken))?,
+                );
+                let input = format!("{header}.{payload}");
+                if input.len() > 4096 {
+                    return Err(ErrorKind::InvalidToken.into());
+                }
+                let signature = remote.sign(input.as_bytes()).await.map_err(|_| {
+                    tracing::error!("KMS signing refused; no local fallback");
+                    Error::from(ErrorKind::InvalidToken)
+                })?;
+                if signature.len() != 64
+                    || ring::signature::UnparsedPublicKey::new(&ring::signature::ED25519, public)
+                        .verify(input.as_bytes(), &signature)
+                        .is_err()
+                {
+                    return Err(ErrorKind::InvalidSignature.into());
+                }
+                Ok(format!("{input}.{}", URL_SAFE_NO_PAD.encode(signature)))
+            }
+        }
+    }
+
     /// Compute a stable key ID from the raw 32-byte Ed25519 public key.
     ///
     /// kid = base64url(SHA-256(public_key_bytes)[0..8])  — 11 URL-safe characters.
@@ -25,7 +216,8 @@ impl KeyPair {
     /// Load from a PEM-encoded Ed25519 private key, or auto-generate an ephemeral keypair.
     ///
     /// Ephemeral keys mean tokens won't survive a server restart — suitable for dev.
-    /// For production, set the `ED25519_PRIVATE_KEY` env var with a PKCS#8 PEM key.
+    /// Legacy/development only: this exposes private key material to the process.
+    /// Real-organization custody requires `FAUTH_REQUIRE_KMS=true` and a KMS manifest.
     pub fn from_pem_or_generate(pem: Option<&str>) -> Self {
         match pem {
             Some(pem_str) => Self::from_pem(pem_str),
@@ -52,14 +244,16 @@ impl KeyPair {
                 .expect("Ed25519 key is neither valid PKCS#8 v1 (ring) nor v2 (OpenSSL 3.x)"),
         };
 
-        let decoding_key = DecodingKey::from_ed_der(&public_key_bytes);
         let kid = Self::compute_kid(&public_key_bytes);
 
         Self {
             kid,
-            encoding_key: Arc::new(encoding_key),
-            decoding_key: Arc::new(decoding_key),
+            signer: Signer::Local(Arc::new(encoding_key)),
+            verification_keys: Arc::new(vec![PublicKey::new(public_key_bytes.clone(), None)]),
             public_key_bytes,
+            ssf: None,
+            max_access_lifetime: u64::MAX,
+            manifest_guard: None,
         }
     }
 
@@ -71,14 +265,16 @@ impl KeyPair {
         let public_key_bytes = pair.public_key().as_ref().to_vec();
 
         let encoding_key = EncodingKey::from_ed_der(pkcs8_doc.as_ref());
-        let decoding_key = DecodingKey::from_ed_der(public_key_bytes.as_slice());
         let kid = Self::compute_kid(&public_key_bytes);
 
         Self {
             kid,
-            encoding_key: Arc::new(encoding_key),
-            decoding_key: Arc::new(decoding_key),
+            signer: Signer::Local(Arc::new(encoding_key)),
+            verification_keys: Arc::new(vec![PublicKey::new(public_key_bytes.clone(), None)]),
             public_key_bytes,
+            ssf: None,
+            max_access_lifetime: u64::MAX,
+            manifest_guard: None,
         }
     }
 }
@@ -129,11 +325,11 @@ mod tests {
 
     #[test]
     fn test_generate_pem_for_secrets_manager() {
-        // Utility: run with --nocapture to get a PEM key for AWS Secrets Manager
+        // Synthetic key round-trip only; private material must never enter test logs.
         let rng = ring::rand::SystemRandom::new();
         let pkcs8_doc = RingEd25519::generate_pkcs8(&rng).unwrap();
         let pem_str = pem::encode(&pem::Pem::new("PRIVATE KEY", pkcs8_doc.as_ref().to_vec()));
-        eprintln!("\n--- Ring-compatible Ed25519 PEM key ---\n{}", pem_str);
+
         // Verify it works with from_pem
         let kp = KeyPair::from_pem(&pem_str);
         assert_eq!(kp.public_key_bytes.len(), 32);
@@ -146,5 +342,155 @@ mod tests {
         let pem_str = pem::encode(&pem::Pem::new("PRIVATE KEY", pkcs8_doc.as_ref().to_vec()));
         let kp = KeyPair::from_pem(&pem_str);
         assert_eq!(kp.public_key_bytes.len(), 32);
+    }
+    struct FakeRemote {
+        pair: RingEd25519,
+        mode: std::sync::atomic::AtomicUsize,
+        calls: std::sync::atomic::AtomicUsize,
+    }
+    impl FakeRemote {
+        fn new() -> Arc<Self> {
+            let doc = RingEd25519::generate_pkcs8(&ring::rand::SystemRandom::new()).unwrap();
+            Arc::new(Self {
+                pair: RingEd25519::from_pkcs8(doc.as_ref()).unwrap(),
+                mode: 0.into(),
+                calls: 0.into(),
+            })
+        }
+        fn public(&self, retire_after: Option<i64>) -> PublicKey {
+            PublicKey::new(self.pair.public_key().as_ref().to_vec(), retire_after)
+        }
+    }
+    impl RemoteSigner for FakeRemote {
+        fn sign<'a>(&'a self, message: &'a [u8]) -> BoxFuture<'a, Result<Vec<u8>, String>> {
+            Box::pin(async move {
+                use std::sync::atomic::Ordering::SeqCst;
+                self.calls.fetch_add(1, SeqCst);
+                match self.mode.load(SeqCst) {
+                    1 => Err("injected unavailable or denied".into()),
+                    2 => Ok(vec![0; 64]),
+                    3 => Ok(vec![0; 65]),
+                    _ => Ok(self.pair.sign(message).as_ref().to_vec()),
+                }
+            })
+        }
+    }
+    #[tokio::test]
+    async fn remote_signing_fail_closed_limits_and_recovery() {
+        use std::sync::atomic::Ordering::SeqCst;
+        let access = FakeRemote::new();
+        let next = FakeRemote::new();
+        let ssf = FakeRemote::new();
+        let keys = KeyPair::remote(
+            access.clone(),
+            vec![access.public(None), next.public(None)],
+            ssf.clone(),
+            ssf.public(None),
+            900,
+        )
+        .unwrap();
+        let now = chrono::Utc::now().timestamp();
+        let claims = serde_json::json!({"iat":now,"exp":now+900,"sub":"synthetic"});
+        let token = keys.sign_access(&claims).await.unwrap();
+        let header = jsonwebtoken::decode_header(&token).unwrap();
+        assert_eq!(header.alg, Algorithm::EdDSA);
+        assert_eq!(header.typ.as_deref(), Some("JWT"));
+        assert_eq!(header.kid, Some(keys.kid.clone()));
+        let mut validation = jsonwebtoken::Validation::new(Algorithm::EdDSA);
+        validation.validate_aud = false;
+        jsonwebtoken::decode::<serde_json::Value>(
+            &token,
+            &keys.verification_key(&keys.kid, now).unwrap(),
+            &validation,
+        )
+        .unwrap();
+        for mode in [1, 2, 3] {
+            access.mode.store(mode, SeqCst);
+            assert!(keys.sign_access(&claims).await.is_err());
+        }
+        access.mode.store(0, SeqCst);
+        assert!(keys.sign_access(&claims).await.is_ok());
+        let before = access.calls.load(SeqCst);
+        assert!(keys
+            .sign_access(&serde_json::json!({"iat":now,"exp":now+901}))
+            .await
+            .is_err());
+        assert!(keys
+            .sign_access(&serde_json::json!({"iat":now,"exp":now+900,"oversized":"x".repeat(4096)}))
+            .await
+            .is_err());
+        assert_eq!(
+            access.calls.load(SeqCst),
+            before,
+            "invalid or oversized requests must not reach KMS"
+        );
+        assert!(keys.verification_key("unknown-kid", now).is_err());
+    }
+    #[tokio::test]
+    async fn rotation_overlap_and_ssf_history_are_independent() {
+        let old = FakeRemote::new();
+        let active = FakeRemote::new();
+        let next = FakeRemote::new();
+        let ssf = FakeRemote::new();
+        let now = chrono::Utc::now().timestamp();
+        let retire = now + 960;
+        let keys = KeyPair::remote(
+            active.clone(),
+            vec![
+                active.public(None),
+                next.public(None),
+                old.public(Some(retire)),
+            ],
+            ssf.clone(),
+            ssf.public(None),
+            900,
+        )
+        .unwrap();
+        let old_id = old.public(None).kid;
+        let ssf_id = ssf.public(None).kid;
+        assert!(keys.verification_key(&old_id, retire - 1).is_ok());
+        assert!(keys.verification_key(&old_id, retire).is_err());
+        assert!(keys
+            .access_public_keys(retire - 1)
+            .iter()
+            .any(|k| k.kid == old_id));
+        assert!(!keys
+            .access_public_keys(retire)
+            .iter()
+            .any(|k| k.kid == old_id));
+        assert!(!keys
+            .access_public_keys(retire - 1)
+            .iter()
+            .any(|k| k.kid == ssf_id));
+        assert!(keys
+            .security_event_public_keys()
+            .iter()
+            .any(|k| k.kid == ssf_id));
+        assert!(
+            keys.verification_key(&ssf_id, now).is_err(),
+            "SET signing key cannot verify access JWTs"
+        );
+        let claims = serde_json::json!({"iat":now,"jti":"historical-event","events":{"https://schemas.openid.net/secevent/ssf/event-type/verification":{}}});
+        let token = keys.sign_security_event(&claims).await.unwrap();
+        let parts: Vec<_> = token.split('.').collect();
+        let header = jsonwebtoken::decode_header(&token).unwrap();
+        assert_eq!(header.typ.as_deref(), Some("secevent+jwt"));
+        assert_eq!(header.kid, Some(ssf_id));
+        let payload: serde_json::Value =
+            serde_json::from_slice(&URL_SAFE_NO_PAD.decode(parts[1]).unwrap()).unwrap();
+        assert!(payload.get("exp").is_none());
+        ring::signature::UnparsedPublicKey::new(
+            &ring::signature::ED25519,
+            ssf.pair.public_key().as_ref(),
+        )
+        .verify(
+            format!("{}.{}", parts[0], parts[1]).as_bytes(),
+            &URL_SAFE_NO_PAD.decode(parts[2]).unwrap(),
+        )
+        .unwrap();
+        assert!(keys
+            .sign_security_event(&serde_json::json!({"iat":now,"exp":now+900}))
+            .await
+            .is_err());
     }
 }

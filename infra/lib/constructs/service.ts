@@ -7,6 +7,16 @@ import * as secretsmanager from 'aws-cdk-lib/aws-secretsmanager';
 import * as rds from 'aws-cdk-lib/aws-rds';
 import { CfnOutput } from 'aws-cdk-lib';
 
+export interface KmsKeyring {
+  version: number;
+  max_access_lifetime: number;
+  publication: { next_key_id: string; all_replicas_serving_since: number; evidence: string } | null;
+  active: string;
+  next: string;
+  ssf: string;
+  previous: Array<{ key_id: string; last_issued_at: number | null; retire_after: number | null; drain_receipt: string | null }>;
+}
+
 export interface ServiceProps {
   vpc: ec2.Vpc;
   vpcConnectorSecurityGroup: ec2.SecurityGroup;
@@ -14,7 +24,8 @@ export interface ServiceProps {
   imageTag: string;
   repositoryName: string;
   serviceName: string;
-  ed25519Key: secretsmanager.ISecret;
+  ed25519Key?: secretsmanager.ISecret;
+  kmsKeyring?: KmsKeyring;
   csrfSecret: secretsmanager.ISecret;
   platformAdminKey: secretsmanager.ISecret;
   oauthGoogle: secretsmanager.ISecret;
@@ -58,12 +69,23 @@ export class Service extends Construct {
 
     // Grant read access to all secrets
     const secrets = [
-      props.ed25519Key,
       props.csrfSecret,
       props.platformAdminKey,
       props.oauthGoogle,
       props.oauthGithub,
     ];
+    if (props.kmsKeyring && (props.ed25519Key || props.ssfSigningKey)) {
+      throw new Error('KMS custody forbids process-readable signing secrets');
+    }
+    if (!props.kmsKeyring && !props.ed25519Key) throw new Error('Signing configuration is required');
+    if (props.ed25519Key) secrets.push(props.ed25519Key);
+    if (props.kmsKeyring) {
+      const ring=props.kmsKeyring;
+      const publicKeys=[ring.active,ring.next,ring.ssf,...ring.previous.map(key=>key.key_id)];
+      if (new Set(publicKeys).size !== publicKeys.length || publicKeys.some(key=>!/^arn:aws:kms:[a-z0-9-]+:\d{12}:key\/[a-zA-Z0-9-]+$/.test(key))) throw new Error('KMS keyring requires distinct immutable key ARNs');
+      instanceRole.addToPolicy(new iam.PolicyStatement({ actions:['kms:GetPublicKey','kms:DescribeKey'], resources:publicKeys }));
+      instanceRole.addToPolicy(new iam.PolicyStatement({ actions:['kms:Sign'], resources:[ring.active,ring.ssf], conditions:{ StringEquals:{ 'kms:SigningAlgorithm':'ED25519_SHA_512', 'kms:MessageType':'RAW' } } }));
+    }
     if (props.smtp) {
       secrets.push(props.smtp);
     }
@@ -99,7 +121,6 @@ export class Service extends Construct {
       { name: 'DB_PASSWORD', value: `${rdsSecretArn}:password::` },
       { name: 'DB_NAME', value: `${rdsSecretArn}:dbname::` },
       // App secrets (plain string)
-      { name: 'ED25519_PRIVATE_KEY', value: props.ed25519Key.secretArn },
       { name: 'CSRF_SECRET', value: props.csrfSecret.secretArn },
       { name: 'PLATFORM_ADMIN_KEY', value: props.platformAdminKey.secretArn },
       // OAuth (JSON field extraction)
@@ -108,6 +129,7 @@ export class Service extends Construct {
       { name: 'GITHUB_CLIENT_ID', value: `${props.oauthGithub.secretArn}:client_id::` },
       { name: 'GITHUB_CLIENT_SECRET', value: `${props.oauthGithub.secretArn}:client_secret::` },
     ];
+    if (props.ed25519Key) runtimeEnvironmentSecrets.push({ name:'ED25519_PRIVATE_KEY', value:props.ed25519Key.secretArn });
     if (props.smtp) {
       runtimeEnvironmentSecrets.push(
         { name: 'SMTP_HOST', value: `${props.smtp.secretArn}:host::` },
@@ -155,6 +177,7 @@ export class Service extends Construct {
             // from individual DB_* env vars to avoid shell quoting issues
             // with special characters in the RDS auto-generated password.
             runtimeEnvironmentVariables: [
+              ...(props.kmsKeyring ? [{ name:'FAUTH_REQUIRE_KMS', value:'true' }, { name:'FAUTH_KMS_KEYRING_JSON', value:JSON.stringify(props.kmsKeyring) }] : []),
               { name: 'PORT', value: '3001' },
               { name: 'HOST', value: '0.0.0.0' },
               { name: 'SERVER_URL', value: props.serverUrl },

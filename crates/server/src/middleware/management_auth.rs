@@ -49,6 +49,13 @@ pub async fn require_management_auth(
     let ctx = resolve_from_api_key(bearer, &state).await?;
     tracing::debug!(tenant_id = %ctx.tenant_id, auth_mode = "mgmt_key", "Management API authenticated");
 
+    audit_key_use(
+        &state,
+        req.uri().path(),
+        &ctx.tenant_id,
+        "management.key.use",
+    )
+    .await?;
     req.extensions_mut().insert(ctx);
     Ok(next.run(req).await)
 }
@@ -161,5 +168,20 @@ pub async fn require_platform_admin(
         });
     }
 
+    audit_key_use(&state, req.uri().path(), "platform", "platform.key.use").await?;
     Ok(next.run(req).await)
+}
+
+/// Every accepted privileged-key request is durably audited before its handler runs.
+/// No bearer value, token prefix, query string or secret value enters this record.
+async fn audit_key_use(
+    state: &AppState,
+    resource: &str,
+    tenant: &str,
+    action: &str,
+) -> Result<(), AppError> {
+    sqlx::query("INSERT INTO audit_log (event_id,timestamp,tenant_id,action,resource,result,compliance_mode) VALUES ($1,NOW(),$2,$3,$4,'success',$5)")
+        .bind(format!("evt_{}",uuid::Uuid::new_v4())).bind(tenant).bind(action).bind(resource)
+        .bind(state.config.compliance.mode.to_string()).execute(&state.db).await?;
+    Ok(())
 }

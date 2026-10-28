@@ -732,7 +732,7 @@ pub async fn verify(
         },
         &state.config,
         &state.keys,
-    )?;
+    ).await?;
 
     // Keep verification sticky across token rotation for a bounded time window.
     let mfa_expires_at = Utc::now() + Duration::hours(24);

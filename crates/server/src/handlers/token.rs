@@ -258,7 +258,7 @@ async fn handle_auth_code(
         },
         &state.config,
         &state.keys,
-    )?;
+    ).await?;
 
     let refresh_token = signing::create_refresh_token();
     let refresh_hash = signing::hash_token(&refresh_token);
@@ -675,10 +675,13 @@ async fn handle_refresh(
     // Transaction: revoke old + insert new atomically (inherit family_id)
     let mut tx = state.db.begin().await?;
 
-    sqlx::query("UPDATE refresh_tokens SET revoked = TRUE WHERE token_hash = $1")
+    let consumed = sqlx::query("UPDATE refresh_tokens SET revoked = TRUE WHERE token_hash = $1 AND revoked = FALSE AND expires_at > NOW()")
         .bind(&token_hash)
         .execute(&mut *tx)
         .await?;
+    if consumed.rows_affected() != 1 {
+        return Err(AppError::Unauthorized { error: "invalid_grant", message: "Refresh token already consumed or expired".into() });
+    }
 
     let (access_token, expires_at) = signing::create_access_token(
         signing::AccessTokenInput {
@@ -693,7 +696,7 @@ async fn handle_refresh(
         },
         &state.config,
         &state.keys,
-    )?;
+    ).await?;
 
     let new_refresh_token = signing::create_refresh_token();
     let new_refresh_hash = signing::hash_token(&new_refresh_token);

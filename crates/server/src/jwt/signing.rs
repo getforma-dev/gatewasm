@@ -1,6 +1,6 @@
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
 use chrono::Utc;
-use jsonwebtoken::{decode, encode, Algorithm, Header, Validation};
+use jsonwebtoken::{decode, decode_header, Algorithm, Validation};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
@@ -46,7 +46,7 @@ pub struct AccessTokenInput<'a> {
     pub cnf: Option<serde_json::Value>,
 }
 
-pub fn create_access_token(
+pub async fn create_access_token(
     input: AccessTokenInput<'_>,
     config: &AppConfig,
     keys: &KeyPair,
@@ -69,10 +69,7 @@ pub fn create_access_token(
         cnf: input.cnf,
     };
 
-    let mut header = Header::new(Algorithm::EdDSA);
-    header.kid = Some(keys.kid.clone());
-
-    let token = encode(&header, &claims, &keys.encoding_key)?;
+    let token = keys.sign_access(&claims).await?;
     Ok((token, exp))
 }
 
@@ -97,6 +94,14 @@ pub fn verify_access_token(
     validation.set_issuer(&[&config.jwt_issuer]);
     validation.set_audience(&[&config.jwt_audience]);
 
-    let data = decode::<Claims>(token, &keys.decoding_key, &validation)?;
+    let header = decode_header(token)?;
+    if header.alg != Algorithm::EdDSA || header.typ.as_deref() != Some("JWT") {
+        return Err(jsonwebtoken::errors::ErrorKind::InvalidToken.into());
+    }
+    let kid = header
+        .kid
+        .ok_or(jsonwebtoken::errors::ErrorKind::InvalidToken)?;
+    let key = keys.verification_key(&kid, Utc::now().timestamp())?;
+    let data = decode::<Claims>(token, &key, &validation)?;
     Ok(data.claims)
 }

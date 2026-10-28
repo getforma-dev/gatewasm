@@ -1323,7 +1323,7 @@ pub async fn login_complete(
         },
         &state.config,
         &state.keys,
-    )?;
+    ).await?;
 
     let refresh_token = signing::create_refresh_token();
     let refresh_hash = signing::hash_token(&refresh_token);

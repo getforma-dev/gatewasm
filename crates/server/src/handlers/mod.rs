@@ -662,6 +662,7 @@ fn create_router_inner(state: AppState, rate_limit_enabled: bool) -> Router {
         .route("/fedcm/accounts", get(fedcm::accounts))
         .route("/fedcm/token", post(fedcm::token_assertion))
         .route("/auth/jwks", get(jwks::jwks))
+        .route("/ssf/jwks", get(jwks::security_events))
         .route("/auth/callback/{provider}", get(oauth::callback))
         .merge(ws_ticket_route)
         .route("/ws", get(crate::ws::handler::ws_upgrade))
@@ -778,16 +779,18 @@ async fn favicon() -> impl IntoResponse {
     }
 }
 
-async fn health(State(state): State<AppState>) -> Json<serde_json::Value> {
+async fn health(State(state): State<AppState>) -> axum::response::Response {
     let db_ok = sqlx::query_scalar::<_, i32>("SELECT 1::int4")
         .fetch_one(&state.db)
         .await
         .is_ok();
 
-    Json(serde_json::json!({
-        "status": if db_ok { "ok" } else { "degraded" },
+    let signer_current = state.keys.serving_current_generation().await;
+    (if db_ok && signer_current { StatusCode::OK } else { StatusCode::SERVICE_UNAVAILABLE }, Json(serde_json::json!({
+        "signer_current": signer_current,
+        "status": if db_ok && signer_current { "ok" } else { "degraded" },
         "db_status": if db_ok { "ok" } else { "error" },
         "ws_connections": state.connection_limits.active_count(),
         "source_revision": option_env!("GATEWASM_SOURCE_REVISION").unwrap_or("unrecorded"),
-    }))
+    }))).into_response()
 }

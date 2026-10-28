@@ -37,3 +37,7 @@ playwright-report/
 
 # Deploy runtime
 deploy/
+
+# Python operational handoff tests
+__pycache__/
+*.pyc

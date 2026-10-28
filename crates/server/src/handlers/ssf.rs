@@ -522,7 +522,8 @@ pub async fn verify_stream(
         }
     });
 
-    // Insert into outbox
+    let set_token = state.keys.sign_security_event(&set_payload).await?;
+    // Insert into outbox only after a verified signature is available.
     sqlx::query(
         "INSERT INTO ssf_outbox (tenant_id, stream_id, sequence_number, event_type, set_token, status) \
          VALUES ($1, $2, $3, $4, $5, 'pending')",
@@ -531,7 +532,7 @@ pub async fn verify_stream(
     .bind(stream_uuid)
     .bind(seq)
     .bind("urn:ietf:params:ssf:event-type:verification")
-    .bind(set_payload.to_string())
+    .bind(set_token)
     .execute(&state.db)
     .await?;
 

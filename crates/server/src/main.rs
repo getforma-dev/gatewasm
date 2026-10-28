@@ -18,6 +18,13 @@ use gatewasm_server::ws::ticket::TicketStore;
 use gatewasm_server::{assets, db, handlers, middleware, AppState};
 use sqlx::postgres::PgPool;
 
+/// Configuration/custody refusal is an ordinary startup failure, not a panic.
+/// Exit directly so abort/core-dump handling cannot leave an unhealthy process alive.
+fn refuse_signing_startup(reason: &str) -> ! {
+    tracing::error!(reason, "Signing configuration refused; server will not start");
+    std::process::exit(1)
+}
+
 #[tokio::main]
 async fn main() {
     tracing_subscriber::fmt::init();
@@ -46,7 +53,27 @@ async fn main() {
     bootstrap_platform_plane(&pool, &config).await;
 
     // JWT keys (EdDSA / Ed25519)
-    let keys = KeyPair::from_pem_or_generate(config.ed25519_private_key_pem.as_deref());
+    let require_kms =
+        gatewasm_server::jwt::kms::parse_required(match &std::env::var("FAUTH_REQUIRE_KMS") {
+            Ok(value) => Some(value.as_str()),
+            Err(std::env::VarError::NotPresent) => None,
+            Err(_) => refuse_signing_startup("Invalid FAUTH_REQUIRE_KMS encoding"),
+        })
+        .unwrap_or_else(|reason| refuse_signing_startup(&reason));
+    let keys = match std::env::var("FAUTH_KMS_KEYRING_JSON") {
+        Ok(manifest) => {
+            if config.ed25519_private_key_pem.is_some() || config.ssf_signing_key_pem.is_some() {
+                refuse_signing_startup("KMS mode refuses process-readable signing key configuration");
+            }
+            gatewasm_server::jwt::kms::load(&manifest, &pool, config.access_token_expiry)
+                .await
+                .unwrap_or_else(|reason| refuse_signing_startup(&reason))
+        }
+        Err(std::env::VarError::NotPresent) if !require_kms => {
+            KeyPair::from_pem_or_generate(config.ed25519_private_key_pem.as_deref())
+        }
+        Err(_) => refuse_signing_startup("Required KMS keyring configuration is missing or invalid"),
+    };
 
     // Asset manifest (content-hashed filenames)
     let asset_manifest = assets::load_manifest();
