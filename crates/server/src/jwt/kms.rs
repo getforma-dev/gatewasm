@@ -19,6 +19,59 @@ pub fn parse_required(value: Option<&str>) -> Result<bool, String> {
     }
 }
 
+/// Select signing custody once, before production config guards or database work.
+/// A supplied manifest always selects KMS; invalid input never selects a local key.
+pub enum SigningMode {
+    Local,
+    Kms(String),
+}
+
+impl SigningMode {
+    pub fn from_env() -> Result<Self, String> {
+        Self::select(
+            std::env::var("FAUTH_REQUIRE_KMS"),
+            std::env::var("FAUTH_KMS_KEYRING_JSON"),
+        )
+    }
+
+    fn select(
+        required: Result<String, std::env::VarError>,
+        manifest: Result<String, std::env::VarError>,
+    ) -> Result<Self, String> {
+        let required = match required {
+            Ok(value) => parse_required(Some(&value))?,
+            Err(std::env::VarError::NotPresent) => false,
+            Err(_) => return Err("Invalid FAUTH_REQUIRE_KMS encoding".into()),
+        };
+        match manifest {
+            Ok(json) => {
+                serde_json::from_str::<Manifest>(&json)
+                    .map_err(|_| "Invalid FAUTH_KMS_KEYRING_JSON")?;
+                Ok(Self::Kms(json))
+            }
+            Err(std::env::VarError::NotPresent) if !required => Ok(Self::Local),
+            Err(_) => Err("Required KMS keyring configuration is missing or invalid".into()),
+        }
+    }
+
+    pub fn validate_private_material(
+        &self,
+        production: bool,
+        access_pem_present: bool,
+        ssf_pem_present: bool,
+    ) -> Result<(), String> {
+        match self {
+            Self::Kms(_) if access_pem_present || ssf_pem_present => {
+                Err("KMS mode refuses process-readable signing key configuration".into())
+            }
+            Self::Local if production && !access_pem_present => {
+                Err("ED25519_PRIVATE_KEY must be set in production when KMS is not selected".into())
+            }
+            _ => Ok(()),
+        }
+    }
+}
+
 pub const JWKS_CACHE_SECONDS: i64 = 3600;
 pub const CLOCK_SKEW_SECONDS: i64 = 60;
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
@@ -490,6 +543,35 @@ mod tests {
         for invalid in ["True", "treu", "", "0", " true"] {
             assert!(parse_required(Some(invalid)).is_err());
         }
+    }
+    #[test]
+    fn custody_selection_and_public_host_guards_share_one_mode() {
+        use std::env::VarError::NotPresent;
+        let manifest = serde_json::to_string(&initial()).unwrap();
+        for required in [Err(NotPresent), Ok("false".into()), Ok("true".into())] {
+            let mode = SigningMode::select(required, Ok(manifest.clone())).unwrap();
+            assert!(matches!(mode, SigningMode::Kms(_)));
+            assert!(mode.validate_private_material(true, false, false).is_ok());
+            assert!(mode.validate_private_material(true, true, false).is_err());
+            assert!(mode.validate_private_material(true, false, true).is_err());
+        }
+        for required in [Err(NotPresent), Ok("false".into())] {
+            let mode = SigningMode::select(required, Err(NotPresent)).unwrap();
+            assert!(matches!(mode, SigningMode::Local));
+            assert!(mode.validate_private_material(true, false, false).is_err());
+            assert!(mode.validate_private_material(true, true, false).is_ok());
+            assert!(mode.validate_private_material(false, false, false).is_ok());
+        }
+        assert!(SigningMode::select(Ok("true".into()), Err(NotPresent)).is_err());
+        for invalid in ["True", "false ", "", "treu"] {
+            assert!(SigningMode::select(Ok(invalid.into()), Ok(manifest.clone())).is_err());
+        }
+        for invalid in ["", "{}", "null", "not-json"] {
+            assert!(SigningMode::select(Ok("false".into()), Ok(invalid.into())).is_err());
+        }
+        let bad_encoding = || std::env::VarError::NotUnicode(std::ffi::OsString::from("invalid"));
+        assert!(SigningMode::select(Err(bad_encoding()), Ok(manifest)).is_err());
+        assert!(SigningMode::select(Ok("false".into()), Err(bad_encoding())).is_err());
     }
     #[test]
     fn lifetime_cap_survives_config_decrease_and_cannot_shrink() {

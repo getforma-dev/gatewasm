@@ -12,6 +12,7 @@ use gatewasm_server::compliance;
 use gatewasm_server::config::AppConfig;
 use gatewasm_server::ir;
 use gatewasm_server::jwt::keys::KeyPair;
+use gatewasm_server::jwt::kms::SigningMode;
 use gatewasm_server::middleware::tenant::TenantCache;
 use gatewasm_server::ws::{handler::ConnectionLimits, EventBus};
 use gatewasm_server::ws::ticket::TicketStore;
@@ -31,7 +32,10 @@ async fn main() {
 
     let _ = dotenvy::dotenv();
 
-    let config = AppConfig::from_env();
+    let signing =
+        SigningMode::from_env().unwrap_or_else(|reason| refuse_signing_startup(&reason));
+    let config = AppConfig::try_from_env_with_signing_mode(&signing)
+        .unwrap_or_else(|reason| refuse_signing_startup(&reason));
     tracing::info!(host = %config.host, port = %config.port, "Starting fAuth server");
     tracing::info!(compliance_mode = %config.compliance.mode, "Compliance mode");
 
@@ -53,26 +57,15 @@ async fn main() {
     bootstrap_platform_plane(&pool, &config).await;
 
     // JWT keys (EdDSA / Ed25519)
-    let require_kms =
-        gatewasm_server::jwt::kms::parse_required(match &std::env::var("FAUTH_REQUIRE_KMS") {
-            Ok(value) => Some(value.as_str()),
-            Err(std::env::VarError::NotPresent) => None,
-            Err(_) => refuse_signing_startup("Invalid FAUTH_REQUIRE_KMS encoding"),
-        })
-        .unwrap_or_else(|reason| refuse_signing_startup(&reason));
-    let keys = match std::env::var("FAUTH_KMS_KEYRING_JSON") {
-        Ok(manifest) => {
-            if config.ed25519_private_key_pem.is_some() || config.ssf_signing_key_pem.is_some() {
-                refuse_signing_startup("KMS mode refuses process-readable signing key configuration");
-            }
+    let keys = match signing {
+        SigningMode::Kms(manifest) => {
             gatewasm_server::jwt::kms::load(&manifest, &pool, config.access_token_expiry)
                 .await
                 .unwrap_or_else(|reason| refuse_signing_startup(&reason))
         }
-        Err(std::env::VarError::NotPresent) if !require_kms => {
+        SigningMode::Local => {
             KeyPair::from_pem_or_generate(config.ed25519_private_key_pem.as_deref())
         }
-        Err(_) => refuse_signing_startup("Required KMS keyring configuration is missing or invalid"),
     };
 
     // Asset manifest (content-hashed filenames)

@@ -105,6 +105,15 @@ impl AppConfig {
     }
 
     pub fn from_env() -> Self {
+        let signing = crate::jwt::kms::SigningMode::from_env()
+            .unwrap_or_else(|reason| panic!("Signing configuration refused: {reason}"));
+        Self::try_from_env_with_signing_mode(&signing)
+            .unwrap_or_else(|reason| panic!("Signing configuration refused: {reason}"))
+    }
+
+    pub fn try_from_env_with_signing_mode(
+        signing: &crate::jwt::kms::SigningMode,
+    ) -> Result<Self, String> {
         let csrf_secret = env::var("CSRF_SECRET").unwrap_or_else(|_| {
             use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
             let bytes: [u8; 32] = rand::random();
@@ -139,14 +148,14 @@ impl AppConfig {
             .ok()
             .map(|v| v.replace("\\n", "\n").trim().to_string())
             .filter(|v| !v.is_empty());
-        if is_production && ed25519_private_key_pem.is_none() {
-            panic!(
-                "ED25519_PRIVATE_KEY must be set in production (SERVER_URL={})",
-                server_url_val
-            );
-        }
+        let ssf_signing_key_pem = env::var("SSF_SIGNING_KEY").ok();
+        signing.validate_private_material(
+            is_production,
+            ed25519_private_key_pem.is_some(),
+            ssf_signing_key_pem.is_some(),
+        )?;
 
-        Self {
+        Ok(Self {
             port: env::var("PORT")
                 .unwrap_or_else(|_| "3001".to_string())
                 .parse()
@@ -224,7 +233,7 @@ impl AppConfig {
                 })
                 .unwrap_or(true),
             compliance: ComplianceConfig::from_env(),
-            ssf_signing_key_pem: env::var("SSF_SIGNING_KEY").ok(),
+            ssf_signing_key_pem,
             maxmind_db_path: env::var("MAXMIND_DB_PATH").ok(),
             ws_ticket_ttl_secs: env::var("WS_TICKET_TTL_SECS")
                 .unwrap_or_else(|_| "30".to_string())
@@ -233,6 +242,113 @@ impl AppConfig {
             suppress_email: env::var("SUPPRESS_EMAIL")
                 .map(|v| v == "true" || v == "1")
                 .unwrap_or(false),
+        })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // Each case gets its own process: environment changes cannot race other tests.
+    #[test]
+    fn public_host_signing_configuration() {
+        if env::var_os("GATEWASM_CONFIG_TEST_CHILD").is_some() {
+            let config = AppConfig::from_env();
+            assert_eq!(config.server_url, "https://auth-staging.getforma.dev");
+            assert!(config.ed25519_private_key_pem.is_none());
+            return;
+        }
+        let manifest = serde_json::json!({
+            "version": 1, "max_access_lifetime": 900, "publication": null,
+            "active": "arn:aws:kms:us-east-1:111122223333:key/a",
+            "next": "arn:aws:kms:us-east-1:111122223333:key/b",
+            "ssf": "arn:aws:kms:us-east-1:111122223333:key/s", "previous": []
+        })
+        .to_string();
+        for (required, keyring, mfa, pem, expected_error) in [
+            ("true", Some(manifest.as_str()), true, false, None),
+            ("false", Some(manifest.as_str()), true, false, None),
+            (
+                "false",
+                None,
+                true,
+                false,
+                Some("ED25519_PRIVATE_KEY must be set"),
+            ),
+            (
+                "true",
+                None,
+                true,
+                false,
+                Some("Required KMS keyring configuration"),
+            ),
+            (
+                "treu",
+                Some(manifest.as_str()),
+                true,
+                false,
+                Some("must be exactly true or false"),
+            ),
+            (
+                "true",
+                Some("{}"),
+                true,
+                false,
+                Some("Invalid FAUTH_KMS_KEYRING_JSON"),
+            ),
+            (
+                "true",
+                Some(manifest.as_str()),
+                false,
+                false,
+                Some("MFA_ENCRYPTION_KEY must be set"),
+            ),
+            (
+                "true",
+                Some(manifest.as_str()),
+                true,
+                true,
+                Some("refuses process-readable"),
+            ),
+        ] {
+            let mut child = std::process::Command::new(env::current_exe().unwrap());
+            child
+                .args([
+                    "--exact",
+                    "config::tests::public_host_signing_configuration",
+                    "--nocapture",
+                ])
+                .env_clear()
+                .env("GATEWASM_CONFIG_TEST_CHILD", "1")
+                .env("SERVER_URL", "https://auth-staging.getforma.dev")
+                .env("CSRF_SECRET", "synthetic-config-test")
+                .env("FAUTH_REQUIRE_KMS", required);
+            if let Some(value) = keyring {
+                child.env("FAUTH_KMS_KEYRING_JSON", value);
+            }
+            if mfa {
+                child.env("MFA_ENCRYPTION_KEY", "synthetic-config-test");
+            }
+            if pem {
+                child.env("ED25519_PRIVATE_KEY", "synthetic-refused-private-material");
+            }
+            let output = child.output().unwrap();
+            match expected_error {
+                None => assert!(
+                    output.status.success(),
+                    "Public-host KMS config was rejected"
+                ),
+                Some(reason) => {
+                    assert!(!output.status.success());
+                    let combined = String::from_utf8_lossy(&output.stdout).to_string()
+                        + &String::from_utf8_lossy(&output.stderr);
+                    assert!(
+                        combined.contains(reason),
+                        "Expected specific fail-closed boundary: {reason}"
+                    );
+                }
+            }
         }
     }
 }
