@@ -8,6 +8,7 @@ pub mod distribution;
 pub mod docs;
 pub mod fedcm;
 pub mod geolocation;
+pub mod hosted_code;
 pub mod hosted_login;
 pub mod hosted_page;
 pub mod introspect;
@@ -147,6 +148,7 @@ fn create_router_inner(state: AppState, rate_limit_enabled: bool) -> Router {
     // ── Public auth routes (with optional rate limiting) ────────────
     let register_routes = Router::new().route("/auth/register", post(auth::register));
     let login_routes = Router::new().route("/auth/login", post(auth::login));
+    let authorize_routes = Router::new().route("/auth/authorize", get(oauth::authorize));
     let token_routes = Router::new().route("/auth/token", post(token::token_exchange));
     let password_reset_routes = Router::new()
         .route(
@@ -160,6 +162,7 @@ fn create_router_inner(state: AppState, rate_limit_enabled: bool) -> Router {
         Router::new()
             .merge(register_routes.layer(rate_limit::register_limiter()))
             .merge(login_routes.layer(rate_limit::login_limiter()))
+            .merge(authorize_routes.layer(rate_limit::login_limiter()))
             .merge(token_routes.layer(rate_limit::token_limiter()))
             .merge(password_reset_routes.layer(rate_limit::register_limiter()))
             .merge(verify_email_routes.layer(rate_limit::register_limiter()))
@@ -167,6 +170,7 @@ fn create_router_inner(state: AppState, rate_limit_enabled: bool) -> Router {
         Router::new()
             .merge(register_routes)
             .merge(login_routes)
+            .merge(authorize_routes)
             .merge(token_routes)
             .merge(password_reset_routes)
             .merge(verify_email_routes)
@@ -175,7 +179,6 @@ fn create_router_inner(state: AppState, rate_limit_enabled: bool) -> Router {
     // ── Tenant-scoped auth (all auth routes go through tenant middleware) ──
     let tenant_auth = auth_routes
         .route("/auth/logout", post(auth::logout))
-        .route("/auth/authorize", get(oauth::authorize))
         .route("/oauth/par", post(par::par_endpoint))
         .route("/login", get(hosted_login::login_page))
         .route("/dashboard", get(dashboard::dashboard_page))
@@ -313,6 +316,7 @@ fn create_router_inner(state: AppState, rate_limit_enabled: bool) -> Router {
     // ── Management API (authenticated with mgmt_ key) ──────────────
     let manage_routes = Router::new()
         .merge(shared_base_routes("/manage"))
+        .route("/manage/oauth-clients", get(management::list_oauth_clients).post(management::register_oauth_client))
         .route("/manage/stats", get(management::tenant_stats))
         .route("/manage/audit-log", get(management::audit_log))
         .route(
@@ -784,5 +788,6 @@ async fn health(State(state): State<AppState>) -> Json<serde_json::Value> {
         "status": if db_ok { "ok" } else { "degraded" },
         "db_status": if db_ok { "ok" } else { "error" },
         "ws_connections": state.connection_limits.active_count(),
+        "source_revision": option_env!("GATEWASM_SOURCE_REVISION").unwrap_or("unrecorded"),
     }))
 }

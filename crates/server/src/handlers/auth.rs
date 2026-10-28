@@ -1087,7 +1087,7 @@ fn dispatch_verification_email(
 pub async fn login(
     State(state): State<AppState>,
     req: axum::extract::Request,
-) -> Result<impl IntoResponse, AppError> {
+) -> Result<axum::response::Response, AppError> {
     let tenant = req.extensions().get::<TenantContext>().cloned();
     let tenant_id = tenant.as_ref().map(|t| t.tenant_id.clone());
     let tenant_slug = tenant.as_ref().map(|t| t.slug.clone());
@@ -1335,6 +1335,11 @@ pub async fn login(
         );
     }
 
+    if let Some(request_id) = body.authorization_request.as_deref() {
+        let tenant = tenant.as_ref().ok_or(AppError::BadRequest { error: "tenant_required", message: "Hosted code sign-in requires a tenant.".into() })?;
+        return super::hosted_code::complete(&state, tenant, &user_id, request_id, &login_req_headers).await;
+    }
+
     let roles = db::fetch_user_roles(&state.db, &user_id, tenant_id.as_deref()).await;
 
     let (access_token, expires_at) = signing::create_access_token(
@@ -1468,7 +1473,7 @@ pub async fn login(
                 "roles": roles,
             }
         })),
-    ))
+    ).into_response())
 }
 
 pub async fn logout(

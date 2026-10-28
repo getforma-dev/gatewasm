@@ -220,6 +220,10 @@ pub async fn authorize(
         });
     }
 
+    if provider_str == "email" {
+        let tenant = tenant.as_ref().ok_or(AppError::BadRequest { error: "tenant_required", message: "Hosted code sign-in requires a tenant.".into() })?;
+        return super::hosted_code::begin(&state, tenant, &client_id, client_redirect, &state_param, &code_challenge).await;
+    }
     let (provider_client_id, _) = get_oauth_creds(provider_str, tenant.as_ref(), &state)?;
 
     let expires_at = Utc::now() + Duration::minutes(10);

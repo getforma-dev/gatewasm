@@ -55,6 +55,7 @@ pub struct RegisterRequest {
 
 #[derive(Debug, Deserialize)]
 pub struct LoginRequest {
+    pub authorization_request: Option<String>,
     pub email: String,
     pub password: String,
     pub invite_token: Option<String>,

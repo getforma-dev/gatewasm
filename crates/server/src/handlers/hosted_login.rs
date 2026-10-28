@@ -25,7 +25,8 @@ pub async fn login_page(
     let preview_mode = extract_preview_mode(req.uri().query());
 
     // Server-side redirect: if user has a valid refresh cookie, skip the login page
-    if !preview_mode {
+    let authorization_request = req.uri().query().and_then(|q| url::form_urlencoded::parse(q.as_bytes()).find(|(k, _)| k == "authorization_request").map(|(_, v)| v.into_owned()));
+    if !preview_mode && authorization_request.is_none() {
         if let Some(rt) = extract_refresh_cookie(req.headers(), Some(&tenant.slug)) {
             let hash = signing::hash_token(&rt);
             let valid = sqlx::query_scalar::<_, bool>(
@@ -46,7 +47,7 @@ pub async fn login_page(
     }
 
     // no-store prevents bfcache — back button makes a fresh server request
-    let page = login_page_render(&state, &tenant, preview_mode).await;
+    let page = login_page_render(&state, &tenant, preview_mode, authorization_request.as_deref()).await;
 
     // Preview mode deliberately does NOT relax `frame-ancestors`. The console
     // opens this page in a new tab — `window.open(..., '_blank', 'noopener')`
@@ -73,6 +74,7 @@ async fn login_page_render(
     state: &AppState,
     tenant: &TenantContext,
     preview_mode: bool,
+    authorization_request: Option<&str>,
 ) -> crate::html_template::PageOutput {
     let frontend = FrontendSnapshot::capture(state);
     let app_name = tenant.branding_app_name.as_deref().unwrap_or(&tenant.name);
@@ -116,7 +118,16 @@ async fn login_page_render(
         "name": app_name,
         "logo_url": tenant.branding_logo_url,
         "primary_color": primary_color,
-        "providers": tenant.allowed_providers,
+        "providers": tenant.allowed_providers.iter().filter(|p| {
+            if authorization_request.is_some() { return p.as_str() == "email"; }
+            match p.as_str() {
+                "google" => tenant.google_client_id.as_deref().is_some_and(|v| !v.is_empty()) && tenant.google_client_secret.as_deref().is_some_and(|v| !v.is_empty()),
+                "github" => tenant.github_client_id.as_deref().is_some_and(|v| !v.is_empty()) && tenant.github_client_secret.as_deref().is_some_and(|v| !v.is_empty()),
+                "email" => true,
+                _ => false,
+            }
+        }).collect::<Vec<_>>(),
+        "authorization_request": authorization_request,
         "signup_mode": tenant.signup_mode,
         "server_url": format!("/t/{}", tenant.slug),
         "login_redirect_url": tenant.login_redirect_url,
