@@ -6,7 +6,7 @@ import { createHash, createPublicKey, randomBytes, verify } from 'node:crypto';
 const callback = 'https://genui.example.test/auth/callback';
 const password = 'HostedInvite123!';
 type Tenant = { id: string; slug: string; key: string; client: string; origin: string };
-const platformHeaders = { Authorization: `Bearer ${process.env.MASTER_PLATFORM_KEY || 'plat_local_dev_key'}` };
+const platformHeaders = { Authorization: `Bearer ${process.env.PLATFORM_ADMIN_KEY || process.env.MASTER_PLATFORM_KEY || 'plat_local_dev_key'}` };
 const test = base.extend<{ tenant: Tenant }>({
   tenant: async ({ request, baseURL }, use) => {
     if (!baseURL || !['127.0.0.1', 'localhost', '[::1]'].includes(new URL(baseURL).hostname)) {
