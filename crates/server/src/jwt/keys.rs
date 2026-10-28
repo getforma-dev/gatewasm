@@ -99,17 +99,25 @@ impl KeyPair {
         }
     }
 
-    pub fn public_keys(&self, now: i64) -> Vec<PublicKey> {
-        let mut keys: Vec<_> = self
-            .verification_keys
+    /// Keys that may verify access JWTs: current, next and unexpired previous.
+    /// The dedicated SSF signing key is deliberately excluded.
+    pub fn access_public_keys(&self, now: i64) -> Vec<PublicKey> {
+        self.verification_keys
             .iter()
             .filter(|key| key.retire_after.is_none_or(|t| t > now))
             .cloned()
-            .collect();
-        if let Some((_, key)) = &self.ssf {
-            keys.push(key.clone());
+            .collect()
+    }
+
+    /// Historical SETs have no expiry, so their signing key has a separate
+    /// public lifetime from the rotating access-token keys.
+    pub fn security_event_public_keys(&self) -> Vec<PublicKey> {
+        match &self.ssf {
+            Some((_, key)) => vec![key.clone()],
+            // Preserve the existing local-development signer contract. KMS
+            // custody always supplies a distinct dedicated SSF key.
+            None => vec![PublicKey::new(self.public_key_bytes.clone(), None)],
         }
-        keys
     }
 
     pub fn verification_key(&self, kid: &str, now: i64) -> Result<DecodingKey, Error> {
@@ -442,10 +450,20 @@ mod tests {
         let ssf_id = ssf.public(None).kid;
         assert!(keys.verification_key(&old_id, retire - 1).is_ok());
         assert!(keys.verification_key(&old_id, retire).is_err());
-        assert!(keys.public_keys(retire - 1).iter().any(|k| k.kid == old_id));
-        assert!(!keys.public_keys(retire).iter().any(|k| k.kid == old_id));
         assert!(keys
-            .public_keys(retire + 1000000)
+            .access_public_keys(retire - 1)
+            .iter()
+            .any(|k| k.kid == old_id));
+        assert!(!keys
+            .access_public_keys(retire)
+            .iter()
+            .any(|k| k.kid == old_id));
+        assert!(!keys
+            .access_public_keys(retire - 1)
+            .iter()
+            .any(|k| k.kid == ssf_id));
+        assert!(keys
+            .security_event_public_keys()
             .iter()
             .any(|k| k.kid == ssf_id));
         assert!(

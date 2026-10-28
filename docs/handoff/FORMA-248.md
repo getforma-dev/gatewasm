@@ -4,6 +4,8 @@ The source implements AWS KMS Ed25519 signing, an immutable-version current/next
 
 The operational contract, public example manifest, exact rotation sequence, managed-secret command and rollback constraints are in [the custody runbook](../../handoff/forma-248/README.md). Source review is independent of hosted acceptance. The prior deployment was deliberately removed; this qualification created no AWS resource, deployed image or live issuer.
 
+Consumer contract: `/auth/jwks` is access-only (current, next and unexpired previous keys); `/ssf/jwks` separately publishes the dedicated SSF verification key. Both retain the ordinary `{ "keys": [...] }` JWK shape. GenUI identified that a shared unmarked key set could not support external cross-purpose refusal; the separated endpoints resolve key selection without an invented JWK field. Access verifiers must not combine the sets. The normal `typ=JWT` check remains required, and a synthetically forged JWT header with an SSF signature must fail access-key selection. Legacy local mode reuses a key and does not satisfy the managed custody gate. No standard SSF discovery or event-issuer migration is introduced.
+
 ## Local evidence
 
 Environment: macOS, Rust 1.93.1, pinned AWS SDK KMS 1.111.0/config 1.8.18, disposable local PostgreSQL, `CARGO_BUILD_JOBS=3`, two Rust test workers. Evidence is retained under `/Users/victorvillacis/dev/Forma/work/FORMA-248/evidence/`.

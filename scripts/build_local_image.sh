@@ -5,6 +5,11 @@ if [[ $# -ne 1 ]]; then
   exit 1
 fi
 image_tag="$1"
+build_jobs="${CARGO_BUILD_JOBS:-3}"
+case "$build_jobs" in
+  1|2|3) ;;
+  *) echo "CARGO_BUILD_JOBS must be 1, 2, or 3 for the bounded image build." >&2; exit 1 ;;
+esac
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$(cd "${script_dir}/.." && pwd)"
 source_revision="$(git -C "${repo_root}" rev-parse HEAD)"
@@ -17,7 +22,7 @@ fi
 git -C "${repo_root}" archive --format=tar "${source_revision}" | \
   docker build --platform linux/amd64 --progress plain \
     --build-arg "GATEWASM_SOURCE_REVISION=${source_revision}" \
-    --build-arg "CARGO_BUILD_JOBS=${CARGO_BUILD_JOBS:-3}" \
+    --build-arg "CARGO_BUILD_JOBS=${build_jobs}" \
     --label "org.opencontainers.image.revision=${source_revision}" \
     -f crates/server/Dockerfile -t "${image_tag}" -
 docker image inspect --format '{{.Id}} {{.Os}}/{{.Architecture}} {{index .Config.Labels "org.opencontainers.image.revision"}}' "${image_tag}"

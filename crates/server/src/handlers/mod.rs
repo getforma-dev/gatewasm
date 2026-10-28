@@ -662,6 +662,7 @@ fn create_router_inner(state: AppState, rate_limit_enabled: bool) -> Router {
         .route("/fedcm/accounts", get(fedcm::accounts))
         .route("/fedcm/token", post(fedcm::token_assertion))
         .route("/auth/jwks", get(jwks::jwks))
+        .route("/ssf/jwks", get(jwks::security_events))
         .route("/auth/callback/{provider}", get(oauth::callback))
         .merge(ws_ticket_route)
         .route("/ws", get(crate::ws::handler::ws_upgrade))

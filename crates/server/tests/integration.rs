@@ -11662,7 +11662,7 @@ async fn test_ssf_verify_stream() {
     assert!(body["sequence_number"].as_i64().unwrap() > 0);
     let set:String=sqlx::query_scalar("SELECT set_token FROM ssf_outbox WHERE stream_id=$1").bind(uuid::Uuid::parse_str(&stream_id).unwrap()).fetch_one(&pool).await.unwrap();
     let header=jsonwebtoken::decode_header(&set).unwrap();assert_eq!(header.typ.as_deref(),Some("secevent+jwt"));
-    let jwks=body_json(app.clone().oneshot(get_request("/auth/jwks")).await.unwrap()).await;
+    let jwks=body_json(app.clone().oneshot(get_request("/ssf/jwks")).await.unwrap()).await;
     let key=jwks["keys"].as_array().unwrap().iter().find(|key|key["kid"].as_str()==header.kid.as_deref()).unwrap();
     let parts:Vec<_>=set.split('.').collect();let decoder=base64::engine::general_purpose::URL_SAFE_NO_PAD;
     let claims:serde_json::Value=serde_json::from_slice(&decoder.decode(parts[1]).unwrap()).unwrap();assert!(claims.get("exp").is_none());
@@ -13094,6 +13094,181 @@ impl gatewasm_server::jwt::keys::RemoteSigner for SyntheticRemoteSigner {
 }
 
 #[tokio::test]
+async fn kms_public_jwks_separates_access_and_security_event_signatures() {
+    let active = SyntheticRemoteSigner::new();
+    let next = SyntheticRemoteSigner::new();
+    let previous = SyntheticRemoteSigner::new();
+    let expired = SyntheticRemoteSigner::new();
+    let ssf = SyntheticRemoteSigner::new();
+    let now = chrono::Utc::now().timestamp();
+    let keys = KeyPair::remote(
+        active.clone(),
+        vec![
+            active.public(None),
+            next.public(None),
+            previous.public(Some(now + 960)),
+            expired.public(Some(now - 1)),
+        ],
+        ssf.clone(),
+        ssf.public(None),
+        900,
+    )
+    .unwrap();
+    let (mut state, _) = test_state_with_keys(Some(keys)).await;
+    let app = handlers::create_router_without_rate_limit(state.clone());
+    let access_response = app
+        .clone()
+        .oneshot(get_request("/auth/jwks"))
+        .await
+        .unwrap();
+    assert_eq!(access_response.status(), StatusCode::OK);
+    assert_eq!(
+        access_response.headers()["cache-control"],
+        "public, max-age=3600"
+    );
+    let access_jwks = body_json(access_response).await;
+    let ssf_response = app.clone().oneshot(get_request("/ssf/jwks")).await.unwrap();
+    assert_eq!(ssf_response.status(), StatusCode::OK);
+    assert_eq!(
+        ssf_response.headers()["cache-control"],
+        "public, max-age=3600"
+    );
+    let ssf_jwks = body_json(ssf_response).await;
+    let access_keys = access_jwks["keys"].as_array().unwrap();
+    let ssf_keys = ssf_jwks["keys"].as_array().unwrap();
+    assert_eq!(access_keys.len(), 3);
+    for expected in [&active, &next, &previous] {
+        assert!(access_keys
+            .iter()
+            .any(|key| key["kid"] == expected.public(None).kid));
+    }
+    assert!(!access_keys
+        .iter()
+        .any(|key| key["kid"] == ssf.public(None).kid || key["kid"] == expired.public(None).kid));
+    assert_eq!(ssf_keys.len(), 1);
+    assert_eq!(ssf_keys[0]["kid"], ssf.public(None).kid);
+    for key in access_keys.iter().chain(ssf_keys.iter()) {
+        assert_eq!(key["kty"], "OKP");
+        assert_eq!(key["crv"], "Ed25519");
+        assert_eq!(key["alg"], "EdDSA");
+        assert_eq!(key["use"], "sig");
+        assert!(
+            key.get("purpose").is_none(),
+            "purpose separation is by key set, not a custom JWK field"
+        );
+    }
+
+    let claims = serde_json::json!({"sub":"synthetic-user", "email":"synthetic@example.test", "name":null,
+        "tenant_id":null, "iss":state.config.jwt_issuer, "aud":state.config.jwt_audience,
+        "iat":now, "exp":now+900, "roles":[], "auth_method":"password", "mfa_verified":false});
+    let access_token = state.keys.sign_access(&claims).await.unwrap();
+    let decoder = base64::engine::general_purpose::URL_SAFE_NO_PAD;
+    let mut validation = jsonwebtoken::Validation::new(jsonwebtoken::Algorithm::EdDSA);
+    validation.set_issuer(&[&state.config.jwt_issuer]);
+    validation.set_audience(&[&state.config.jwt_audience]);
+    let decoding = |key: &serde_json::Value| {
+        jsonwebtoken::DecodingKey::from_ed_der(&decoder.decode(key["x"].as_str().unwrap()).unwrap())
+    };
+    let active_jwk = access_keys
+        .iter()
+        .find(|key| key["kid"] == active.public(None).kid)
+        .unwrap();
+    jsonwebtoken::decode::<signing::Claims>(&access_token, &decoding(active_jwk), &validation)
+        .unwrap();
+    assert!(jsonwebtoken::decode::<signing::Claims>(
+        &access_token,
+        &decoding(&ssf_keys[0]),
+        &validation
+    )
+    .is_err());
+
+    // Strong cross-purpose control: valid access claims and typ=JWT, genuinely
+    // signed by the SSF key. Rejection must come from key separation, not typ.
+    let forged_header = serde_json::json!({"alg":"EdDSA", "typ":"JWT", "kid":ssf.public(None).kid});
+    let input = format!(
+        "{}.{}",
+        decoder.encode(serde_json::to_vec(&forged_header).unwrap()),
+        decoder.encode(serde_json::to_vec(&claims).unwrap())
+    );
+    let forged = format!(
+        "{input}.{}",
+        decoder.encode(ssf.0.sign(input.as_bytes()).as_ref())
+    );
+    jsonwebtoken::decode::<signing::Claims>(&forged, &decoding(&ssf_keys[0]), &validation).unwrap();
+    let forged_kid = jsonwebtoken::decode_header(&forged).unwrap().kid.unwrap();
+    assert!(!access_keys.iter().any(|key| key["kid"] == forged_kid));
+    for key in access_keys {
+        assert!(
+            jsonwebtoken::decode::<signing::Claims>(&forged, &decoding(key), &validation).is_err()
+        );
+    }
+    assert!(signing::verify_access_token(&forged, &state.config, &state.keys).is_err());
+
+    let set = state
+        .keys
+        .sign_security_event(&serde_json::json!({"iss":"historical-tenant", "iat":now,
+        "jti":"synthetic-event", "events":{"urn:ietf:params:ssf:event-type:verification":{}}}))
+        .await
+        .unwrap();
+    assert_eq!(
+        jsonwebtoken::decode_header(&set).unwrap().typ.as_deref(),
+        Some("secevent+jwt")
+    );
+    let parts: Vec<_> = set.split('.').collect();
+    let payload: serde_json::Value =
+        serde_json::from_slice(&decoder.decode(parts[1]).unwrap()).unwrap();
+    assert!(payload.get("exp").is_none());
+    let verify_set = |key: &serde_json::Value| {
+        ring::signature::UnparsedPublicKey::new(
+            &ring::signature::ED25519,
+            decoder.decode(key["x"].as_str().unwrap()).unwrap(),
+        )
+        .verify(
+            format!("{}.{}", parts[0], parts[1]).as_bytes(),
+            &decoder.decode(parts[2]).unwrap(),
+        )
+    };
+    verify_set(&ssf_keys[0]).unwrap();
+    for key in access_keys {
+        assert!(verify_set(key).is_err());
+    }
+
+    // Rotate the access signer and model the previous access key past its
+    // retirement instant. The original no-expiry SET must still verify.
+    let future = SyntheticRemoteSigner::new();
+    state.keys = KeyPair::remote(
+        next.clone(),
+        vec![
+            next.public(None),
+            future.public(None),
+            active.public(Some(now - 1)),
+        ],
+        ssf.clone(),
+        ssf.public(None),
+        900,
+    )
+    .unwrap();
+    let rotated = handlers::create_router_without_rate_limit(state);
+    let rotated_access = body_json(
+        rotated
+            .clone()
+            .oneshot(get_request("/auth/jwks"))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(rotated_access["keys"].as_array().unwrap().len(), 2);
+    assert!(!rotated_access["keys"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|key| key["kid"] == active.public(None).kid || key["kid"] == ssf.public(None).kid));
+    let retained_ssf = body_json(rotated.oneshot(get_request("/ssf/jwks")).await.unwrap()).await;
+    assert_eq!(retained_ssf, ssf_jwks);
+    verify_set(&retained_ssf["keys"][0]).unwrap();
+}
+
+#[tokio::test]
 async fn kms_contract_refresh_survives_rotation_and_old_key_retires() {
     let old = SyntheticRemoteSigner::new();
     let next = SyntheticRemoteSigner::new();
@@ -13210,7 +13385,7 @@ async fn kms_contract_refresh_survives_rotation_and_old_key_retires() {
         .is_err());
     assert!(!state
         .keys
-        .public_keys(now + 960)
+        .access_public_keys(now + 960)
         .iter()
         .any(|key| Some(&key.kid) == old_header.kid.as_ref()));
 }
@@ -13250,13 +13425,11 @@ async fn kms_manifest_persistence_stale_replica_restart_and_rollback_guards() {
         evidence: "synthetic-fleet-published".into(),
     });
     record_manifest(&pool, &manifest, 900).await.unwrap();
-    let stale = old_router
-        .clone()
-        .oneshot(get_request("/auth/jwks"))
-        .await
-        .unwrap();
-    assert_eq!(stale.status(), StatusCode::SERVICE_UNAVAILABLE);
-    assert_eq!(stale.headers()["cache-control"], "no-store");
+    for path in ["/auth/jwks", "/ssf/jwks"] {
+        let stale = old_router.clone().oneshot(get_request(path)).await.unwrap();
+        assert_eq!(stale.status(), StatusCode::SERVICE_UNAVAILABLE);
+        assert_eq!(stale.headers()["cache-control"], "no-store");
+    }
     assert_eq!(
         old_router
             .oneshot(get_request("/health"))
