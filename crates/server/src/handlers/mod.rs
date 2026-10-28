@@ -150,6 +150,7 @@ fn create_router_inner(state: AppState, rate_limit_enabled: bool) -> Router {
     let login_routes = Router::new().route("/auth/login", post(auth::login));
     let authorize_routes = Router::new().route("/auth/authorize", get(oauth::authorize));
     let token_routes = Router::new().route("/auth/token", post(token::token_exchange));
+    let par_routes = Router::new().route("/oauth/par", post(par::par_endpoint));
     let password_reset_routes = Router::new()
         .route(
             "/auth/forgot-password",
@@ -163,6 +164,7 @@ fn create_router_inner(state: AppState, rate_limit_enabled: bool) -> Router {
             .merge(register_routes.layer(rate_limit::register_limiter()))
             .merge(login_routes.layer(rate_limit::login_limiter()))
             .merge(authorize_routes.layer(rate_limit::login_limiter()))
+            .merge(par_routes.layer(rate_limit::login_limiter()))
             .merge(token_routes.layer(rate_limit::token_limiter()))
             .merge(password_reset_routes.layer(rate_limit::register_limiter()))
             .merge(verify_email_routes.layer(rate_limit::register_limiter()))
@@ -171,6 +173,7 @@ fn create_router_inner(state: AppState, rate_limit_enabled: bool) -> Router {
             .merge(register_routes)
             .merge(login_routes)
             .merge(authorize_routes)
+            .merge(par_routes)
             .merge(token_routes)
             .merge(password_reset_routes)
             .merge(verify_email_routes)
@@ -179,7 +182,6 @@ fn create_router_inner(state: AppState, rate_limit_enabled: bool) -> Router {
     // ── Tenant-scoped auth (all auth routes go through tenant middleware) ──
     let tenant_auth = auth_routes
         .route("/auth/logout", post(auth::logout))
-        .route("/oauth/par", post(par::par_endpoint))
         .route("/login", get(hosted_login::login_page))
         .route("/dashboard", get(dashboard::dashboard_page))
         .route("/admin", get(dashboard::admin_console_page))

@@ -483,7 +483,7 @@ pub(crate) async fn ensure_platform_account_and_owner_role(
 pub async fn register(
     State(state): State<AppState>,
     req: axum::extract::Request,
-) -> Result<impl IntoResponse, AppError> {
+) -> Result<axum::response::Response, AppError> {
     let tenant = req.extensions().get::<TenantContext>().cloned();
     let tenant_id = tenant.as_ref().map(|t| t.tenant_id.clone());
     let tenant_slug = tenant.as_ref().map(|t| t.slug.clone());
@@ -535,6 +535,11 @@ pub async fn register(
         error: "weak_password",
         message: msg.into(),
     })?;
+
+    if body.authorization_request.is_some() {
+        let tenant = tenant.as_ref().ok_or_else(super::hosted_code::invalid_request)?;
+        return super::hosted_code::register(&state, tenant, &body, &req_headers).await;
+    }
 
     if tenant_signup_mode == "invite_only" && invite_token.is_none() {
         return Err(AppError::BadRequest {
@@ -848,7 +853,7 @@ pub async fn register(
                 "roles": roles,
             }
         })),
-    ))
+    ).into_response())
 }
 
 /// Check whether the account is currently locked out due to too many failed login attempts.
@@ -1044,7 +1049,7 @@ async fn check_impossible_travel(
 
 /// Send the verification email for a newly registered user.
 /// Logs a warning if delivery fails or SMTP is not configured; never propagates errors.
-fn dispatch_verification_email(
+pub(crate) fn dispatch_verification_email(
     state: &AppState,
     tenant_slug: &str,
     tenant_app_name: &str,
@@ -1115,6 +1120,12 @@ pub async fn login(
         })?
         .0;
     let invite_token = normalize_invite_token(body.invite_token.as_deref());
+
+    if let Some(request_id) = body.authorization_request.as_deref() {
+        if body.invite_token.is_some() { return Err(super::hosted_code::invalid_request()); }
+        let tenant = tenant.as_ref().ok_or_else(super::hosted_code::invalid_request)?;
+        super::hosted_code::preflight(&state, tenant, request_id, &login_req_headers, &normalize_email(&body.email), false).await?;
+    }
 
     let email = normalize_email(&body.email);
     tracing::info!(email = %email, "Processing login");
@@ -1277,6 +1288,11 @@ pub async fn login(
         }
     }
 
+    if let Some(request_id) = body.authorization_request.as_deref() {
+        let tenant = tenant.as_ref().ok_or(AppError::BadRequest { error: "tenant_required", message: "Hosted code sign-in requires a tenant.".into() })?;
+        return super::hosted_code::complete(&state, tenant, &user_id, request_id, &login_req_headers).await;
+    }
+
     // Reset login attempts on success
     sqlx::query("UPDATE users SET login_attempts = 0, locked_until = NULL WHERE id = $1")
         .bind(&user_id)
@@ -1333,11 +1349,6 @@ pub async fn login(
             already_accepted = invite_acceptance.already_accepted,
             "Applied tenant invite during login"
         );
-    }
-
-    if let Some(request_id) = body.authorization_request.as_deref() {
-        let tenant = tenant.as_ref().ok_or(AppError::BadRequest { error: "tenant_required", message: "Hosted code sign-in requires a tenant.".into() })?;
-        return super::hosted_code::complete(&state, tenant, &user_id, request_id, &login_req_headers).await;
     }
 
     let roles = db::fetch_user_roles(&state.db, &user_id, tenant_id.as_deref()).await;

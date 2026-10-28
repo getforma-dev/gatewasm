@@ -13,7 +13,7 @@ import {
   email, setEmail, password, setPassword, name, setName,
   rememberEmail, setRememberEmail,
   hasGoogle, hasGithub, hasOAuth, hasEmail,
-  inviteOnly, allowPublicSignup,
+  inviteRequired, allowSignup,
   startOAuth, submitForm, sendForgotPassword, persistEmail,
   appName, logoUrl,
   setError, setSuccess,
@@ -109,9 +109,9 @@ function AuthFormView() {
     ),
     hasOAuth ? OAuthButtons() : null,
     hasOAuth && hasEmail ? h('div', { class: 'tl-divider' }, 'or') : null,
-    inviteOnly
+    inviteRequired
       ? h('div', { class: 'tl-notice' },
-          allowPublicSignup
+          allowSignup
             ? 'Invite link detected. You can sign in or create your invited account.'
             : 'This tenant is invite-only. New account sign-up requires an invite link.',
         )
@@ -167,7 +167,7 @@ function AuthFormView() {
         )
       : null,
     hasEmail
-      ? allowPublicSignup
+      ? allowSignup
         ? h('div', { class: 'tl-toggle' },
             () => mode() === 'login' ? "Don\u2019t have an account? " : 'Already have an account? ',
             h('a', {

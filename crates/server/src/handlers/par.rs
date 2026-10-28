@@ -1,9 +1,4 @@
-use axum::{
-    extract::State,
-    http::StatusCode,
-    response::IntoResponse,
-    Extension, Json,
-};
+use axum::{extract::State, http::StatusCode, response::IntoResponse, Extension, Json};
 use chrono::{Duration, Utc};
 
 use crate::error::AppError;
@@ -22,12 +17,11 @@ pub async fn par_endpoint(
     body: String,
 ) -> Result<impl IntoResponse, AppError> {
     // 1. Parse form-urlencoded body
-    let params: Vec<(String, String)> = serde_urlencoded::from_str(&body).map_err(|_| {
-        AppError::BadRequest {
+    let params: Vec<(String, String)> =
+        serde_urlencoded::from_str(&body).map_err(|_| AppError::BadRequest {
             error: "invalid_request",
             message: "Malformed form body".into(),
-        }
-    })?;
+        })?;
 
     let get_param = |name: &str| -> Option<String> {
         params
@@ -116,6 +110,51 @@ pub async fn par_endpoint(
         });
     }
 
+    // Serialize the bound and insert. Only the invitation hash is retained for
+    // hosted email; raw tokens stay in the backend POST, never a redirect or log.
+    let mut tx = state.db.begin().await?;
+    sqlx::query("SELECT id FROM tenants WHERE id=$1 FOR UPDATE")
+        .bind(&tenant.tenant_id)
+        .execute(&mut *tx)
+        .await?;
+    let email_invite_hash = if provider == "email" {
+        if state_param.is_empty()
+            || state_param.len() > 1024
+            || code_challenge.len() != 43
+            || !code_challenge
+                .bytes()
+                .all(|c| c.is_ascii_alphanumeric() || c == b'-' || c == b'_')
+        {
+            return Err(super::hosted_code::invalid_request());
+        }
+        match invite_token.as_deref() {
+            Some(token) if !token.trim().is_empty() && token.len() <= 256 => {
+                let hash = crate::jwt::signing::hash_token(token.trim());
+                super::hosted_code::validate_invite_hash(&mut tx, &tenant.tenant_id, &hash).await?;
+                Some(hash)
+            }
+            Some(_) => return Err(super::hosted_code::invalid_request()),
+            None => None,
+        }
+    } else {
+        None
+    };
+    sqlx::query(
+        "DELETE FROM par_requests WHERE tenant_id=$1 AND (consumed=TRUE OR expires_at<clock_timestamp())",
+    )
+    .bind(&tenant.tenant_id)
+    .execute(&mut *tx)
+    .await?;
+    let pending: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM par_requests WHERE tenant_id=$1 AND consumed=FALSE",
+    )
+    .bind(&tenant.tenant_id)
+    .fetch_one(&mut *tx)
+    .await?;
+    if pending >= 1000 {
+        return Err(AppError::TooManyRequests);
+    }
+
     // 5. Generate request_uri with 128-bit random hex
     let request_uri = format!(
         "urn:ietf:params:oauth:request_uri:{}",
@@ -133,7 +172,8 @@ pub async fn par_endpoint(
         "code_challenge_method": code_challenge_method,
         "provider": provider,
         "nonce": nonce,
-        "invite_token": invite_token,
+        "invite_token": if provider == "email" { None } else { invite_token },
+        "invite_token_hash": email_invite_hash,
     });
 
     let expires_at = Utc::now() + Duration::seconds(60);
@@ -146,11 +186,11 @@ pub async fn par_endpoint(
     .bind(&parameters)
     .bind(&tenant.tenant_id)
     .bind(expires_at)
-    .execute(&state.db)
+    .execute(&mut *tx)
     .await?;
+    tx.commit().await?;
 
     tracing::info!(
-        request_uri = %request_uri,
         client_id = %client_id,
         tenant_id = %tenant.tenant_id,
         "PAR request created"
@@ -159,6 +199,7 @@ pub async fn par_endpoint(
     // 7. Return 201 Created
     Ok((
         StatusCode::CREATED,
+        [(axum::http::header::CACHE_CONTROL, "no-store")],
         Json(serde_json::json!({
             "request_uri": request_uri,
             "expires_in": 60
@@ -173,7 +214,10 @@ pub async fn cleanup_expired_par(pool: &sqlx::PgPool) {
         .await;
     match result {
         Ok(res) if res.rows_affected() > 0 => {
-            tracing::debug!(deleted = res.rows_affected(), "Cleaned up expired PAR requests");
+            tracing::debug!(
+                deleted = res.rows_affected(),
+                "Cleaned up expired PAR requests"
+            );
         }
         Err(e) => {
             tracing::warn!(error = %e, "Failed to clean up expired PAR requests");

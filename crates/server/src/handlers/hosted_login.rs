@@ -47,7 +47,10 @@ pub async fn login_page(
     }
 
     // no-store prevents bfcache — back button makes a fresh server request
-    let page = login_page_render(&state, &tenant, preview_mode, authorization_request.as_deref()).await;
+    let hosted_registration_allowed = if let Some(id) = authorization_request.as_deref() {
+        super::hosted_code::registration_allowed(&state, &tenant, id, req.headers()).await
+    } else { false };
+    let page = login_page_render(&state, &tenant, preview_mode, authorization_request.as_deref(), hosted_registration_allowed).await;
 
     // Preview mode deliberately does NOT relax `frame-ancestors`. The console
     // opens this page in a new tab — `window.open(..., '_blank', 'noopener')`
@@ -75,6 +78,7 @@ async fn login_page_render(
     tenant: &TenantContext,
     preview_mode: bool,
     authorization_request: Option<&str>,
+    hosted_registration_allowed: bool,
 ) -> crate::html_template::PageOutput {
     let frontend = FrontendSnapshot::capture(state);
     let app_name = tenant.branding_app_name.as_deref().unwrap_or(&tenant.name);
@@ -128,6 +132,7 @@ async fn login_page_render(
             }
         }).collect::<Vec<_>>(),
         "authorization_request": authorization_request,
+        "hosted_registration_allowed": hosted_registration_allowed,
         "signup_mode": tenant.signup_mode,
         "server_url": format!("/t/{}", tenant.slug),
         "login_redirect_url": tenant.login_redirect_url,

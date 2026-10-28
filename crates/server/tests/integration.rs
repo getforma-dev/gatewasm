@@ -10968,14 +10968,11 @@ async fn test_par_client_id_mismatch_rejected() {
     assert_eq!(res.status(), StatusCode::BAD_REQUEST);
     let json = body_json(res).await;
     assert_eq!(json["error"], "invalid_request");
-    assert!(
-        json["message"]
-            .as_str()
-            .unwrap()
-            .contains("client_id"),
-        "Expected client_id mismatch error, got: {}",
-        json["message"]
-    );
+    assert_eq!(json["message"], "Invalid, expired, or already-consumed request_uri");
+    // A foreign client must not burn the legitimate client's pending request.
+    let consumed: bool = sqlx::query_scalar("SELECT consumed FROM par_requests WHERE request_uri=$1")
+        .bind(&request_uri).fetch_one(&pool).await.unwrap();
+    assert!(!consumed);
 }
 
 // ── mTLS Certificate Management ─────────────────────────────────────────
@@ -13519,3 +13516,6 @@ async fn staged_management_rotation_is_retryable_audited_and_revokes_old_key() {
         "privileged actions fail closed if durable auditing fails"
     );
 }
+
+#[path = "cases/hosted_signup.rs"]
+mod hosted_signup;

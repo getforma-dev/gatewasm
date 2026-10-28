@@ -47,6 +47,7 @@ pub struct GitHubEmail {
 
 #[derive(Debug, Deserialize)]
 pub struct RegisterRequest {
+    pub authorization_request: Option<String>,
     pub email: String,
     pub password: String,
     pub name: Option<String>,
