@@ -73,7 +73,6 @@ pub async fn token_exchange(
         grant_type = %body.grant_type,
         client_id = ?body.client_id,
         redirect_uri = ?body.redirect_uri,
-        code_prefix = ?body.code.as_deref().map(|c| crate::text::truncate_chars(c, 12)),
         "Token exchange requested"
     );
     match body.grant_type.as_str() {
@@ -151,7 +150,6 @@ async fn handle_auth_code(
         auth_code_row.ok_or_else(|| {
             tracing::warn!(
                 request_id = %request_id,
-                code_prefix = %crate::text::truncate_chars(code, 12),
                 client_id = %req_client_id,
                 redirect_uri = %req_redirect_uri,
                 "Authorization code rejected: no matching code row"
@@ -193,8 +191,6 @@ async fn handle_auth_code(
     if computed_challenge.as_bytes().ct_eq(stored_code_challenge.as_bytes()).unwrap_u8() != 1 {
         tracing::warn!(
             request_id = %request_id,
-            computed = %computed_challenge,
-            stored = %stored_code_challenge,
             "Authorization code rejected: PKCE mismatch"
         );
         return Err(AppError::BadRequest {
@@ -204,8 +200,8 @@ async fn handle_auth_code(
     }
 
     // Mark auth code as used (atomic)
-    let result = sqlx::query("UPDATE auth_codes SET used = TRUE WHERE code = $1 AND used = FALSE")
-        .bind(code)
+    let result = sqlx::query("UPDATE auth_codes SET used = TRUE WHERE code = $1 AND used = FALSE AND expires_at > NOW() AND client_id=$2 AND redirect_uri=$3 AND code_challenge=$4 AND tenant_id IS NOT DISTINCT FROM $5")
+        .bind(code).bind(req_client_id).bind(req_redirect_uri).bind(&stored_code_challenge).bind(&tenant_id)
         .execute(&state.db)
         .await?;
 

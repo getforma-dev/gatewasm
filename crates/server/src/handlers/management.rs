@@ -832,6 +832,92 @@ pub struct UpdateConfigRequest {
     pub signup_mode: Option<String>,
 }
 
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RegisterOAuthClient {
+    pub client_id: String,
+    pub name: String,
+    pub redirect_uri: String,
+}
+
+/// One exact redirect per registered client. Repeating identical input is idempotent;
+/// replacing an existing redirect or taking another tenant's identifier is refused.
+pub async fn register_oauth_client(
+    State(state): State<AppState>,
+    Extension(tenant): Extension<TenantContext>,
+    Json(body): Json<RegisterOAuthClient>,
+) -> Result<impl IntoResponse, AppError> {
+    let invalid = || {
+        AppError::BadRequest { error: "invalid_client_configuration", message: "Use a bounded client identifier, name, and exact HTTPS callback (loopback HTTP only in local development).".into() }
+    };
+    if body.client_id.is_empty()
+        || body.client_id.len() > 128
+        || !body
+            .client_id
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
+        || body.client_id.ends_with("-hosted")
+        || body.name.trim().is_empty()
+        || body.name.len() > 200
+        || body.redirect_uri.len() > 2048
+    {
+        return Err(invalid());
+    }
+    let url = url::Url::parse(&body.redirect_uri).map_err(|_| invalid())?;
+    let local = state.config.server_url.starts_with("http://")
+        && matches!(url.host_str(), Some("localhost" | "127.0.0.1" | "[::1]"));
+    if !(url.scheme() == "https" || (url.scheme() == "http" && local))
+        || url.host_str().is_none()
+        || !url.username().is_empty()
+        || url.password().is_some()
+        || url.fragment().is_some()
+        || body.redirect_uri.contains('*')
+        || url.query_pairs().any(|(k, _)| k == "code" || k == "state")
+    {
+        return Err(invalid());
+    }
+    let result = sqlx::query("INSERT INTO oauth_clients (id, name, redirect_uri, tenant_id) VALUES ($1,$2,$3,$4) ON CONFLICT (id) DO NOTHING")
+        .bind(&body.client_id).bind(&body.name).bind(&body.redirect_uri).bind(&tenant.tenant_id)
+        .execute(&state.db).await?;
+    let existing: Option<(String, String)> =
+        sqlx::query_as("SELECT name, redirect_uri FROM oauth_clients WHERE id=$1 AND tenant_id=$2")
+            .bind(&body.client_id)
+            .bind(&tenant.tenant_id)
+            .fetch_optional(&state.db)
+            .await?;
+    if existing != Some((body.name.clone(), body.redirect_uri.clone())) {
+        return Err(AppError::Conflict {
+            error: "client_conflict",
+            message: "Client identifier already exists with different configuration.".into(),
+        });
+    }
+    Ok((
+        if result.rows_affected() == 1 {
+            StatusCode::CREATED
+        } else {
+            StatusCode::OK
+        },
+        Json(
+            serde_json::json!({"client_id":body.client_id,"name":body.name,"redirect_uri":body.redirect_uri,"tenant_id":tenant.tenant_id,"pkce_method":"S256"}),
+        ),
+    ))
+}
+
+pub async fn list_oauth_clients(
+    State(state): State<AppState>,
+    Extension(tenant): Extension<TenantContext>,
+) -> Result<impl IntoResponse, AppError> {
+    let rows: Vec<(String, String, String)> = sqlx::query_as(
+        "SELECT id,name,redirect_uri FROM oauth_clients WHERE tenant_id=$1 ORDER BY id",
+    )
+    .bind(&tenant.tenant_id)
+    .fetch_all(&state.db)
+    .await?;
+    Ok(Json(
+        serde_json::json!({"clients":rows.into_iter().map(|(id,name,redirect_uri)| serde_json::json!({"client_id":id,"name":name,"redirect_uri":redirect_uri})).collect::<Vec<_>>()}),
+    ))
+}
+
 #[derive(sqlx::FromRow)]
 struct UserListRow {
     id: String,

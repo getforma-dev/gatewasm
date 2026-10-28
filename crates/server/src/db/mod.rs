@@ -49,6 +49,7 @@ async fn run_migrations(pool: &PgPool) -> Result<(), sqlx::Error> {
             "gold branding default for new tenants",
             include_str!("pg_migrations/004_gold_branding_default.sql"),
         ),
+        (5, "hosted password authorization", include_str!("pg_migrations/005_hosted_authorization.sql")),
     ];
 
     for &(version, label, sql) in migrations {

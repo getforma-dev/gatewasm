@@ -5486,10 +5486,7 @@ async fn test_hosted_login_page_contains_tenant_config() {
         body.contains("email"),
         "Config should include email provider"
     );
-    assert!(
-        body.contains("google"),
-        "Config should include google provider"
-    );
+    assert!(!body.contains("\"google\""), "Unconfigured provider must stay hidden");
     assert!(body.contains("window.__TENANT__"), "Should have tenant config injection");
 }
 
@@ -12718,4 +12715,326 @@ async fn token_endpoint_survives_a_non_ascii_authorization_code() {
             res.status()
         );
     }
+}
+
+// FORMA-247: the quiet hosted email flow hands only a PKCE code to browser JS.
+#[tokio::test]
+async fn hosted_code_pkce_is_bound_single_use_and_offline_verifiable() {
+    use sha2::{Digest, Sha256};
+    let (app, pool) = test_app_with_pool().await;
+    let (tenant_id, key) = create_test_tenant_with_mgmt_key(&pool, "northstar", "Northstar").await;
+    let client = serde_json::json!({"client_id":"northstar-platform", "name":"Northstar", "redirect_uri":"https://platform.example.test/auth/callback"});
+    for expected in [StatusCode::CREATED, StatusCode::OK] {
+        let res = app
+            .clone()
+            .oneshot(mgmt_request(
+                "POST",
+                "/manage/oauth-clients",
+                client.clone(),
+                &key,
+            ))
+            .await
+            .unwrap();
+        assert_eq!(res.status(), expected);
+    }
+    let created = app.clone().oneshot(mgmt_request("POST", "/manage/users", serde_json::json!({"email":"maya@northstar.test","password":"TestPassword123!","name":"Maya","role":"admin"}), &key)).await.unwrap();
+    assert_eq!(created.status(), StatusCode::CREATED);
+    let user_id = body_json(created).await["user"]["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let verifier = "a".repeat(43);
+    let challenge = base64::engine::general_purpose::URL_SAFE_NO_PAD
+        .encode(Sha256::digest(verifier.as_bytes()));
+    let authorize = format!("/t/northstar/auth/authorize?client_id=northstar-platform&redirect_uri=https%3A%2F%2Fplatform.example.test%2Fauth%2Fcallback&response_type=code&state=client-csrf-state&code_challenge={challenge}&code_challenge_method=S256&provider=email");
+    let start = app.clone().oneshot(get_request(&authorize)).await.unwrap();
+    assert_eq!(start.status(), StatusCode::TEMPORARY_REDIRECT);
+    let cookie = start.headers()["set-cookie"]
+        .to_str()
+        .unwrap()
+        .split(';')
+        .next()
+        .unwrap()
+        .to_string();
+    let location = start.headers()["location"].to_str().unwrap().to_string();
+    let request_id = location.split("authorization_request=").nth(1).unwrap();
+    let login = serde_json::json!({"email":"maya@northstar.test","password":"TestPassword123!","authorization_request":request_id});
+    let missing_cookie = app
+        .clone()
+        .oneshot(json_request_no_tenant(
+            "POST",
+            "/t/northstar/auth/login",
+            login.clone(),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(missing_cookie.status(), StatusCode::BAD_REQUEST);
+    let mut wrong_cookie = json_request_no_tenant("POST", "/t/northstar/auth/login", login.clone());
+    wrong_cookie.headers_mut().insert(
+        "cookie",
+        format!("fauth_authorization={}", "x".repeat(43))
+            .parse()
+            .unwrap(),
+    );
+    assert_eq!(
+        app.clone().oneshot(wrong_cookie).await.unwrap().status(),
+        StatusCode::BAD_REQUEST
+    );
+    let mut req = json_request_no_tenant("POST", "/t/northstar/auth/login", login.clone());
+    req.headers_mut().insert("cookie", cookie.parse().unwrap());
+    let signed_in = app.clone().oneshot(req).await.unwrap();
+    assert_eq!(signed_in.status(), StatusCode::OK);
+    assert!(signed_in.headers().get("set-cookie").is_none());
+    let result = body_json(signed_in).await;
+    assert!(result.get("access_token").is_none() && result.get("refresh_token").is_none());
+    let redirect = url::Url::parse(result["redirect_uri"].as_str().unwrap()).unwrap();
+    let query: std::collections::HashMap<_, _> = redirect.query_pairs().into_owned().collect();
+    assert_eq!(query["state"], "client-csrf-state");
+    let exchange = serde_json::json!({"grant_type":"authorization_code","code":query["code"],"code_verifier":verifier,"client_id":"northstar-platform","redirect_uri":"https://platform.example.test/auth/callback"});
+    for (field, value) in [
+        ("code_verifier", "wrong"),
+        ("redirect_uri", "https://evil.example/callback"),
+        ("client_id", "another-client"),
+    ] {
+        let mut bad = exchange.clone();
+        bad[field] = value.into();
+        let res = app
+            .clone()
+            .oneshot(json_request_no_tenant(
+                "POST",
+                "/t/northstar/auth/token",
+                bad,
+            ))
+            .await
+            .unwrap();
+        assert_eq!(res.status(), StatusCode::BAD_REQUEST);
+    }
+    create_test_tenant_in_db(&pool, "canary", "Canary").await;
+    let cross = app
+        .clone()
+        .oneshot(json_request_no_tenant(
+            "POST",
+            "/t/canary/auth/token",
+            exchange.clone(),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(cross.status(), StatusCode::UNAUTHORIZED);
+    let (first, second) = tokio::join!(
+        app.clone().oneshot(json_request_no_tenant(
+            "POST",
+            "/t/northstar/auth/token",
+            exchange.clone()
+        )),
+        app.clone().oneshot(json_request_no_tenant(
+            "POST",
+            "/t/northstar/auth/token",
+            exchange.clone()
+        ))
+    );
+    let (first, second) = (first.unwrap(), second.unwrap());
+    let (issued, refused) = if first.status() == StatusCode::OK {
+        (first, second)
+    } else {
+        (second, first)
+    };
+    assert_eq!(issued.status(), StatusCode::OK);
+    assert_eq!(refused.status(), StatusCode::BAD_REQUEST);
+    let token = body_json(issued).await;
+    let jwt = token["access_token"].as_str().unwrap();
+    let jwks = body_json(
+        app.clone()
+            .oneshot(get_request("/auth/jwks"))
+            .await
+            .unwrap(),
+    )
+    .await;
+    let header = jsonwebtoken::decode_header(jwt).unwrap();
+    let jwk = jwks["keys"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|key| key["kid"].as_str() == header.kid.as_deref())
+        .unwrap();
+    let decoding =
+        jsonwebtoken::DecodingKey::from_ed_components(jwk["x"].as_str().unwrap()).unwrap();
+    let mut validation = jsonwebtoken::Validation::new(jsonwebtoken::Algorithm::EdDSA);
+    validation.set_issuer(&["test"]);
+    validation.set_audience(&["test-app"]);
+    let claims = jsonwebtoken::decode::<serde_json::Value>(jwt, &decoding, &validation)
+        .unwrap()
+        .claims;
+    assert_eq!(claims["tenant_id"], tenant_id);
+    assert_eq!(claims["sub"], user_id);
+    assert_eq!(claims["roles"], serde_json::json!(["admin"]));
+    let replay = app
+        .clone()
+        .oneshot(json_request_no_tenant(
+            "POST",
+            "/t/northstar/auth/token",
+            exchange.clone(),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(replay.status(), StatusCode::BAD_REQUEST);
+    let refreshed = app.clone().oneshot(json_request_no_tenant("POST", "/t/northstar/auth/token", serde_json::json!({"grant_type":"refresh_token","refresh_token":token["refresh_token"]}))).await.unwrap();
+    assert_eq!(refreshed.status(), StatusCode::OK);
+    let mut replay_login = json_request_no_tenant("POST", "/t/northstar/auth/login", login);
+    replay_login
+        .headers_mut()
+        .insert("cookie", cookie.parse().unwrap());
+    assert_eq!(
+        app.clone().oneshot(replay_login).await.unwrap().status(),
+        StatusCode::BAD_REQUEST
+    );
+    sqlx::query("UPDATE auth_codes SET used=FALSE, expires_at=NOW()-INTERVAL '1 second'")
+        .execute(&pool)
+        .await
+        .unwrap();
+    assert_eq!(
+        app.clone()
+            .oneshot(json_request_no_tenant(
+                "POST",
+                "/t/northstar/auth/token",
+                exchange
+            ))
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::BAD_REQUEST
+    );
+}
+
+#[tokio::test]
+async fn hosted_code_registration_refuses_cross_tenant_and_unsafe_redirects() {
+    let (app, pool) = test_app_with_pool().await;
+    let (_, key) = create_test_tenant_with_mgmt_key(&pool, "northstar", "Northstar").await;
+    let (_, canary_key) = create_test_tenant_with_mgmt_key(&pool, "canary", "Canary").await;
+    let client = serde_json::json!({"client_id":"northstar-platform","name":"Northstar","redirect_uri":"https://platform.example.test/callback"});
+    assert_eq!(
+        app.clone()
+            .oneshot(mgmt_request(
+                "POST",
+                "/manage/oauth-clients",
+                client.clone(),
+                &key
+            ))
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::CREATED
+    );
+    assert_eq!(
+        app.clone()
+            .oneshot(mgmt_request(
+                "POST",
+                "/manage/oauth-clients",
+                client.clone(),
+                &canary_key
+            ))
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::CONFLICT
+    );
+    for redirect in [
+        "http://platform.example.test/callback",
+        "https://user:password@example.test/callback",
+        "https://example.test/#fragment",
+        "https://example.test/*",
+        "https://example.test/?code=old",
+        "javascript:alert(1)",
+    ] {
+        let mut bad = client.clone();
+        bad["redirect_uri"] = redirect.into();
+        assert_eq!(
+            app.clone()
+                .oneshot(mgmt_request("POST", "/manage/oauth-clients", bad, &key))
+                .await
+                .unwrap()
+                .status(),
+            StatusCode::BAD_REQUEST
+        );
+    }
+    let list = body_json(
+        app.clone()
+            .oneshot(mgmt_get("/manage/oauth-clients", &canary_key))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(list["clients"], serde_json::json!([]));
+}
+
+#[tokio::test]
+async fn hosted_code_refuses_mfa_expired_requests_and_pending_exhaustion() {
+    use sha2::{Digest, Sha256};
+    let (app, pool) = test_app_with_pool().await;
+    let (tenant_id, key) = create_test_tenant_with_mgmt_key(&pool, "northstar", "Northstar").await;
+    assert_eq!(app.clone().oneshot(mgmt_request("POST", "/manage/oauth-clients", serde_json::json!({"client_id":"northstar-platform","name":"Northstar","redirect_uri":"https://platform.example.test/callback"}), &key)).await.unwrap().status(),StatusCode::CREATED);
+    let created = app.clone().oneshot(mgmt_request("POST", "/manage/users", serde_json::json!({"email":"maya@northstar.test","password":"TestPassword123!","name":"Maya","role":"admin"}), &key)).await.unwrap();
+    let user_id = body_json(created).await["user"]["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let challenge = base64::engine::general_purpose::URL_SAFE_NO_PAD
+        .encode(Sha256::digest("a".repeat(43).as_bytes()));
+    let authorize=format!("/t/northstar/auth/authorize?client_id=northstar-platform&redirect_uri=https%3A%2F%2Fplatform.example.test%2Fcallback&response_type=code&state=state&code_challenge={challenge}&code_challenge_method=S256&provider=email");
+    let start = app.clone().oneshot(get_request(&authorize)).await.unwrap();
+    assert_eq!(start.status(), StatusCode::TEMPORARY_REDIRECT);
+    let cookie = start.headers()["set-cookie"]
+        .to_str()
+        .unwrap()
+        .split(';')
+        .next()
+        .unwrap()
+        .to_string();
+    let request_id = start.headers()["location"]
+        .to_str()
+        .unwrap()
+        .split("authorization_request=")
+        .nth(1)
+        .unwrap()
+        .to_string();
+    let login = serde_json::json!({"email":"maya@northstar.test","password":"TestPassword123!","authorization_request":request_id});
+    sqlx::query("UPDATE users SET mfa_enabled=TRUE WHERE id=$1")
+        .bind(&user_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let mut req = json_request_no_tenant("POST", "/t/northstar/auth/login", login.clone());
+    req.headers_mut().insert("cookie", cookie.parse().unwrap());
+    let denied = app.clone().oneshot(req).await.unwrap();
+    assert_eq!(denied.status(), StatusCode::FORBIDDEN);
+    assert_eq!(body_json(denied).await["error"], "mfa_required");
+    sqlx::query("UPDATE users SET mfa_enabled=FALSE WHERE id=$1")
+        .bind(&user_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("UPDATE hosted_authorization_requests SET expires_at=NOW()-INTERVAL '1 second'")
+        .execute(&pool)
+        .await
+        .unwrap();
+    let mut req = json_request_no_tenant("POST", "/t/northstar/auth/login", login);
+    req.headers_mut().insert("cookie", cookie.parse().unwrap());
+    assert_eq!(
+        app.clone().oneshot(req).await.unwrap().status(),
+        StatusCode::BAD_REQUEST
+    );
+    sqlx::query("INSERT INTO hosted_authorization_requests (id,tenant_id,client_id,redirect_uri,client_state,code_challenge,browser_hash,expires_at) SELECT 'pending-' || n, $1,'northstar-platform','https://platform.example.test/callback','state','challenge','hash',NOW()+INTERVAL '1 minute' FROM generate_series(1,1000) n").bind(&tenant_id).execute(&pool).await.unwrap();
+    assert_eq!(
+        app.clone()
+            .oneshot(get_request(&authorize))
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::TOO_MANY_REQUESTS
+    );
+    let codes: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM auth_codes WHERE tenant_id=$1")
+        .bind(&tenant_id)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(codes, 0);
 }

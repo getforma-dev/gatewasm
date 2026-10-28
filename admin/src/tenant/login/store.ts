@@ -8,7 +8,7 @@ import { createSignal } from 'formajs';
 import type { TenantConfig } from '../../core/types';
 
 // ── Tenant config (injected by Rust handler into window.__TENANT__) ──────
-const config: TenantConfig & { hosted_redirect_uri?: string } =
+const config: TenantConfig & { hosted_redirect_uri?: string; authorization_request?: string } =
   (window as any).__TENANT__ || {};
 
 export const slug = config.slug || '';
@@ -20,6 +20,7 @@ export const logoUrl = config.logo_url || null;
 export const signupMode = config.signup_mode || 'public';
 export const loginRedirectUrl = config.login_redirect_url || '/';
 const hostedRedirectUri = config.hosted_redirect_uri || '';
+const authorizationRequest = config.authorization_request || '';
 const clientId = config.client_id || `${slug}-hosted`;
 
 // ── Provider flags ──────────────────────────────────────────────────────
@@ -47,7 +48,7 @@ const redirectParam = urlParams.get('redirect') || '';
 const safeRedirect = redirectParam.startsWith('/t/' + slug + '/') ? redirectParam : '';
 
 export const inviteOnly = signupMode === 'invite_only';
-export const allowPublicSignup = !inviteOnly || !!inviteToken;
+export const allowPublicSignup = !authorizationRequest && (!inviteOnly || !!inviteToken);
 
 // ── Reactive state ──────────────────────────────────────────────────────
 export type LoginMode = 'login' | 'register' | 'forgot' | 'forgot-sent' | 'reset' | 'reset-done';
@@ -201,6 +202,8 @@ export function submitForm(e: Event) {
       ? { email: email(), password: password(), name: name() }
       : { email: email(), password: password() };
 
+  if (!isReset && !isRegister && authorizationRequest) body.authorization_request = authorizationRequest;
+
   if (!isReset && inviteToken) {
     body.invite_token = inviteToken;
   }
@@ -229,6 +232,11 @@ export function submitForm(e: Event) {
       }
       if (inviteToken) {
         try { sessionStorage.removeItem(inviteStorageKey); } catch { /* noop */ }
+      }
+      if (authorizationRequest) {
+        if (!result.data?.redirect_uri) { setError('Sign-in request expired. Start sign-in again.'); return; }
+        window.location.href = result.data.redirect_uri;
+        return;
       }
       window.location.href = safeRedirect || loginRedirectUrl;
     })
@@ -294,6 +302,5 @@ export function init() {
 
   applyBranding();
   loadRememberedEmail();
-  setupBfcacheListener();
-  handleOAuthCallback();
+  if (!authorizationRequest) { setupBfcacheListener(); handleOAuthCallback(); }
 }

@@ -19,9 +19,16 @@ echo "Logging in to ECR (${repo_uri})..."
 aws ecr get-login-password --region "${region}" | \
   docker login --username AWS --password-stdin "$(dirname "${repo_uri}")"
 
+source_revision="$(git -C "${repo_root}" rev-parse HEAD)"
+if [[ -n "$(git -C "${repo_root}" status --porcelain --untracked-files=no)" ]]; then
+  echo "Refusing an image identity for a dirty source tree." >&2
+  exit 1
+fi
 echo "Building image ${repo_uri}:${tag}..."
 docker build \
   --platform linux/amd64 \
+  --build-arg "GATEWASM_SOURCE_REVISION=${source_revision}" \
+  --label "org.opencontainers.image.revision=${source_revision}" \
   -f "${repo_root}/crates/server/Dockerfile" \
   -t "${repo_uri}:${tag}" \
   "${repo_root}"

@@ -27,7 +27,9 @@ COPY admin/dist/ ./admin/dist/
 # Touch files to invalidate the stub build cache
 RUN touch crates/server/src/main.rs crates/server/src/lib.rs
 
-RUN cargo build --release -p gatewasm-server
+ARG GATEWASM_SOURCE_REVISION=unrecorded
+ENV GATEWASM_SOURCE_REVISION=${GATEWASM_SOURCE_REVISION}
+RUN cargo build --locked --release -p gatewasm-server
 
 # --- Runtime stage ---
 FROM debian:bookworm-slim
