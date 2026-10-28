@@ -8,7 +8,11 @@ import { createSignal } from 'formajs';
 import type { TenantConfig } from '../../core/types';
 
 // ── Tenant config (injected by Rust handler into window.__TENANT__) ──────
-const config: TenantConfig & { hosted_redirect_uri?: string; authorization_request?: string } =
+const config: TenantConfig & {
+  hosted_redirect_uri?: string;
+  authorization_request?: string;
+  hosted_registration_allowed?: boolean;
+} =
   (window as any).__TENANT__ || {};
 
 export const slug = config.slug || '';
@@ -21,23 +25,32 @@ export const signupMode = config.signup_mode || 'public';
 export const loginRedirectUrl = config.login_redirect_url || '/';
 const hostedRedirectUri = config.hosted_redirect_uri || '';
 const authorizationRequest = config.authorization_request || '';
+const urlParams = new URLSearchParams(window.location.search);
+// A missing/empty injected request must fail as a hosted request, rather than
+// fall through to the legacy password API that returns bearer tokens.
+const isHostedAuthorization = typeof config.authorization_request === 'string'
+  || urlParams.has('authorization_request');
 const clientId = config.client_id || `${slug}-hosted`;
 
 // ── Provider flags ──────────────────────────────────────────────────────
-export const hasGoogle = providers.indexOf('google') >= 0;
-export const hasGithub = providers.indexOf('github') >= 0;
+export const hasGoogle = !isHostedAuthorization && providers.indexOf('google') >= 0;
+export const hasGithub = !isHostedAuthorization && providers.indexOf('github') >= 0;
 export const hasOAuth = hasGoogle || hasGithub;
 export const hasEmail = providers.indexOf('email') >= 0;
 
 // ── Invite token ────────────────────────────────────────────────────────
 const inviteStorageKey = 'tenant_invite_token_' + slug;
-const urlParams = new URLSearchParams(window.location.search);
-let inviteToken = urlParams.get('invite_token') || '';
-if (!inviteToken) {
-  try { inviteToken = sessionStorage.getItem(inviteStorageKey) || ''; } catch { /* noop */ }
-}
-if (inviteToken) {
-  try { sessionStorage.setItem(inviteStorageKey, inviteToken); } catch { /* noop */ }
+// Hosted invitations stay on the server. Only the legacy direct-invite flow
+// reads or stores a raw invite token in this page.
+let inviteToken = '';
+if (!isHostedAuthorization) {
+  inviteToken = urlParams.get('invite_token') || '';
+  if (!inviteToken) {
+    try { inviteToken = sessionStorage.getItem(inviteStorageKey) || ''; } catch { /* noop */ }
+  }
+  if (inviteToken) {
+    try { sessionStorage.setItem(inviteStorageKey, inviteToken); } catch { /* noop */ }
+  }
 }
 
 const resetToken = urlParams.get('reset_token') || '';
@@ -48,7 +61,10 @@ const redirectParam = urlParams.get('redirect') || '';
 const safeRedirect = redirectParam.startsWith('/t/' + slug + '/') ? redirectParam : '';
 
 export const inviteOnly = signupMode === 'invite_only';
-export const allowPublicSignup = !authorizationRequest && (!inviteOnly || !!inviteToken);
+export const inviteRequired = isHostedAuthorization || inviteOnly;
+export const allowSignup = isHostedAuthorization
+  ? !!authorizationRequest && config.hosted_registration_allowed === true
+  : !inviteOnly || !!inviteToken;
 
 // ── Reactive state ──────────────────────────────────────────────────────
 export type LoginMode = 'login' | 'register' | 'forgot' | 'forgot-sent' | 'reset' | 'reset-done';
@@ -60,7 +76,7 @@ export const [error, setError] = createSignal<string | null>(null);
 export const [success, setSuccess] = createSignal<string | null>(null);
 export const [loading, setLoading] = createSignal(false);
 const modeParam = urlParams.get('mode');
-const initialMode: LoginMode = resetToken ? 'reset' : (modeParam === 'register' ? 'register' : 'login');
+const initialMode: LoginMode = resetToken ? 'reset' : (modeParam === 'register' && allowSignup ? 'register' : 'login');
 export const [mode, setMode] = createSignal<LoginMode>(initialMode);
 export const [showPassword, setShowPassword] = createSignal(false);
 export const [rememberEmail, setRememberEmail] = createSignal(false);
@@ -105,6 +121,7 @@ function applyBranding() {
 // ── OAuth start ─────────────────────────────────────────────────────────
 
 export function startOAuth(provider: string) {
+  if (isHostedAuthorization) return;
   setError(null);
   setSuccess(null);
   generatePKCE().then((pkce) => {
@@ -184,7 +201,7 @@ export function submitForm(e: Event) {
   const isRegister = currentMode === 'register';
   const isReset = currentMode === 'reset';
 
-  if (isRegister && !allowPublicSignup) {
+  if (isRegister && !allowSignup) {
     setLoading(false);
     setError('This tenant is invite-only. Use an invitation link to sign up.');
     return;
@@ -202,9 +219,9 @@ export function submitForm(e: Event) {
       ? { email: email(), password: password(), name: name() }
       : { email: email(), password: password() };
 
-  if (!isReset && !isRegister && authorizationRequest) body.authorization_request = authorizationRequest;
+  if (!isReset && isHostedAuthorization) body.authorization_request = authorizationRequest;
 
-  if (!isReset && inviteToken) {
+  if (!isReset && !isHostedAuthorization && inviteToken) {
     body.invite_token = inviteToken;
   }
 
@@ -233,7 +250,7 @@ export function submitForm(e: Event) {
       if (inviteToken) {
         try { sessionStorage.removeItem(inviteStorageKey); } catch { /* noop */ }
       }
-      if (authorizationRequest) {
+      if (isHostedAuthorization) {
         if (!result.data?.redirect_uri) { setError('Sign-in request expired. Start sign-in again.'); return; }
         window.location.href = result.data.redirect_uri;
         return;
@@ -302,5 +319,5 @@ export function init() {
 
   applyBranding();
   loadRememberedEmail();
-  if (!authorizationRequest) { setupBfcacheListener(); handleOAuthCallback(); }
+  if (!isHostedAuthorization) { setupBfcacheListener(); handleOAuthCallback(); }
 }

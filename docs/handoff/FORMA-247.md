@@ -1,5 +1,7 @@
 # FORMA-247 source qualification — 2026-10-28
 
+Historical existing-user qualification. The later invitation-first extension is recorded in `FORMA-247-INVITED-SIGNUP.md`; its new source/image and application acceptance are separate.
+
 Base: `b750ca534ae89066714f100eb2b76ee71edf1ab1`; branch `codex/forma-247-hosted-auth`. This changes fAuth only; its published Forma 2/0.2 dependencies remain pinned. No GenUI checkout was modified.
 
 Implemented: idempotent tenant-scoped OAuth client registration, exact redirect validation, branded email/password authorization-code flow with S256 and browser binding, bounded pending requests, one-use 60-second codes, atomic expiry/binding check at exchange, token-free browser login response, and explicit MFA refusal. Tenant provider buttons require actual tenant credentials. Health includes build-time source identity. The delivery directory `handoff/forma-247/` contains idempotent Northstar/canary provisioning and the exact app contract.

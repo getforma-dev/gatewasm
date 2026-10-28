@@ -91,16 +91,17 @@ pub async fn authorize(
     // ── PAR request_uri handling ─────────────────────────────────────
     // If request_uri is present, look up the stored PAR record and use those
     // parameters instead of query params. The request_uri is single-use.
+    let mut par_invite_hash = None;
     let (client_id, redirect_uri_opt, response_type, state_param, code_challenge, code_challenge_method, provider, invite_token) =
         if let Some(ref request_uri) = params.request_uri {
-            // Atomically consume the PAR request (single-use)
+            // Read first; hosted email atomically consumes this only when its
+            // browser-bound request is committed, after client/tenant validation.
             let row = sqlx::query_as::<_, (String, serde_json::Value, String)>(
-                "UPDATE par_requests SET consumed = TRUE \
-                 WHERE request_uri = $1 AND consumed = FALSE AND expires_at > $2 \
-                 RETURNING client_id, parameters, tenant_id",
+                "SELECT client_id,parameters,tenant_id FROM par_requests WHERE request_uri=$1 AND consumed=FALSE AND expires_at>clock_timestamp() AND client_id=$2 AND tenant_id=$3",
             )
             .bind(request_uri)
-            .bind(Utc::now())
+            .bind(&params.client_id)
+            .bind(tenant_id.as_deref().ok_or_else(super::hosted_code::invalid_request)?)
             .fetch_optional(&state.db)
             .await?
             .ok_or_else(|| AppError::BadRequest {
@@ -137,6 +138,7 @@ pub async fn authorize(
             let p_code_challenge_method = par_params["code_challenge_method"].as_str().unwrap_or("").to_string();
             let p_provider = par_params["provider"].as_str().unwrap_or("").to_string();
             let p_invite_token = par_params["invite_token"].as_str().map(|s| s.to_string());
+            par_invite_hash = par_params["invite_token_hash"].as_str().map(str::to_string);
 
             (p_client_id, p_redirect_uri, p_response_type, p_state, p_code_challenge, p_code_challenge_method, p_provider, p_invite_token)
         } else {
@@ -222,9 +224,19 @@ pub async fn authorize(
 
     if provider_str == "email" {
         let tenant = tenant.as_ref().ok_or(AppError::BadRequest { error: "tenant_required", message: "Hosted code sign-in requires a tenant.".into() })?;
-        return super::hosted_code::begin(&state, tenant, &client_id, client_redirect, &state_param, &code_challenge).await;
+        // Email invitation capabilities are accepted only through a backend PAR
+        // body. Legacy raw query invitations must never silently become signup.
+        if invite_token.is_some() { return Err(super::hosted_code::invalid_request()); }
+        let par = params.request_uri.as_deref().map(|uri| (uri, par_invite_hash.as_deref()));
+        return super::hosted_code::begin(&state, tenant, &client_id, client_redirect, &state_param, &code_challenge, par).await;
     }
     let (provider_client_id, _) = get_oauth_creds(provider_str, tenant.as_ref(), &state)?;
+    if let Some(uri) = params.request_uri.as_deref() {
+        let consumed = sqlx::query("UPDATE par_requests SET consumed=TRUE WHERE request_uri=$1 AND client_id=$2 AND tenant_id=$3 AND consumed=FALSE AND expires_at>clock_timestamp()")
+            .bind(uri).bind(&client_id).bind(&tenant_id).execute(&state.db).await?;
+        if consumed.rows_affected()!=1 { return Err(super::hosted_code::invalid_request()); }
+    }
+
 
     let expires_at = Utc::now() + Duration::minutes(10);
 

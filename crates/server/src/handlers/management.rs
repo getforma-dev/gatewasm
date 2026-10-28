@@ -1489,6 +1489,7 @@ pub struct ListTenantInvitesQuery {
 
 #[derive(Debug, Deserialize)]
 pub struct CreateTenantInviteRequest {
+    pub delivery_mode: Option<String>,
     pub email: String,
     pub role: Option<String>,
     pub expires_in_hours: Option<i64>,
@@ -1633,6 +1634,15 @@ pub async fn create_tenant_invite(
             })?
             .0;
 
+    let server_only = match body.delivery_mode.as_deref().unwrap_or("email") {
+        "email" => false,
+        "server_only" => true,
+        _ => return Err(AppError::BadRequest { error: "invalid_delivery_mode", message: "delivery_mode must be email or server_only".into() }),
+    };
+    if server_only && body.role.as_deref().is_none_or(|r| r.trim().is_empty()) {
+        return Err(AppError::BadRequest { error: "role_required", message: "server_only invitations require an explicit role".into() });
+    }
+
     let email = normalize_email(&body.email);
     if email.is_empty() || !is_valid_email(&email) {
         return Err(AppError::BadRequest {
@@ -1643,6 +1653,12 @@ pub async fn create_tenant_invite(
 
     let (role_id, role_name) =
         resolve_tenant_role(&state, &tenant.tenant_id, body.role.as_deref(), "admin").await?;
+
+    if server_only {
+        let allowed: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM roles WHERE id=$1 AND (tenant_id=$2 OR (tenant_id IS NULL AND id IN ('role_admin','role_user'))))")
+            .bind(&role_id).bind(&tenant.tenant_id).fetch_one(&state.db).await?;
+        if !allowed { return Err(AppError::BadRequest { error: "invalid_role", message: "Role is not available to this tenant".into() }); }
+    }
 
     let expires_in_hours = body.expires_in_hours.unwrap_or(72).clamp(1, 168);
     let expires_at = Utc::now() + chrono::Duration::hours(expires_in_hours);
@@ -1694,7 +1710,9 @@ pub async fn create_tenant_invite(
     let (subject, text, html) =
         email::tenant_invite_email_content(&app_name, &invite_url, &role_name, inviter_email);
 
-    let email_delivery = if email::email_delivery_configured(&state.config) {
+    let email_delivery = if server_only {
+        "suppressed"
+    } else if email::email_delivery_configured(&state.config) {
         match email::send_email(&state.config, &email, &subject, &text, &html).await {
             Ok(()) => "sent",
             Err(error) => {
@@ -1711,9 +1729,7 @@ pub async fn create_tenant_invite(
         "not_configured"
     };
 
-    Ok((
-        StatusCode::CREATED,
-        Json(serde_json::json!({
+    let mut response = serde_json::json!({
             "invite": {
                 "id": invite_id,
                 "email": email,
@@ -1723,10 +1739,10 @@ pub async fn create_tenant_invite(
                 "expires_at": expires_at.to_rfc3339(),
             },
             "invite_token": invite_token,
-            "invite_url": invite_url,
             "email_delivery": email_delivery,
-        })),
-    ))
+        });
+    if !server_only { response["invite_url"] = invite_url.into(); }
+    Ok((StatusCode::CREATED, [(axum::http::header::CACHE_CONTROL, "no-store")], Json(response)))
 }
 
 /// POST /manage/invites/{id}/revoke (alias: /admin/invites/{id}/revoke) — Revoke a pending tenant invite.
