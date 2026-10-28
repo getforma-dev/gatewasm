@@ -3,8 +3,8 @@ use std::{net::SocketAddr, time::Duration};
 use axum::{
     body::Body,
     http::{
-        header::{LOCATION, ORIGIN, USER_AGENT},
-        Request, Response,
+        header::{ORIGIN, USER_AGENT},
+        Request,
     },
 };
 
@@ -146,47 +146,7 @@ async fn main() {
                 "HTTP request started"
             );
         })
-        .on_response(
-            |response: &Response<Body>, latency: Duration, span: &tracing::Span| {
-                let status = response.status().as_u16();
-                let latency_ms = latency.as_millis() as u64;
-                let location = response
-                    .headers()
-                    .get(LOCATION)
-                    .and_then(|value| value.to_str().ok())
-                    .unwrap_or("");
-                if (300..400).contains(&status) {
-                    tracing::warn!(
-                        parent: span,
-                        status,
-                        latency_ms,
-                        location = %location,
-                        "HTTP redirect response"
-                    );
-                } else if status >= 500 {
-                    tracing::error!(
-                        parent: span,
-                        status,
-                        latency_ms,
-                        "HTTP server error response"
-                    );
-                } else if status >= 400 {
-                    tracing::warn!(
-                        parent: span,
-                        status,
-                        latency_ms,
-                        "HTTP client error response"
-                    );
-                } else {
-                    tracing::info!(
-                        parent: span,
-                        status,
-                        latency_ms,
-                        "HTTP response completed"
-                    );
-                }
-            },
-        )
+        .on_response(gatewasm_server::http_trace::log_response)
         .on_failure(
             |error: tower_http::classify::ServerErrorsFailureClass,
              latency: Duration,

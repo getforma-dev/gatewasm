@@ -16,6 +16,7 @@ pub mod error;
 pub mod frontend;
 pub mod handlers;
 pub mod html_template;
+pub mod http_trace;
 pub mod ir;
 pub mod jwt;
 pub mod text;
