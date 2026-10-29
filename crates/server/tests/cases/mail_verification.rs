@@ -472,3 +472,59 @@ async fn verified_page_offers_only_the_clients_current_same_origin_entry() {
     let html = verified_html(&app, "vt_entry_three").await;
     assert!(!html.contains("href=") && html.contains("Return to Entry Tenant"));
 }
+
+#[tokio::test]
+async fn cooldown_starts_at_issuance_and_a_racing_verification_wins() {
+    // An SMTP endpoint that accepts the connection and never answers keeps the
+    // signup send in flight; the cooldown must already apply.
+    let silent = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let silent_port = silent.local_addr().unwrap().port();
+    tokio::spawn(async move {
+        let mut held = Vec::new();
+        loop {
+            let (stream, _) = silent.accept().await.unwrap();
+            held.push(stream);
+        }
+    });
+    let (mut state, pool) = test_state_with_keys(None).await;
+    with_smtp(&mut state, silent_port);
+    let app = handlers::create_router_without_rate_limit(state.clone());
+    let email = "inflight@example.test";
+    let access = register(&app, email).await;
+    let res = resend(&app, &access).await;
+    assert_eq!(res.status(), StatusCode::TOO_MANY_REQUESTS);
+    assert_eq!(body_json(res).await["error"], "resend_cooldown");
+
+    // A resend blocked behind a verification that commits reports already_verified.
+    let (port, _messages) = smtp_capture().await;
+    let mut state = state;
+    state.config.smtp_port = port;
+    let app = handlers::create_router_without_rate_limit(state);
+    let email = "racing@example.test";
+    let access = register(&app, email).await;
+    sqlx::query("UPDATE users SET verification_delivery_at = clock_timestamp() - INTERVAL '2 minutes' WHERE email = $1")
+        .bind(email)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let mut lock = pool.begin().await.unwrap();
+    sqlx::query("SELECT id FROM users WHERE email = $1 FOR UPDATE")
+        .bind(email)
+        .fetch_one(&mut *lock)
+        .await
+        .unwrap();
+    let waiting = tokio::spawn({
+        let app = app.clone();
+        async move { resend(&app, &access).await }
+    });
+    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+    sqlx::query("UPDATE users SET email_verified = TRUE, verification_token = NULL WHERE email = $1")
+        .bind(email)
+        .execute(&mut *lock)
+        .await
+        .unwrap();
+    lock.commit().await.unwrap();
+    let res = waiting.await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    assert_eq!(body_json(res).await["status"], "already_verified");
+}

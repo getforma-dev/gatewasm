@@ -3055,6 +3055,47 @@
           }
         }
       }
+    },
+    "/auth/resend-verification": {
+      "post": {
+        "tags": [
+          "User"
+        ],
+        "summary": "Resend the verification email to the account's stored address. Per-account 60 s cooldown from the last issuance (including signup). 202 means the provider accepted the message, not that it was received.",
+        "security": [
+          {
+            "BearerJWT": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/TenantSlug"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "status=already_verified"
+          },
+          "202": {
+            "description": "status=provider_accepted; the previous link no longer works"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "description": "error=user_not_found"
+          },
+          "429": {
+            "description": "error=resend_cooldown, or too_many_requests from the per-IP limiter"
+          },
+          "502": {
+            "description": "error=email_failed: provider refused or timed out; the previous link was replaced"
+          },
+          "503": {
+            "description": "error=email_unavailable: mail suppressed or no transport; nothing rotated or sent"
+          }
+        }
+      }
     }
   },
   "components": {

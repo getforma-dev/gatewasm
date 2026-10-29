@@ -681,7 +681,7 @@ pub async fn register(
         pending_invite_id = Some(invite_id);
     }
 
-    sqlx::query("INSERT INTO users (id, email, name, verification_token, verification_token_expires, tenant_id, verification_email) VALUES ($1, $2, $3, $4, $5, $6, $2)")
+    sqlx::query("INSERT INTO users (id, email, name, verification_token, verification_token_expires, tenant_id, verification_email, verification_delivery, verification_delivery_at) VALUES ($1, $2, $3, $4, $5, $6, $2, 'pending', clock_timestamp())")
         .bind(&user_id)
         .bind(&email)
         .bind(name)
@@ -1890,6 +1890,7 @@ fn verification_page(status: StatusCode, nonce: &str, title: &str, body: &str) -
   h1 {{ font-size:20px; margin:0 0 8px; color:#e8e6e3; }}
   p {{ font-size:14px; color:#6b6a72; margin:0; }}
   a {{ color:#c4a265; text-decoration:none; }}
+  .next {{ margin-top:16px; }}
   button {{ margin-top:24px; background:#c4a265; color:#0a0a0c; border:0; border-radius:8px; padding:12px 20px; font-size:14px; font-weight:600; cursor:pointer; }}
 </style>
 </head>
@@ -2013,16 +2014,19 @@ pub async fn confirm_email_verification(
     // or profile, establishes identity. The platform console keeps its notice.
     let app_name = email::escape_html(tenant.branding_app_name.as_deref().unwrap_or(&tenant.name));
     let entry = match client_id {
-        Some(client) => verified_return_entry(&state.db, &tenant.tenant_id, &client).await?,
+        // Verification already committed: a lookup failure only drops the link.
+        Some(client) => verified_return_entry(&state.db, &tenant.tenant_id, &client)
+            .await
+            .unwrap_or_else(|_| None),
         None => None,
     };
     let body = if tenant.slug == "platform" {
-        r#"<p>Your email address is verified.</p><p style="margin-top:16px"><a href="/platform/login?verified=true">Sign in</a></p>"#.to_string()
+        r#"<p>Your email address is verified.</p><p class="next"><a href="/platform/login?verified=true">Sign in</a></p>"#.to_string()
     } else if let Some(entry) = entry {
         // A fresh sign-in at the client's own configured entry route: no token,
         // code, state or verification value travels with it.
         format!(
-            r#"<p>Your email address is verified. Sign in again to continue.</p><p style="margin-top:16px"><a href="{}" rel="noreferrer">Continue to {}</a></p>"#,
+            r#"<p>Your email address is verified. Sign in again to continue.</p><p class="next"><a href="{}" rel="noreferrer">Continue to {}</a></p>"#,
             email::escape_html(&entry),
             app_name
         )
@@ -2123,11 +2127,32 @@ pub async fn resend_verification(
     .bind(&tenant.tenant_id)
     .bind(RESEND_COOLDOWN_SECONDS as f64)
     .fetch_optional(&state.db)
-    .await?
-    .ok_or(AppError::RateLimited {
-        error: "resend_cooldown",
-        message: "A verification email was sent recently. Try again shortly.".into(),
-    })?;
+    .await?;
+    let Some(email_address) = email_address else {
+        // No row claimed: cooldown, unless verification (or deletion) won a race.
+        let verified = sqlx::query_scalar::<_, bool>(
+            "SELECT COALESCE(email_verified, FALSE) FROM users WHERE id = $1 AND tenant_id = $2",
+        )
+        .bind(&claims.sub)
+        .bind(&tenant.tenant_id)
+        .fetch_optional(&state.db)
+        .await?;
+        return match verified {
+            Some(true) => Ok(Json(serde_json::json!({
+                "status": "already_verified",
+                "message": "Email is already verified"
+            }))
+            .into_response()),
+            Some(false) => Err(AppError::RateLimited {
+                error: "resend_cooldown",
+                message: "A verification email was sent recently. Try again shortly.".into(),
+            }),
+            None => Err(AppError::NotFound {
+                error: "user_not_found",
+                message: "User not found".into(),
+            }),
+        };
+    };
 
     let app_name = tenant.branding_app_name.as_deref().unwrap_or(&tenant.name);
     let (subject, text_body, html_body) = email::verification_email_content(
