@@ -157,7 +157,10 @@ fn create_router_inner(state: AppState, rate_limit_enabled: bool) -> Router {
             post(password_reset::forgot_password),
         )
         .route("/auth/reset-password", post(password_reset::reset_password));
-    let verify_email_routes = Router::new().route("/auth/verify-email", get(auth::verify_email));
+    let verify_email_routes = Router::new().route(
+        "/auth/verify-email",
+        get(auth::verify_email).post(auth::confirm_email_verification),
+    );
 
     let auth_routes = if rate_limit_enabled {
         Router::new()

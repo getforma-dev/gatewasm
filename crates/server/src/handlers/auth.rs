@@ -1,8 +1,8 @@
 use axum::{
     extract::{ConnectInfo, FromRequest, Query, State},
     http::{header::SET_COOKIE, HeaderMap, HeaderValue, StatusCode},
-    response::IntoResponse,
-    Json,
+    response::{IntoResponse, Response},
+    Extension, Json,
 };
 use chrono::{DateTime, Duration, Utc};
 use std::net::SocketAddr;
@@ -559,8 +559,8 @@ pub async fn register(
     let hashed = password::hash_password(&body.password)?;
     let name = body.name.as_deref().unwrap_or("");
 
-    let verification_token = format!("vt_{}", uuid::Uuid::new_v4());
-    let verification_expires = Utc::now() + Duration::hours(24);
+    let (verification_token, verification_hash) = new_verification_challenge();
+    let verification_expires = Utc::now() + Duration::hours(VERIFICATION_TTL_HOURS);
 
     let refresh_token = signing::create_refresh_token();
     let refresh_hash = signing::hash_token(&refresh_token);
@@ -681,11 +681,11 @@ pub async fn register(
         pending_invite_id = Some(invite_id);
     }
 
-    sqlx::query("INSERT INTO users (id, email, name, verification_token, verification_token_expires, tenant_id) VALUES ($1, $2, $3, $4, $5, $6)")
+    sqlx::query("INSERT INTO users (id, email, name, verification_token, verification_token_expires, tenant_id, verification_email, verification_delivery, verification_delivery_at) VALUES ($1, $2, $3, $4, $5, $6, $2, 'pending', clock_timestamp())")
         .bind(&user_id)
         .bind(&email)
         .bind(name)
-        .bind(&verification_token)
+        .bind(&verification_hash)
         .bind(verification_expires)
         .bind(&tenant_id)
         .execute(&mut *tx)
@@ -1047,8 +1047,45 @@ async fn check_impossible_travel(
     }
 }
 
-/// Send the verification email for a newly registered user.
-/// Logs a warning if delivery fails or SMTP is not configured; never propagates errors.
+/// Lifetime of an emailed verification link.
+pub(crate) const VERIFICATION_TTL_HOURS: i64 = 24;
+/// Minimum interval between verification emails for one account.
+const RESEND_COOLDOWN_SECONDS: i64 = 60;
+
+/// A fresh verification challenge: the value for the emailed link, and its
+/// hash, which is the only form ever stored.
+pub(crate) fn new_verification_challenge() -> (String, String) {
+    let challenge = format!("vt_{}", signing::create_refresh_token());
+    let hash = signing::hash_token(&challenge);
+    (challenge, hash)
+}
+
+/// Record a send outcome against the challenge it carried. A stale task never
+/// overwrites the outcome of a newer challenge for the same account.
+async fn record_verification_delivery(
+    db: &sqlx::PgPool,
+    user_id: &str,
+    challenge_hash: &str,
+    delivery: &str,
+) {
+    if let Err(error) = sqlx::query(
+        "UPDATE users SET verification_delivery = $1, verification_delivery_at = clock_timestamp() \
+         WHERE id = $2 AND verification_token = $3",
+    )
+    .bind(delivery)
+    .bind(user_id)
+    .bind(challenge_hash)
+    .execute(db)
+    .await
+    {
+        tracing::warn!(user_id = %user_id, %error, "Failed to record verification delivery outcome");
+    }
+}
+
+/// Send the verification email for a newly registered user after its
+/// registration committed. Delivery never fails the registration; the bounded
+/// outcome (suppressed, unconfigured, provider_accepted or failed) is recorded
+/// on the account, and the authenticated resend endpoint is the recovery path.
 pub(crate) fn dispatch_verification_email(
     state: &AppState,
     tenant_slug: &str,
@@ -1064,28 +1101,23 @@ pub(crate) fn dispatch_verification_email(
     let uid = user_id.to_owned();
     let addr = email.to_owned();
     let config = state.config.clone();
+    let db = state.db.clone();
 
     tokio::spawn(async move {
         let (subject, text, html) =
             email::verification_email_content(&server_url, &slug, &app_name, &vt);
-        if email::email_delivery_configured(&config) {
-            if let Err(error) =
-                email::send_email(&config, &addr, &subject, &text, &html).await
-            {
-                tracing::warn!(
-                    user_id = %uid,
-                    email = %addr,
-                    %error,
-                    "Failed to send verification email"
-                );
+        let delivery = match email::send_email(&config, &addr, &subject, &text, &html).await {
+            Ok(email::DeliveryOutcome::ProviderAccepted) => "provider_accepted",
+            Ok(outcome) => {
+                tracing::warn!(user_id = %uid, outcome = outcome.as_str(), "Verification email not sent");
+                outcome.as_str()
             }
-        } else {
-            tracing::warn!(
-                user_id = %uid,
-                email = %addr,
-                "SMTP is not configured; verification email not delivered"
-            );
-        }
+            Err(error) => {
+                tracing::warn!(user_id = %uid, %error, "Failed to send verification email");
+                "failed"
+            }
+        };
+        record_verification_delivery(&db, &uid, &signing::hash_token(&vt), delivery).await;
     });
 }
 
@@ -1843,97 +1875,202 @@ pub async fn login_history(
     Ok(Json(serde_json::json!({ "history": attempts })))
 }
 
-pub async fn verify_email(
-    State(state): State<AppState>,
-    Query(params): Query<VerifyEmailQuery>,
-) -> Result<impl IntoResponse, AppError> {
-    tracing::info!("Processing email verification");
-
-    let user_id = sqlx::query_scalar::<_, String>(
-        "SELECT id FROM users WHERE verification_token = $1 AND verification_token_expires > $2",
-    )
-    .bind(&params.token)
-    .bind(Utc::now())
-    .fetch_optional(&state.db)
-    .await?
-    .ok_or(AppError::BadRequest {
-        error: "invalid_token",
-        message: "Invalid or expired verification token".into(),
-    })?;
-
-    sqlx::query(
-        "UPDATE users SET email_verified = TRUE, verification_token = NULL, verification_token_expires = NULL WHERE id = $1",
-    )
-    .bind(&user_id)
-    .execute(&state.db)
-    .await?;
-
-    tracing::info!(user_id = %user_id, "Email verified");
-
-    // Dispatch webhook — look up tenant_id for this user
-    let tenant_id: Option<String> = sqlx::query_scalar("SELECT tenant_id FROM users WHERE id = $1")
-        .bind(&user_id)
-        .fetch_optional(&state.db)
-        .await
-        .ok()
-        .flatten();
-    if let Some(ref tid) = tenant_id {
-        super::webhook_engine::dispatch_event(
-            &state.db,
-            tid,
-            "user.email_verified",
-            serde_json::json!({ "user_id": user_id }),
-        )
-        .await;
-    }
-
-    // Notify connected WS clients so the verification banner disappears
-    if let Some(ref tid) = tenant_id {
-        crate::ws::events::emit_account_updated(&state.event_bus, tid, "email_verified");
-    }
-
-    // Always redirect to login — avoids wrong-session issues when verification
-    // link is opened in a different browser profile than the one that registered.
-    let redirect_url = "/platform/login?verified=true";
-
+/// Headers for every page that carries or consumes a verification capability.
+fn verification_page(status: StatusCode, nonce: &str, title: &str, body: &str) -> Response {
     let html = format!(
         r#"<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="refresh" content="2;url={redirect_url}">
-<title>Email Verified — fAuth</title>
-<style>
+<meta name="referrer" content="no-referrer">
+<title>{title} — fAuth</title>
+<style nonce="{nonce}">
   body {{ margin:0; background:#0a0a0c; color:#e8e6e3; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif; display:flex; align-items:center; justify-content:center; min-height:100vh; }}
   .card {{ background:#111114; border:1px solid #1e1e24; border-radius:12px; padding:48px; text-align:center; max-width:400px; }}
-  .check {{ font-size:48px; margin-bottom:16px; color:#c4a265; }}
   h1 {{ font-size:20px; margin:0 0 8px; color:#e8e6e3; }}
   p {{ font-size:14px; color:#6b6a72; margin:0; }}
   a {{ color:#c4a265; text-decoration:none; }}
-  a:hover {{ text-decoration:underline; }}
+  .next {{ margin-top:16px; }}
+  button {{ margin-top:24px; background:#c4a265; color:#0a0a0c; border:0; border-radius:8px; padding:12px 20px; font-size:14px; font-weight:600; cursor:pointer; }}
 </style>
 </head>
 <body>
 <div class="card">
-  <div class="check">&#10003;</div>
-  <h1>Email Verified</h1>
-  <p>Redirecting you to sign in...</p>
-  <p style="margin-top:16px;"><a href="{redirect_url}">Click here if not redirected</a></p>
+<h1>{title}</h1>
+{body}
 </div>
 </body>
 </html>"#,
-        redirect_url = redirect_url,
+        title = title,
+        nonce = nonce,
+        body = body,
     );
+    let mut response = (status, axum::response::Html(html)).into_response();
+    let headers = response.headers_mut();
+    headers.insert(
+        axum::http::header::CONTENT_SECURITY_POLICY,
+        axum::http::HeaderValue::from_str(&format!(
+            "default-src 'none'; style-src 'nonce-{nonce}'; form-action 'self'; \
+             frame-ancestors 'none'; base-uri 'none'"
+        ))
+        .expect("nonce is base64"),
+    );
+    headers.insert(
+        axum::http::header::CACHE_CONTROL,
+        axum::http::HeaderValue::from_static("no-store"),
+    );
+    headers.insert(
+        axum::http::header::REFERRER_POLICY,
+        axum::http::HeaderValue::from_static("no-referrer"),
+    );
+    response
+}
 
-    Ok(axum::response::Html(html).into_response())
+/// GET /t/{slug}/auth/verify-email — confirmation page only.
+///
+/// Opening the link (for example a mail scanner prefetching it) changes no
+/// state; the explicit POST below consumes the challenge. The challenge leaves
+/// the address bar with that POST, whose target carries no query string.
+pub async fn verify_email(
+    Extension(tenant): Extension<TenantContext>,
+    Query(params): Query<VerifyEmailQuery>,
+) -> Response {
+    let nonce = crate::middleware::csp::generate_csp_nonce().as_str().to_owned();
+    let body = format!(
+        r#"<p>Confirm the email address for your {app} account.</p>
+<form method="post" action="/t/{slug}/auth/verify-email">
+<input type="hidden" name="token" value="{token}">
+<button type="submit">Verify email address</button>
+</form>"#,
+        app = email::escape_html(tenant.branding_app_name.as_deref().unwrap_or(&tenant.name)),
+        slug = urlencoding::encode(&tenant.slug),
+        token = email::escape_html(&params.token),
+    );
+    verification_page(StatusCode::OK, &nonce, "Verify your email", &body)
+}
+
+/// POST /t/{slug}/auth/verify-email — consume a verification challenge.
+///
+/// The row is locked first; only then is the challenge consumed, checking this
+/// tenant, the address it was issued for, and expiry against the wall clock
+/// after the lock was obtained. (A single UPDATE would not do: PostgreSQL
+/// rechecks its WHERE after a lock wait only if the row was modified.) Only the
+/// winning transition emits the verification event.
+pub async fn confirm_email_verification(
+    State(state): State<AppState>,
+    Extension(tenant): Extension<TenantContext>,
+    axum::Form(params): axum::Form<VerifyEmailQuery>,
+) -> Result<Response, AppError> {
+    let hash = signing::hash_token(&params.token);
+    let mut tx = state.db.begin().await?;
+    let locked = sqlx::query_as::<_, (String, Option<String>)>(
+        "SELECT id, verification_client_id FROM users WHERE verification_token = $1 AND tenant_id = $2 FOR UPDATE",
+    )
+    .bind(&hash)
+    .bind(&tenant.tenant_id)
+    .fetch_optional(&mut *tx)
+    .await?;
+    let mut client_id = None;
+    let user_id = match locked {
+        Some((id, client)) => {
+            client_id = client;
+            sqlx::query_scalar::<_, String>(
+                "UPDATE users SET email_verified = TRUE, verification_token = NULL, verification_token_expires = NULL, verification_client_id = NULL \
+                 WHERE id = $1 AND verification_token = $2 AND verification_email = email \
+                   AND verification_token_expires > clock_timestamp() AND NOT COALESCE(email_verified, FALSE) \
+                 RETURNING id",
+            )
+            .bind(&id)
+            .bind(&hash)
+            .fetch_optional(&mut *tx)
+            .await?
+        }
+        None => None,
+    };
+    tx.commit().await?;
+    let nonce = crate::middleware::csp::generate_csp_nonce().as_str().to_owned();
+
+    let Some(user_id) = user_id else {
+        return Ok(verification_page(
+            StatusCode::BAD_REQUEST,
+            &nonce,
+            "Link not valid",
+            "<p>This verification link is invalid, expired or already used. Sign in to the application and request a new verification email.</p>",
+        ));
+    };
+
+    tracing::info!(user_id = %user_id, "Email verified");
+    super::webhook_engine::dispatch_event(
+        &state.db,
+        &tenant.tenant_id,
+        "user.email_verified",
+        serde_json::json!({ "user_id": user_id }),
+    )
+    .await;
+    // Notify connected WS clients so the verification banner disappears
+    crate::ws::events::emit_account_updated(&state.event_bus, &tenant.tenant_id, "email_verified");
+
+    // No session is created or resumed here: the next sign-in, in any browser
+    // or profile, establishes identity. The platform console keeps its notice.
+    let app_name = email::escape_html(tenant.branding_app_name.as_deref().unwrap_or(&tenant.name));
+    let entry = match client_id {
+        // Verification already committed: a lookup failure only drops the link.
+        Some(client) => verified_return_entry(&state.db, &tenant.tenant_id, &client)
+            .await
+            .unwrap_or_else(|error| {
+                tracing::warn!(?error, "Return entry lookup failed after verification; omitting link");
+                None
+            }),
+        None => None,
+    };
+    let body = if tenant.slug == "platform" {
+        r#"<p>Your email address is verified.</p><p class="next"><a href="/platform/login?verified=true">Sign in</a></p>"#.to_string()
+    } else if let Some(entry) = entry {
+        // A fresh sign-in at the client's own configured entry route: no token,
+        // code, state or verification value travels with it.
+        format!(
+            r#"<p>Your email address is verified. Sign in again to continue.</p><p class="next"><a href="{}" rel="noreferrer">Continue to {}</a></p>"#,
+            email::escape_html(&entry),
+            app_name
+        )
+    } else {
+        format!("<p>Your email address is verified. Return to {app_name} and sign in to continue.</p>")
+    };
+    Ok(verification_page(StatusCode::OK, &nonce, "Email verified", &body))
+}
+
+/// The client's current return entry, revalidated against its current callback.
+/// A removed client, a missing entry or a now-invalid one yields no link.
+async fn verified_return_entry(
+    db: &sqlx::PgPool,
+    tenant_id: &str,
+    client_id: &str,
+) -> Result<Option<String>, AppError> {
+    let row: Option<(String, Option<String>)> = sqlx::query_as(
+        "SELECT redirect_uri, return_entry_url FROM oauth_clients WHERE id = $1 AND tenant_id = $2",
+    )
+    .bind(client_id)
+    .bind(tenant_id)
+    .fetch_optional(db)
+    .await?;
+    Ok(row.and_then(|(redirect, entry)| {
+        entry.filter(|entry| super::management::valid_return_entry(entry, &redirect))
+    }))
 }
 
 /// POST /t/{slug}/auth/resend-verification — Resend verification email.
-/// Authenticated. Rate-limited via register_limiter (5 burst per IP).
+/// Authenticated. Rate-limited via register_limiter (5 burst per IP), plus a
+/// per-account cooldown claimed atomically with the challenge rotation.
+///
+/// Responses: 202 `provider_accepted` (the provider took the message; not proof
+/// of receipt), 200 `already_verified`, 429 `resend_cooldown`, 503
+/// `email_unavailable` (suppressed or no transport: nothing rotated or sent),
+/// 502 `email_failed` (provider refused or timed out; the new link replaced
+/// the old one but may not arrive).
 pub async fn resend_verification(
     State(state): State<AppState>,
     req: axum::extract::Request,
-) -> Result<impl IntoResponse, AppError> {
+) -> Result<Response, AppError> {
     let claims = req
         .extensions()
         .get::<signing::Claims>()
@@ -1941,56 +2078,123 @@ pub async fn resend_verification(
             error: "unauthorized",
             message: "Not authenticated".into(),
         })?;
+    let tenant = req
+        .extensions()
+        .get::<TenantContext>()
+        .cloned()
+        .ok_or(AppError::Unauthorized {
+            error: "unauthorized",
+            message: "Not authenticated".into(),
+        })?;
 
-    let user = sqlx::query_as::<_, (String, String, bool)>(
-        "SELECT id, email, COALESCE(email_verified, FALSE) FROM users WHERE id = $1",
+    let verified = sqlx::query_scalar::<_, bool>(
+        "SELECT COALESCE(email_verified, FALSE) FROM users WHERE id = $1 AND tenant_id = $2",
     )
     .bind(&claims.sub)
+    .bind(&tenant.tenant_id)
     .fetch_optional(&state.db)
     .await?
     .ok_or(AppError::NotFound {
         error: "user_not_found",
         message: "User not found".into(),
     })?;
-
-    let (user_id, email, verified) = user;
-
     if verified {
-        return Ok(Json(serde_json::json!({ "message": "Email is already verified" })));
+        return Ok(Json(serde_json::json!({
+            "status": "already_verified",
+            "message": "Email is already verified"
+        }))
+        .into_response());
     }
-
-    let token = format!("vt_{}", uuid::Uuid::new_v4());
-    let expires = Utc::now() + chrono::Duration::hours(24);
-
-    sqlx::query(
-        "UPDATE users SET verification_token = $1, verification_token_expires = $2 WHERE id = $3",
-    )
-    .bind(&token)
-    .bind(expires)
-    .bind(&user_id)
-    .execute(&state.db)
-    .await?;
-
-    let tenant = req.extensions().get::<crate::middleware::tenant::TenantContext>().cloned();
-    let slug = tenant.as_ref().map(|t| t.slug.as_str()).unwrap_or("platform");
-    let app_name = tenant
-        .as_ref()
-        .and_then(|t| t.branding_app_name.as_deref())
-        .unwrap_or_else(|| tenant.as_ref().map(|t| t.name.as_str()).unwrap_or("fAuth"));
-    let (subject, text_body, html_body) =
-        crate::email::verification_email_content(&state.config.server_url, slug, app_name, &token);
-
-    if let Err(err) =
-        crate::email::send_email(&state.config, &email, &subject, &text_body, &html_body).await
-    {
-        tracing::warn!(to = %email, error = %err, "Failed to send verification email");
-        return Err(AppError::InternalError {
-            error: "email_failed",
-            message: "Failed to send verification email".into(),
+    if !email::email_send_possible(&state.config) {
+        return Err(AppError::ServiceUnavailable {
+            error: "email_unavailable",
+            message: "Verification email cannot be sent right now".into(),
         });
     }
 
-    Ok(Json(serde_json::json!({ "message": "Verification email sent" })))
+    // Rotation and cooldown in one statement: concurrent resends cannot both
+    // pass the cooldown, and the address is the account's stored one.
+    let (challenge, hash) = new_verification_challenge();
+    let email_address = sqlx::query_scalar::<_, String>(
+        "UPDATE users SET verification_token = $1, verification_email = email, \
+             verification_token_expires = clock_timestamp() + make_interval(hours => $2), \
+             verification_delivery = 'pending', verification_delivery_at = clock_timestamp() \
+         WHERE id = $3 AND tenant_id = $4 AND NOT COALESCE(email_verified, FALSE) \
+           AND (verification_delivery_at IS NULL \
+                OR verification_delivery_at <= clock_timestamp() - make_interval(secs => $5)) \
+         RETURNING email",
+    )
+    .bind(&hash)
+    .bind(VERIFICATION_TTL_HOURS as i32)
+    .bind(&claims.sub)
+    .bind(&tenant.tenant_id)
+    .bind(RESEND_COOLDOWN_SECONDS as f64)
+    .fetch_optional(&state.db)
+    .await?;
+    let Some(email_address) = email_address else {
+        // No row claimed: cooldown, unless verification (or deletion) won a race.
+        let verified = sqlx::query_scalar::<_, bool>(
+            "SELECT COALESCE(email_verified, FALSE) FROM users WHERE id = $1 AND tenant_id = $2",
+        )
+        .bind(&claims.sub)
+        .bind(&tenant.tenant_id)
+        .fetch_optional(&state.db)
+        .await?;
+        return match verified {
+            Some(true) => Ok(Json(serde_json::json!({
+                "status": "already_verified",
+                "message": "Email is already verified"
+            }))
+            .into_response()),
+            Some(false) => Err(AppError::RateLimited {
+                error: "resend_cooldown",
+                message: "A verification email was sent recently. Try again shortly.".into(),
+            }),
+            None => Err(AppError::NotFound {
+                error: "user_not_found",
+                message: "User not found".into(),
+            }),
+        };
+    };
+
+    let app_name = tenant.branding_app_name.as_deref().unwrap_or(&tenant.name);
+    let (subject, text_body, html_body) = email::verification_email_content(
+        &state.config.server_url,
+        &tenant.slug,
+        app_name,
+        &challenge,
+    );
+    let sent = email::send_email(&state.config, &email_address, &subject, &text_body, &html_body).await;
+    let delivery = match &sent {
+        Ok(outcome) => outcome.as_str(),
+        Err(_) => "failed",
+    };
+    record_verification_delivery(&state.db, &claims.sub, &hash, delivery).await;
+    match sent {
+        Ok(email::DeliveryOutcome::ProviderAccepted) => Ok((
+            StatusCode::ACCEPTED,
+            Json(serde_json::json!({
+                "status": "provider_accepted",
+                "message": "Verification email sent"
+            })),
+        )
+            .into_response()),
+        Ok(outcome) => {
+            // Configuration changed between the check above and the send.
+            tracing::warn!(user_id = %claims.sub, outcome = outcome.as_str(), "Verification email not sent");
+            Err(AppError::ServiceUnavailable {
+                error: "email_unavailable",
+                message: "Verification email cannot be sent right now".into(),
+            })
+        }
+        Err(error) => {
+            tracing::warn!(user_id = %claims.sub, %error, "Failed to send verification email");
+            Err(AppError::BadGateway {
+                error: "email_failed",
+                message: "Failed to send verification email".into(),
+            })
+        }
+    }
 }
 
 #[cfg(test)]

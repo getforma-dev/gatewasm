@@ -35,6 +35,15 @@ pub enum AppError {
         message: String,
     },
     TooManyRequests,
+    /// A specific, client-actionable 429 (unlike the generic limiter refusal).
+    RateLimited {
+        error: &'static str,
+        message: String,
+    },
+    ServiceUnavailable {
+        error: &'static str,
+        message: String,
+    },
     AccountLocked {
         error: &'static str,
         message: String,
@@ -59,6 +68,12 @@ impl IntoResponse for AppError {
                 "too_many_requests",
                 "Rate limit exceeded".to_string(),
             ),
+            AppError::RateLimited { error, message } => {
+                (StatusCode::TOO_MANY_REQUESTS, error, message)
+            }
+            AppError::ServiceUnavailable { error, message } => {
+                (StatusCode::SERVICE_UNAVAILABLE, error, message)
+            }
             AppError::AccountLocked {
                 error,
                 message,

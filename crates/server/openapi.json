@@ -562,12 +562,8 @@
         "tags": [
           "User"
         ],
-        "summary": "Verify email with token",
-        "security": [
-          {
-            "BearerJWT": []
-          }
-        ],
+        "summary": "Verification confirmation page. Opening the emailed link changes no state; the page POSTs the challenge.",
+        "security": [],
         "parameters": [
           {
             "$ref": "#/components/parameters/TenantSlug"
@@ -583,10 +579,45 @@
         ],
         "responses": {
           "200": {
-            "description": "Email verified"
+            "description": "HTML confirmation page (Cache-Control: no-store, Referrer-Policy: no-referrer)"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "User"
+        ],
+        "summary": "Consume an email verification challenge (one use, bound to tenant, user and issuance address, wall-clock expiry). No session is created.",
+        "security": [],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/TenantSlug"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "token"
+                ],
+                "properties": {
+                  "token": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "HTML: email verified; sign in again to continue"
           },
           "400": {
-            "$ref": "#/components/responses/BadRequest"
+            "description": "HTML: link invalid, expired, already used, wrong tenant or address changed"
           }
         }
       }
@@ -3021,6 +3052,47 @@
           },
           "401": {
             "description": "Unauthorized / invalid code"
+          }
+        }
+      }
+    },
+    "/auth/resend-verification": {
+      "post": {
+        "tags": [
+          "User"
+        ],
+        "summary": "Resend the verification email to the account's stored address. Per-account 60 s cooldown from the last issuance (including signup). 202 means the provider accepted the message, not that it was received.",
+        "security": [
+          {
+            "BearerJWT": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/TenantSlug"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "status=already_verified"
+          },
+          "202": {
+            "description": "status=provider_accepted; the previous link no longer works"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "description": "error=user_not_found"
+          },
+          "429": {
+            "description": "error=resend_cooldown, or too_many_requests from the per-IP limiter"
+          },
+          "502": {
+            "description": "error=email_failed: provider refused or timed out; the previous link was replaced"
+          },
+          "503": {
+            "description": "error=email_unavailable: mail suppressed or no transport; nothing rotated or sent"
           }
         }
       }

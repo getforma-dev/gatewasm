@@ -865,6 +865,27 @@ pub struct RegisterOAuthClient {
     pub client_id: String,
     pub name: String,
     pub redirect_uri: String,
+    /// Optional entry route the email-verified page may offer: it must start a
+    /// fresh sign-in at the client, so it shares the callback's origin and has
+    /// no query or fragment. Setting or replacing it keeps the client identity.
+    #[serde(default)]
+    pub return_entry_url: Option<String>,
+}
+
+/// A return entry URL is acceptable only on the callback's exact origin, with
+/// no credentials, query or fragment. Rechecked before every display.
+pub(crate) fn valid_return_entry(entry: &str, redirect_uri: &str) -> bool {
+    let (Ok(entry_url), Ok(redirect)) = (url::Url::parse(entry), url::Url::parse(redirect_uri)) else {
+        return false;
+    };
+    entry.len() <= 2048
+        && entry_url.origin() == redirect.origin()
+        && matches!(entry_url.scheme(), "https" | "http")
+        && entry_url.username().is_empty()
+        && entry_url.password().is_none()
+        && entry_url.query().is_none()
+        && entry_url.fragment().is_none()
+        && !entry.contains('*')
 }
 
 /// One exact redirect per registered client. Repeating identical input is idempotent;
@@ -903,8 +924,23 @@ pub async fn register_oauth_client(
     {
         return Err(invalid());
     }
-    let result = sqlx::query("INSERT INTO oauth_clients (id, name, redirect_uri, tenant_id) VALUES ($1,$2,$3,$4) ON CONFLICT (id) DO NOTHING")
-        .bind(&body.client_id).bind(&body.name).bind(&body.redirect_uri).bind(&tenant.tenant_id)
+    if body
+        .return_entry_url
+        .as_deref()
+        .is_some_and(|entry| !valid_return_entry(entry, &body.redirect_uri))
+    {
+        return Err(AppError::BadRequest { error: "invalid_client_configuration", message: "The return entry URL must be on the callback's origin, without query or fragment.".into() });
+    }
+    // Store the parser's serialization, so the rendered link is exactly what
+    // was validated (no raw spacing, backslashes or quoting variants).
+    let mut body = body;
+    body.return_entry_url = body
+        .return_entry_url
+        .as_deref()
+        .map(|entry| url::Url::parse(entry).map(|u| u.to_string()).map_err(|_| invalid()))
+        .transpose()?;
+    let result = sqlx::query("INSERT INTO oauth_clients (id, name, redirect_uri, tenant_id, return_entry_url) VALUES ($1,$2,$3,$4,$5) ON CONFLICT (id) DO NOTHING")
+        .bind(&body.client_id).bind(&body.name).bind(&body.redirect_uri).bind(&tenant.tenant_id).bind(&body.return_entry_url)
         .execute(&state.db).await?;
     let existing: Option<(String, String)> =
         sqlx::query_as("SELECT name, redirect_uri FROM oauth_clients WHERE id=$1 AND tenant_id=$2")
@@ -918,6 +954,22 @@ pub async fn register_oauth_client(
             message: "Client identifier already exists with different configuration.".into(),
         });
     }
+    if result.rows_affected() == 0 {
+        if let Some(entry) = &body.return_entry_url {
+            sqlx::query("UPDATE oauth_clients SET return_entry_url=$1 WHERE id=$2 AND tenant_id=$3")
+                .bind(entry)
+                .bind(&body.client_id)
+                .bind(&tenant.tenant_id)
+                .execute(&state.db)
+                .await?;
+        }
+    }
+    let return_entry_url: Option<String> =
+        sqlx::query_scalar("SELECT return_entry_url FROM oauth_clients WHERE id=$1 AND tenant_id=$2")
+            .bind(&body.client_id)
+            .bind(&tenant.tenant_id)
+            .fetch_one(&state.db)
+            .await?;
     Ok((
         if result.rows_affected() == 1 {
             StatusCode::CREATED
@@ -925,7 +977,7 @@ pub async fn register_oauth_client(
             StatusCode::OK
         },
         Json(
-            serde_json::json!({"client_id":body.client_id,"name":body.name,"redirect_uri":body.redirect_uri,"tenant_id":tenant.tenant_id,"pkce_method":"S256"}),
+            serde_json::json!({"client_id":body.client_id,"name":body.name,"redirect_uri":body.redirect_uri,"return_entry_url":return_entry_url,"tenant_id":tenant.tenant_id,"pkce_method":"S256"}),
         ),
     ))
 }
@@ -934,14 +986,14 @@ pub async fn list_oauth_clients(
     State(state): State<AppState>,
     Extension(tenant): Extension<TenantContext>,
 ) -> Result<impl IntoResponse, AppError> {
-    let rows: Vec<(String, String, String)> = sqlx::query_as(
-        "SELECT id,name,redirect_uri FROM oauth_clients WHERE tenant_id=$1 ORDER BY id",
+    let rows: Vec<(String, String, String, Option<String>)> = sqlx::query_as(
+        "SELECT id,name,redirect_uri,return_entry_url FROM oauth_clients WHERE tenant_id=$1 ORDER BY id",
     )
     .bind(&tenant.tenant_id)
     .fetch_all(&state.db)
     .await?;
     Ok(Json(
-        serde_json::json!({"clients":rows.into_iter().map(|(id,name,redirect_uri)| serde_json::json!({"client_id":id,"name":name,"redirect_uri":redirect_uri})).collect::<Vec<_>>()}),
+        serde_json::json!({"clients":rows.into_iter().map(|(id,name,redirect_uri,return_entry_url)| serde_json::json!({"client_id":id,"name":name,"redirect_uri":redirect_uri,"return_entry_url":return_entry_url})).collect::<Vec<_>>()}),
     ))
 }
 
@@ -1714,7 +1766,9 @@ pub async fn create_tenant_invite(
         "suppressed"
     } else if email::email_delivery_configured(&state.config) {
         match email::send_email(&state.config, &email, &subject, &text, &html).await {
-            Ok(()) => "sent",
+            Ok(email::DeliveryOutcome::ProviderAccepted) => "sent",
+            Ok(email::DeliveryOutcome::Suppressed) => "suppressed",
+            Ok(email::DeliveryOutcome::Unconfigured) => "not_configured",
             Err(error) => {
                 tracing::warn!(tenant_id = %tenant.tenant_id, invite_id = %invite_id, %error, "Failed to send tenant invite email");
                 "failed"
