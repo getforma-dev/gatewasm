@@ -2017,7 +2017,7 @@ pub async fn confirm_email_verification(
         // Verification already committed: a lookup failure only drops the link.
         Some(client) => verified_return_entry(&state.db, &tenant.tenant_id, &client)
             .await
-            .unwrap_or_else(|_| None),
+            .unwrap_or(None),
         None => None,
     };
     let body = if tenant.slug == "platform" {
