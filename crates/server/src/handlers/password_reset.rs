@@ -84,15 +84,20 @@ pub async fn forgot_password(
                     &reset_token,
                 );
                 if email::email_delivery_configured(&state.config) {
-                    if let Err(error) =
-                        email::send_email(&state.config, &email, &subject, &text, &html).await
+                    match email::send_email(&state.config, &email, &subject, &text, &html).await
                     {
-                        tracing::warn!(
+                        Ok(email::DeliveryOutcome::ProviderAccepted) => {}
+                        Ok(outcome) => tracing::warn!(
+                            user_id = %user_id,
+                            outcome = outcome.as_str(),
+                            "Password reset email not sent"
+                        ),
+                        Err(error) => tracing::warn!(
                             user_id = %user_id,
                             email = %email,
                             %error,
                             "Failed to send password reset email"
-                        );
+                        ),
                     }
                 } else {
                     tracing::warn!(

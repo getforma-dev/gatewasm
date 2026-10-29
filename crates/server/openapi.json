@@ -562,12 +562,8 @@
         "tags": [
           "User"
         ],
-        "summary": "Verify email with token",
-        "security": [
-          {
-            "BearerJWT": []
-          }
-        ],
+        "summary": "Verification confirmation page. Opening the emailed link changes no state; the page POSTs the challenge.",
+        "security": [],
         "parameters": [
           {
             "$ref": "#/components/parameters/TenantSlug"
@@ -583,10 +579,45 @@
         ],
         "responses": {
           "200": {
-            "description": "Email verified"
+            "description": "HTML confirmation page (Cache-Control: no-store, Referrer-Policy: no-referrer)"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "User"
+        ],
+        "summary": "Consume an email verification challenge (one use, bound to tenant, user and issuance address, wall-clock expiry). No session is created.",
+        "security": [],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/TenantSlug"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "token"
+                ],
+                "properties": {
+                  "token": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "HTML: email verified; sign in again to continue"
           },
           "400": {
-            "$ref": "#/components/responses/BadRequest"
+            "description": "HTML: link invalid, expired, already used, wrong tenant or address changed"
           }
         }
       }

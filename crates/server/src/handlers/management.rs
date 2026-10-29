@@ -1714,7 +1714,9 @@ pub async fn create_tenant_invite(
         "suppressed"
     } else if email::email_delivery_configured(&state.config) {
         match email::send_email(&state.config, &email, &subject, &text, &html).await {
-            Ok(()) => "sent",
+            Ok(email::DeliveryOutcome::ProviderAccepted) => "sent",
+            Ok(email::DeliveryOutcome::Suppressed) => "suppressed",
+            Ok(email::DeliveryOutcome::Unconfigured) => "not_configured",
             Err(error) => {
                 tracing::warn!(tenant_id = %tenant.tenant_id, invite_id = %invite_id, %error, "Failed to send tenant invite email");
                 "failed"

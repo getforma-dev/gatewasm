@@ -428,10 +428,10 @@ pub async fn register(
         });
     }
     let user_id = format!("usr_{}", uuid::Uuid::new_v4());
-    let verification = format!("vt_{}", uuid::Uuid::new_v4());
-    sqlx::query("INSERT INTO users (id,email,name,verification_token,verification_token_expires,tenant_id) VALUES ($1,$2,$3,$4,$5,$6)")
-        .bind(&user_id).bind(&email).bind(body.name.as_deref().unwrap_or("")).bind(&verification)
-        .bind(Utc::now()+Duration::hours(24)).bind(&tenant.tenant_id).execute(&mut *tx).await?;
+    let (verification, verification_hash) = super::auth::new_verification_challenge();
+    sqlx::query("INSERT INTO users (id,email,name,verification_token,verification_token_expires,tenant_id,verification_email) VALUES ($1,$2,$3,$4,$5,$6,$2)")
+        .bind(&user_id).bind(&email).bind(body.name.as_deref().unwrap_or("")).bind(&verification_hash)
+        .bind(Utc::now()+Duration::hours(super::auth::VERIFICATION_TTL_HOURS)).bind(&tenant.tenant_id).execute(&mut *tx).await?;
     sqlx::query("INSERT INTO credentials (id,user_id,provider,provider_user_id,hashed_password,tenant_id) VALUES ($1,$2,'email',$3,$4,$5)")
         .bind(format!("cred_{}",uuid::Uuid::new_v4())).bind(&user_id).bind(&email).bind(hashed).bind(&tenant.tenant_id).execute(&mut *tx).await?;
     accept_invite(&mut tx, tenant, &user_id, &invite_id, &role_id).await?;

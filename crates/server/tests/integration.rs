@@ -1347,21 +1347,24 @@ async fn verify_email_endpoint_is_public_and_marks_user_verified() {
         .unwrap();
     assert_eq!(res.status(), StatusCode::CREATED);
 
-    let token: Option<String> =
-        sqlx::query_scalar("SELECT verification_token FROM users WHERE email = $1")
+    // Only the challenge hash is stored; seed a known challenge (the captured
+    // message link path is covered in cases/mail_verification.rs).
+    let token = "vt_known_test_challenge".to_string();
+    let stored: Option<String> =
+        sqlx::query_scalar("UPDATE users SET verification_token = $1 WHERE email = $2 AND verification_token IS NOT NULL RETURNING verification_token")
+            .bind(signing::hash_token(&token))
             .bind(email)
-            .fetch_one(&pool)
+            .fetch_optional(&pool)
             .await
             .unwrap();
-    let token = token.expect("verification token should be present after register");
+    stored.expect("verification challenge should be present after register");
 
     let verify_req = Request::builder()
-        .uri(format!(
-            "/auth/verify-email?token={}",
-            urlencoding::encode(&token)
-        ))
+        .method("POST")
+        .uri("/auth/verify-email")
         .header("x-tenant-slug", TEST_TENANT_SLUG)
-        .body(Body::empty())
+        .header("content-type", "application/x-www-form-urlencoded")
+        .body(Body::from(format!("token={}", urlencoding::encode(&token))))
         .unwrap();
 
     let verify_res = app.clone().oneshot(verify_req).await.unwrap();
@@ -1395,24 +1398,27 @@ async fn verified_email_is_reflected_in_login_me_and_refresh_responses() {
         .unwrap();
     assert_eq!(register_res.status(), StatusCode::CREATED);
 
-    let token: Option<String> =
-        sqlx::query_scalar("SELECT verification_token FROM users WHERE email = $1")
+    // Only the challenge hash is stored; seed a known challenge (the captured
+    // message link path is covered in cases/mail_verification.rs).
+    let token = "vt_known_test_challenge".to_string();
+    let stored: Option<String> =
+        sqlx::query_scalar("UPDATE users SET verification_token = $1 WHERE email = $2 AND verification_token IS NOT NULL RETURNING verification_token")
+            .bind(signing::hash_token(&token))
             .bind(email)
-            .fetch_one(&pool)
+            .fetch_optional(&pool)
             .await
             .unwrap();
-    let token = token.expect("verification token should be present after register");
+    stored.expect("verification challenge should be present after register");
 
     let verify_res = app
         .clone()
         .oneshot(
             Request::builder()
-                .uri(format!(
-                    "/auth/verify-email?token={}",
-                    urlencoding::encode(&token)
-                ))
+                .method("POST")
+                .uri("/auth/verify-email")
                 .header("x-tenant-slug", TEST_TENANT_SLUG)
-                .body(Body::empty())
+                .header("content-type", "application/x-www-form-urlencoded")
+                .body(Body::from(format!("token={}", urlencoding::encode(&token))))
                 .unwrap(),
         )
         .await
@@ -13519,3 +13525,6 @@ async fn staged_management_rotation_is_retryable_audited_and_revokes_old_key() {
 
 #[path = "cases/hosted_signup.rs"]
 mod hosted_signup;
+
+#[path = "cases/mail_verification.rs"]
+mod mail_verification;

@@ -380,12 +380,17 @@ pub async fn create_owner_invite(
     let (subject, text_body, html_body) =
         crate::email::platform_team_invite_email_content(&invite_url, &role, &me.email, &tenant_names);
 
-    if let Err(err) = crate::email::send_email(&state.config, &email, &subject, &text_body, &html_body).await {
-        tracing::warn!(
+    match crate::email::send_email(&state.config, &email, &subject, &text_body, &html_body).await {
+        Ok(crate::email::DeliveryOutcome::ProviderAccepted) => {}
+        Ok(outcome) => tracing::warn!(
+            outcome = outcome.as_str(),
+            "Platform team invite email not sent"
+        ),
+        Err(err) => tracing::warn!(
             to = %email,
             error = %err,
             "Failed to send platform team invite email"
-        );
+        ),
     }
 
     crate::ws::events::emit_team_changed(&state.event_bus, "ten_platform", "invite_created");

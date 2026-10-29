@@ -14,7 +14,7 @@ fn normalize_base_url(server_url: &str) -> String {
     server_url.trim_end_matches('/').to_string()
 }
 
-fn escape_html(input: &str) -> String {
+pub(crate) fn escape_html(input: &str) -> String {
     input
         .replace('&', "&amp;")
         .replace('<', "&lt;")
@@ -29,53 +29,91 @@ pub fn email_delivery_configured(config: &AppConfig) -> bool {
         || (config.smtp_host.is_some() && config.smtp_from_email.is_some())
 }
 
+/// `SUPPRESS_EMAIL` or a configured transport decides whether a send is attempted.
+pub fn email_send_possible(config: &AppConfig) -> bool {
+    !config.suppress_email && email_delivery_configured(config)
+}
+
+/// Upper bound on one provider call, so request handlers and spawned tasks
+/// always finish with a recorded outcome.
+const SEND_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(15);
+
 // ---------------------------------------------------------------------------
 // Unified entry point
 // ---------------------------------------------------------------------------
 
+/// What a send call actually did. Only `ProviderAccepted` means a message left
+/// this process, and even that is not evidence of receipt in a mailbox.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DeliveryOutcome {
+    /// `SUPPRESS_EMAIL=true`: nothing was sent.
+    Suppressed,
+    /// No transport configured: nothing was sent.
+    Unconfigured,
+    /// Resend or the SMTP relay accepted the message.
+    ProviderAccepted,
+}
+
+impl DeliveryOutcome {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            DeliveryOutcome::Suppressed => "suppressed",
+            DeliveryOutcome::Unconfigured => "unconfigured",
+            DeliveryOutcome::ProviderAccepted => "provider_accepted",
+        }
+    }
+}
+
 /// Send a transactional email.
 ///
 /// Prefers **Resend** when `RESEND_API_KEY` is set, otherwise falls back to
-/// SMTP.  If neither provider is configured the call is a no-op (logged as a
-/// warning).
+/// SMTP. Suppression and a missing provider are reported as such, never as a
+/// send; a provider refusal or a call exceeding `SEND_TIMEOUT` is an error.
 pub async fn send_email(
     config: &AppConfig,
     to_email: &str,
     subject: &str,
     text_body: &str,
     html_body: &str,
-) -> Result<(), String> {
+) -> Result<DeliveryOutcome, String> {
     // Suppress all emails in test environments (e.g., e2e tests)
     if config.suppress_email {
-        tracing::debug!(to = to_email, subject, "email suppressed (SUPPRESS_EMAIL=true)");
-        return Ok(());
+        tracing::debug!(subject, "email suppressed (SUPPRESS_EMAIL=true)");
+        return Ok(DeliveryOutcome::Suppressed);
     }
 
-    // Prefer Resend if API key is configured
-    if let Some(ref api_key) = config.resend_api_key {
-        return send_via_resend(
-            api_key,
-            &config.email_from_name,
-            &config.email_from_address,
-            to_email,
-            subject,
-            html_body,
-            text_body,
+    let sent = if let Some(ref api_key) = config.resend_api_key {
+        // Prefer Resend if API key is configured
+        tokio::time::timeout(
+            SEND_TIMEOUT,
+            send_via_resend(
+                api_key,
+                &config.email_from_name,
+                &config.email_from_address,
+                to_email,
+                subject,
+                html_body,
+                text_body,
+            ),
         )
-        .await;
-    }
+        .await
+    } else if config.smtp_host.is_some() && config.smtp_from_email.is_some() {
+        // Fall back to SMTP
+        tokio::time::timeout(
+            SEND_TIMEOUT,
+            send_via_smtp(config, to_email, subject, text_body, html_body),
+        )
+        .await
+    } else {
+        tracing::warn!(subject, "No email provider configured — email not sent");
+        return Ok(DeliveryOutcome::Unconfigured);
+    };
 
-    // Fall back to SMTP
-    if config.smtp_host.is_some() && config.smtp_from_email.is_some() {
-        return send_via_smtp(config, to_email, subject, text_body, html_body).await;
+    match sent {
+        Ok(Ok(())) => Ok(DeliveryOutcome::ProviderAccepted),
+        Ok(Err(error)) => Err(error),
+        Err(_) => Err("Email provider call timed out".into()),
     }
-
-    tracing::warn!(
-        to = to_email,
-        subject = subject,
-        "No email provider configured — email not sent"
-    );
-    Ok(())
 }
 
 // ---------------------------------------------------------------------------
@@ -156,7 +194,7 @@ async fn send_via_smtp(
 ) -> Result<(), String> {
     let to = to_email
         .parse()
-        .map_err(|e| format!("Invalid recipient email '{to_email}': {e}"))?;
+        .map_err(|e| format!("Invalid recipient email: {e}"))?;
 
     let message = Message::builder()
         .from(configured_from_mailbox(config)?)
