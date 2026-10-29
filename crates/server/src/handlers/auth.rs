@@ -1962,17 +1962,19 @@ pub async fn confirm_email_verification(
 ) -> Result<Response, AppError> {
     let hash = signing::hash_token(&params.token);
     let mut tx = state.db.begin().await?;
-    let locked = sqlx::query_scalar::<_, String>(
-        "SELECT id FROM users WHERE verification_token = $1 AND tenant_id = $2 FOR UPDATE",
+    let locked = sqlx::query_as::<_, (String, Option<String>)>(
+        "SELECT id, verification_client_id FROM users WHERE verification_token = $1 AND tenant_id = $2 FOR UPDATE",
     )
     .bind(&hash)
     .bind(&tenant.tenant_id)
     .fetch_optional(&mut *tx)
     .await?;
+    let mut client_id = None;
     let user_id = match locked {
-        Some(id) => {
+        Some((id, client)) => {
+            client_id = client;
             sqlx::query_scalar::<_, String>(
-                "UPDATE users SET email_verified = TRUE, verification_token = NULL, verification_token_expires = NULL \
+                "UPDATE users SET email_verified = TRUE, verification_token = NULL, verification_token_expires = NULL, verification_client_id = NULL \
                  WHERE id = $1 AND verification_token = $2 AND verification_email = email \
                    AND verification_token_expires > clock_timestamp() AND NOT COALESCE(email_verified, FALSE) \
                  RETURNING id",
@@ -2009,15 +2011,44 @@ pub async fn confirm_email_verification(
 
     // No session is created or resumed here: the next sign-in, in any browser
     // or profile, establishes identity. The platform console keeps its notice.
+    let app_name = email::escape_html(tenant.branding_app_name.as_deref().unwrap_or(&tenant.name));
+    let entry = match client_id {
+        Some(client) => verified_return_entry(&state.db, &tenant.tenant_id, &client).await?,
+        None => None,
+    };
     let body = if tenant.slug == "platform" {
         r#"<p>Your email address is verified.</p><p style="margin-top:16px"><a href="/platform/login?verified=true">Sign in</a></p>"#.to_string()
-    } else {
+    } else if let Some(entry) = entry {
+        // A fresh sign-in at the client's own configured entry route: no token,
+        // code, state or verification value travels with it.
         format!(
-            "<p>Your email address is verified. Return to {} and sign in to continue.</p>",
-            email::escape_html(tenant.branding_app_name.as_deref().unwrap_or(&tenant.name))
+            r#"<p>Your email address is verified. Sign in again to continue.</p><p style="margin-top:16px"><a href="{}" rel="noreferrer">Continue to {}</a></p>"#,
+            email::escape_html(&entry),
+            app_name
         )
+    } else {
+        format!("<p>Your email address is verified. Return to {app_name} and sign in to continue.</p>")
     };
     Ok(verification_page(StatusCode::OK, &nonce, "Email verified", &body))
+}
+
+/// The client's current return entry, revalidated against its current callback.
+/// A removed client, a missing entry or a now-invalid one yields no link.
+async fn verified_return_entry(
+    db: &sqlx::PgPool,
+    tenant_id: &str,
+    client_id: &str,
+) -> Result<Option<String>, AppError> {
+    let row: Option<(String, Option<String>)> = sqlx::query_as(
+        "SELECT redirect_uri, return_entry_url FROM oauth_clients WHERE id = $1 AND tenant_id = $2",
+    )
+    .bind(client_id)
+    .bind(tenant_id)
+    .fetch_optional(db)
+    .await?;
+    Ok(row.and_then(|(redirect, entry)| {
+        entry.filter(|entry| super::management::valid_return_entry(entry, &redirect))
+    }))
 }
 
 /// POST /t/{slug}/auth/resend-verification — Resend verification email.

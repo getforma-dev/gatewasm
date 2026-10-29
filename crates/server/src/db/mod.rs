@@ -52,7 +52,7 @@ async fn run_migrations(pool: &PgPool) -> Result<(), sqlx::Error> {
         (5, "hosted password authorization", include_str!("pg_migrations/005_hosted_authorization.sql")),
         (6, "KMS keyring versions", include_str!("pg_migrations/006_keyring_versions.sql")),
         (7, "hosted invitation binding", include_str!("pg_migrations/007_hosted_invitation.sql")),
-        (8, "hashed email verification challenge", include_str!("pg_migrations/008_verification_challenge.sql")),
+        (8, "hashed email verification challenge and client return entry", include_str!("pg_migrations/008_verification_challenge.sql")),
     ];
 
     for &(version, label, sql) in migrations {

@@ -138,8 +138,16 @@ def provision(config, secrets):
             "branding_logo_url": desired["logo_url"], "login_redirect_url": redirect,
             "signup_mode": "invite_only", "allowed_providers": ["email"], "allowed_origins": [origin]})
         request(base, "PATCH", f"/manage/tenants/{existing['id']}/security", key, {"mfa_policy": "off"})
-        request(base, "POST", "/manage/oauth-clients", key, {
-            "client_id": desired["client_id"], "name": desired["name"] + " platform", "redirect_uri": redirect})
+        client = {"client_id": desired["client_id"], "name": desired["name"] + " platform", "redirect_uri": redirect}
+        entry = desired.get("return_entry_url")
+        if entry is not None:
+            # GenUI's per-organization fresh sign-in route (requires a server with
+            # return-entry support); same origin, no query or fragment.
+            parsed_entry = urllib.parse.urlsplit(entry)
+            if f"{parsed_entry.scheme}://{parsed_entry.netloc}" != origin or parsed_entry.query or parsed_entry.fragment:
+                raise Failure(f"return_entry_url for {slug} must be on app_origin without query or fragment")
+            client["return_entry_url"] = entry
+        request(base, "POST", "/manage/oauth-clients", key, client)
         user_receipts = []
         for user in desired["users"]:
             password = os.environ.get(user["password_env"])

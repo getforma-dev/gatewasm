@@ -393,3 +393,82 @@ async fn resend_rotates_cools_down_atomically_and_reports_provider_failure() {
     assert_eq!(delivery(&pool, email).await.as_deref(), Some("failed"));
     assert!(!verified(&pool, email).await);
 }
+
+#[tokio::test]
+async fn verified_page_offers_only_the_clients_current_same_origin_entry() {
+    const CALLBACK: &str = "https://beta.example.test/auth/callback";
+    let (state, pool) = test_state_with_keys(None).await;
+    let app = handlers::create_router_without_rate_limit(state);
+    let (_, key) = create_test_tenant_with_mgmt_key(&pool, "entry-tenant", "Entry Tenant").await;
+    let register_client = |entry: Option<&str>| {
+        let mut body = serde_json::json!({"client_id":"entry-beta","name":"Beta","redirect_uri":CALLBACK});
+        if let Some(entry) = entry {
+            body["return_entry_url"] = entry.into();
+        }
+        app.clone().oneshot(mgmt_request("POST", "/manage/oauth-clients", body, &key))
+    };
+    for bad in [
+        "https://evil.example.test/signin/h1",
+        "http://beta.example.test/signin/h1",
+        "https://beta.example.test/signin/h1?return_to=x",
+        "https://beta.example.test/signin/h1#frag",
+        "https://user@beta.example.test/signin/h1",
+    ] {
+        assert_eq!(register_client(Some(bad)).await.unwrap().status(), StatusCode::BAD_REQUEST, "{bad}");
+    }
+    let created = register_client(Some("https://beta.example.test/signin/h1")).await.unwrap();
+    assert_eq!(created.status(), StatusCode::CREATED);
+    assert_eq!(body_json(created).await["return_entry_url"], "https://beta.example.test/signin/h1");
+    let rotated = register_client(Some("https://beta.example.test/signin/h2")).await.unwrap();
+    assert_eq!(rotated.status(), StatusCode::OK);
+    assert_eq!(body_json(rotated).await["return_entry_url"], "https://beta.example.test/signin/h2");
+    let unchanged = register_client(None).await.unwrap();
+    assert_eq!(body_json(unchanged).await["return_entry_url"], "https://beta.example.test/signin/h2");
+
+    // Accounts associated with the client (the hosted signup path that sets this
+    // association is covered in hosted_signup.rs).
+    async fn account(app: &axum::Router, pool: &PgPool, email: &str, raw: &str) {
+        let res = app
+            .clone()
+            .oneshot(json_request_with_slug("POST", "/auth/register", serde_json::json!({"email": email, "password": PASSWORD}), "entry-tenant"))
+            .await
+            .unwrap();
+        assert_eq!(res.status(), StatusCode::CREATED);
+        seed_challenge(pool, email, raw, 600.0).await;
+        sqlx::query("UPDATE users SET verification_client_id = 'entry-beta' WHERE email = $1")
+            .bind(email)
+            .execute(pool)
+            .await
+            .unwrap();
+    }
+    async fn verified_html(app: &axum::Router, raw: &str) -> String {
+        let res = app.clone().oneshot(confirm("entry-tenant", raw)).await.unwrap();
+        assert_eq!(res.status(), StatusCode::OK);
+        String::from_utf8(axum::body::to_bytes(res.into_body(), 1 << 20).await.unwrap().to_vec()).unwrap()
+    }
+
+    account(&app, &pool, "one@example.test", "vt_entry_one").await;
+    let html = verified_html(&app, "vt_entry_one").await;
+    assert!(html.contains(r#"href="https://beta.example.test/signin/h2""#), "current entry offered");
+    assert!(!html.contains("vt_entry_one") && !html.contains("token"), "no capability travels with the link");
+    let association: Option<String> = sqlx::query_scalar("SELECT verification_client_id FROM users WHERE email = 'one@example.test'")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert!(association.is_none(), "association cleared once used");
+
+    // An entry that no longer matches the client's callback origin is not offered.
+    account(&app, &pool, "two@example.test", "vt_entry_two").await;
+    sqlx::query("UPDATE oauth_clients SET return_entry_url = 'https://evil.example.test/signin' WHERE id = 'entry-beta'")
+        .execute(&pool)
+        .await
+        .unwrap();
+    let html = verified_html(&app, "vt_entry_two").await;
+    assert!(!html.contains("href=") && html.contains("Return to Entry Tenant"));
+
+    // A removed client yields the safe no-link page.
+    account(&app, &pool, "three@example.test", "vt_entry_three").await;
+    sqlx::query("DELETE FROM oauth_clients WHERE id = 'entry-beta'").execute(&pool).await.unwrap();
+    let html = verified_html(&app, "vt_entry_three").await;
+    assert!(!html.contains("href=") && html.contains("Return to Entry Tenant"));
+}

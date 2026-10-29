@@ -208,6 +208,13 @@ async fn invited_registration_is_code_only_bound_and_verifiable() {
     assert_eq!(result.as_object().unwrap().len(), 1);
     assert!(result.get("redirect_uri").is_some());
     assert_eq!(f.counts().await, (1, 0, 1));
+    let association: Option<String> =
+        sqlx::query_scalar("SELECT verification_client_id FROM users WHERE email=$1")
+            .bind(EMAIL)
+            .fetch_one(&f.pool)
+            .await
+            .unwrap();
+    assert_eq!(association.as_deref(), Some(CLIENT), "client association comes from the consumed hosted request");
     let redirect = url::Url::parse(result["redirect_uri"].as_str().unwrap()).unwrap();
     assert_eq!(
         format!(
