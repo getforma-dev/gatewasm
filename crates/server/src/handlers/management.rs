@@ -931,6 +931,14 @@ pub async fn register_oauth_client(
     {
         return Err(AppError::BadRequest { error: "invalid_client_configuration", message: "The return entry URL must be on the callback's origin, without query or fragment.".into() });
     }
+    // Store the parser's serialization, so the rendered link is exactly what
+    // was validated (no raw spacing, backslashes or quoting variants).
+    let mut body = body;
+    body.return_entry_url = body
+        .return_entry_url
+        .as_deref()
+        .map(|entry| url::Url::parse(entry).map(|u| u.to_string()).map_err(|_| invalid()))
+        .transpose()?;
     let result = sqlx::query("INSERT INTO oauth_clients (id, name, redirect_uri, tenant_id, return_entry_url) VALUES ($1,$2,$3,$4,$5) ON CONFLICT (id) DO NOTHING")
         .bind(&body.client_id).bind(&body.name).bind(&body.redirect_uri).bind(&tenant.tenant_id).bind(&body.return_entry_url)
         .execute(&state.db).await?;

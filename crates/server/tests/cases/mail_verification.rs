@@ -466,6 +466,31 @@ async fn verified_page_offers_only_the_clients_current_same_origin_entry() {
     let html = verified_html(&app, "vt_entry_two").await;
     assert!(!html.contains("href=") && html.contains("Return to Entry Tenant"));
 
+    // Another tenant's client is never offered, even if an association pointed at it.
+    let (_, other_key) = create_test_tenant_with_mgmt_key(&pool, "other-entry", "Other Entry").await;
+    let other = app
+        .clone()
+        .oneshot(mgmt_request(
+            "POST",
+            "/manage/oauth-clients",
+            serde_json::json!({"client_id":"other-beta","name":"Other","redirect_uri":"https://other.example.test/auth/callback","return_entry_url":"https://other.example.test/signin/x"}),
+            &other_key,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(other.status(), StatusCode::CREATED);
+    account(&app, &pool, "cross@example.test", "vt_entry_cross").await;
+    sqlx::query("UPDATE users SET verification_client_id = 'other-beta' WHERE email = 'cross@example.test'")
+        .execute(&pool)
+        .await
+        .unwrap();
+    let html = verified_html(&app, "vt_entry_cross").await;
+    assert!(!html.contains("other.example.test") && !html.contains("href="), "cross-tenant client never offered");
+
+    // The stored entry is the parser's normalized form.
+    let normalized = register_client(Some("HTTPS://BETA.example.test:443/signin/h3")).await.unwrap();
+    assert_eq!(body_json(normalized).await["return_entry_url"], "https://beta.example.test/signin/h3");
+
     // A removed client yields the safe no-link page.
     account(&app, &pool, "three@example.test", "vt_entry_three").await;
     sqlx::query("DELETE FROM oauth_clients WHERE id = 'entry-beta'").execute(&pool).await.unwrap();
