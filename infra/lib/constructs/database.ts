@@ -20,7 +20,7 @@ export class Database extends Construct {
 
     // Parameter group for connection limits
     const parameterGroup = new rds.ParameterGroup(this, 'Params', {
-      engine: rds.DatabaseInstanceEngine.postgres({ version: rds.PostgresEngineVersion.VER_16 }),
+      engine: rds.DatabaseInstanceEngine.postgres({ version: rds.PostgresEngineVersion.of('16.15', '16') }),
       parameters: {
         'max_connections': '50',
       },
@@ -28,7 +28,7 @@ export class Database extends Construct {
 
     this.instance = new rds.DatabaseInstance(this, 'Instance', {
       engine: rds.DatabaseInstanceEngine.postgres({
-        version: rds.PostgresEngineVersion.VER_16,
+        version: rds.PostgresEngineVersion.of('16.15', '16'),
       }),
       instanceType: ec2.InstanceType.of(ec2.InstanceClass.T4G, ec2.InstanceSize.MICRO),
       vpc: props.vpc,
@@ -61,6 +61,7 @@ export class Database extends Construct {
       removalPolicy: RemovalPolicy.RETAIN,
 
       parameterGroup,
+      autoMinorVersionUpgrade: false,
     });
 
     // MIGRATION: The RDS auto-generated secret's logical ID includes the stack
