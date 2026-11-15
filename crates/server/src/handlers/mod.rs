@@ -69,7 +69,8 @@ pub fn create_router_without_rate_limit(state: AppState) -> Router {
 fn create_router_inner(state: AppState, rate_limit_enabled: bool) -> Router {
     // One trust boundary for every limiter: the forwarded client address when
     // the peer is the local reverse proxy, otherwise the peer itself.
-    let limiter_key = rate_limit::ClientIpKeyExtractor::from_env();
+    let mut limiters = rate_limit::RateLimiters::from_env();
+    let shutdown = state.shutdown_tx.subscribe();
     // ── Protected auth routes (require JWT + compliance enforcement) ──
     let protected = Router::new()
         .route("/auth/me", get(auth::me))
@@ -92,7 +93,7 @@ fn create_router_inner(state: AppState, rate_limit_enabled: bool) -> Router {
         .route("/auth/resend-verification", post(auth::resend_verification))
         .layer(middleware::from_fn_with_state(state.clone(), require_auth));
     let resend_verification_route = if rate_limit_enabled {
-        resend_verification_route.layer(rate_limit::register_limiter(&limiter_key))
+        resend_verification_route.layer(limiters.register())
     } else {
         resend_verification_route
     };
@@ -101,7 +102,7 @@ fn create_router_inner(state: AppState, rate_limit_enabled: bool) -> Router {
     // lockouts so users can complete MFA enrollment/challenge.
     let mfa_verify_route = Router::new().route("/auth/mfa/verify", post(mfa::verify));
     let mfa_verify_route = if rate_limit_enabled {
-        mfa_verify_route.layer(rate_limit::mfa_verify_limiter(&limiter_key))
+        mfa_verify_route.layer(limiters.mfa_verify())
     } else {
         mfa_verify_route
     };
@@ -143,7 +144,7 @@ fn create_router_inner(state: AppState, rate_limit_enabled: bool) -> Router {
             post(webauthn::login_complete),
         );
     let webauthn_login_routes = if rate_limit_enabled {
-        webauthn_login_routes.layer(rate_limit::login_limiter(&limiter_key))
+        webauthn_login_routes.layer(limiters.login())
     } else {
         webauthn_login_routes
     };
@@ -167,13 +168,13 @@ fn create_router_inner(state: AppState, rate_limit_enabled: bool) -> Router {
 
     let auth_routes = if rate_limit_enabled {
         Router::new()
-            .merge(register_routes.layer(rate_limit::register_limiter(&limiter_key)))
-            .merge(login_routes.layer(rate_limit::login_limiter(&limiter_key)))
-            .merge(authorize_routes.layer(rate_limit::login_limiter(&limiter_key)))
-            .merge(par_routes.layer(rate_limit::login_limiter(&limiter_key)))
-            .merge(token_routes.layer(rate_limit::token_limiter(&limiter_key)))
-            .merge(password_reset_routes.layer(rate_limit::register_limiter(&limiter_key)))
-            .merge(verify_email_routes.layer(rate_limit::register_limiter(&limiter_key)))
+            .merge(register_routes.layer(limiters.register()))
+            .merge(login_routes.layer(limiters.login()))
+            .merge(authorize_routes.layer(limiters.login()))
+            .merge(par_routes.layer(limiters.login()))
+            .merge(token_routes.layer(limiters.token()))
+            .merge(password_reset_routes.layer(limiters.register()))
+            .merge(verify_email_routes.layer(limiters.register()))
     } else {
         Router::new()
             .merge(register_routes)
@@ -743,6 +744,12 @@ fn create_router_inner(state: AppState, rate_limit_enabled: bool) -> Router {
             }
         }
     });
+
+    if rate_limit_enabled {
+        // governor's keyed stores never evict on their own; one sweeper drops
+        // idle client keys from every limiter until the server shuts down.
+        let _sweeper = limiters.spawn_sweeper(rate_limit::SWEEP_INTERVAL, shutdown);
+    }
 
     main_router
         .nest("/t", slug_handler)

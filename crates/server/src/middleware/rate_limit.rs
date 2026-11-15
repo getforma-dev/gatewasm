@@ -22,11 +22,13 @@
 
 use std::net::{IpAddr, SocketAddr};
 use std::sync::Arc;
+use std::time::Duration;
 
 use axum::extract::ConnectInfo;
 use axum::http::{HeaderMap, Request};
+use governor::clock::QuantaInstant;
 use ipnet::IpNet;
-use tower_governor::governor::GovernorConfigBuilder;
+use tower_governor::governor::{GovernorConfigBuilder, SharedRateLimiter};
 use tower_governor::key_extractor::KeyExtractor;
 use tower_governor::{GovernorError, GovernorLayer};
 
@@ -147,15 +149,133 @@ fn parse_forwarded_address(entry: &str) -> Option<IpAddr> {
 }
 
 /// Build a governor layer keyed by client address. `per_second` is governor's
-/// replenish interval in seconds (one token every `per_second` seconds).
-fn limiter(extractor: &ClientIpKeyExtractor, per_second: u64, burst: u32) -> ClientGovernorLayer {
-    let config = GovernorConfigBuilder::default()
-        .key_extractor(extractor.clone())
-        .per_second(per_second)
-        .burst_size(burst)
-        .finish()
-        .expect("Failed to build rate limiter");
-    GovernorLayer::new(config)
+/// How often the sweeper drops idle client keys from every limiter.
+pub const SWEEP_INTERVAL: Duration = Duration::from_secs(60);
+
+/// A limiter's keyed state store, shared with the layer that uses it.
+type SharedStore = SharedRateLimiter<IpAddr, governor::middleware::NoOpMiddleware<QuantaInstant>>;
+
+/// Builds the per-client limiters and keeps a handle on each one's keyed store,
+/// so one sweeper can evict idle keys from all of them.
+///
+/// governor's keyed stores never shrink on their own: every distinct client
+/// address that touches a limited route stays in the map until the process
+/// exits. [`RateLimiters::spawn_sweeper`] runs governor's documented
+/// `retain_recent()` housekeeping on an interval.
+pub struct RateLimiters {
+    key: ClientIpKeyExtractor,
+    stores: Vec<SharedStore>,
+}
+
+impl RateLimiters {
+    /// Limiters keyed by [`ClientIpKeyExtractor::from_env`].
+    pub fn from_env() -> Self {
+        Self::new(ClientIpKeyExtractor::from_env())
+    }
+
+    pub fn new(key: ClientIpKeyExtractor) -> Self {
+        Self {
+            key,
+            stores: Vec::new(),
+        }
+    }
+
+    /// Build a governor layer keyed by client address: one token every
+    /// `period`, up to `burst` tokens, and remember its store for the sweeper.
+    fn layer(&mut self, period: Duration, burst: u32) -> ClientGovernorLayer {
+        let config = GovernorConfigBuilder::default()
+            .key_extractor(self.key.clone())
+            .period(period)
+            .burst_size(burst)
+            .finish()
+            .expect("Failed to build rate limiter");
+        self.stores.push(config.limiter().clone());
+        GovernorLayer::new(config)
+    }
+
+    /// Login endpoints: one token every 6 s, burst of 10 per client.
+    /// Override burst size with LOGIN_RATE_LIMIT_BURST env var (useful for e2e tests).
+    pub fn login(&mut self) -> ClientGovernorLayer {
+        self.layer(
+            Duration::from_secs(6),
+            burst_from_env("LOGIN_RATE_LIMIT_BURST", 10),
+        )
+    }
+
+    /// Register endpoints: one token every 12 s, burst of 5 per client.
+    /// Override burst size with REGISTER_RATE_LIMIT_BURST env var (useful for e2e tests).
+    pub fn register(&mut self) -> ClientGovernorLayer {
+        self.layer(
+            Duration::from_secs(12),
+            burst_from_env("REGISTER_RATE_LIMIT_BURST", 5),
+        )
+    }
+
+    /// Token endpoints: one token every 2 s, burst of 30 per client.
+    /// Override burst size with TOKEN_RATE_LIMIT_BURST env var (useful for e2e tests).
+    pub fn token(&mut self) -> ClientGovernorLayer {
+        self.layer(
+            Duration::from_secs(2),
+            burst_from_env("TOKEN_RATE_LIMIT_BURST", 30),
+        )
+    }
+
+    /// MFA code verification: one token every 1 s, burst of 6 per client.
+    pub fn mfa_verify(&mut self) -> ClientGovernorLayer {
+        self.layer(Duration::from_secs(1), 6)
+    }
+
+    /// Number of client keys currently held across all limiters.
+    pub fn live_keys(&self) -> usize {
+        self.stores.iter().map(|store| store.len()).sum()
+    }
+
+    /// Drop every key whose state is indistinguishable from a fresh bucket
+    /// (governor: theoretical arrival time at least one period in the past).
+    /// Returns the key counts before and after.
+    pub fn sweep(&self) -> (usize, usize) {
+        let before = self.live_keys();
+        for store in &self.stores {
+            store.retain_recent();
+        }
+        (before, self.live_keys())
+    }
+
+    /// Run [`RateLimiters::sweep`] every `every` until `shutdown` turns true or
+    /// its sender is dropped. Detached, like the server's other housekeeping
+    /// loops; the handle is returned for callers that want to await it.
+    pub fn spawn_sweeper(
+        &self,
+        every: Duration,
+        mut shutdown: tokio::sync::watch::Receiver<bool>,
+    ) -> tokio::task::JoinHandle<()> {
+        let sweeper = Self {
+            key: self.key.clone(),
+            stores: self.stores.clone(),
+        };
+        tokio::spawn(async move {
+            let mut ticker = tokio::time::interval(every);
+            ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+            ticker.tick().await; // the first tick completes immediately
+            loop {
+                tokio::select! {
+                    _ = ticker.tick() => {
+                        let (before, after) = sweeper.sweep();
+                        if before != after {
+                            tracing::info!(before, after, limiters = sweeper.stores.len(), "Rate limiter sweep evicted idle client keys");
+                        } else {
+                            tracing::debug!(keys = after, limiters = sweeper.stores.len(), "Rate limiter sweep");
+                        }
+                    }
+                    changed = shutdown.changed() => {
+                        if changed.is_err() || *shutdown.borrow() {
+                            break;
+                        }
+                    }
+                }
+            }
+        })
+    }
 }
 
 fn burst_from_env(var: &str, default: u32) -> u32 {
@@ -163,33 +283,6 @@ fn burst_from_env(var: &str, default: u32) -> u32 {
         .ok()
         .and_then(|v| v.parse().ok())
         .unwrap_or(default)
-}
-
-/// Rate limit for login endpoints: one token every 6 s, burst of 10 per client.
-/// Override burst size with LOGIN_RATE_LIMIT_BURST env var (useful for e2e tests).
-pub fn login_limiter(extractor: &ClientIpKeyExtractor) -> ClientGovernorLayer {
-    limiter(extractor, 6, burst_from_env("LOGIN_RATE_LIMIT_BURST", 10))
-}
-
-/// Rate limit for register endpoints: one token every 12 s, burst of 5 per client.
-/// Override burst size with REGISTER_RATE_LIMIT_BURST env var (useful for e2e tests).
-pub fn register_limiter(extractor: &ClientIpKeyExtractor) -> ClientGovernorLayer {
-    limiter(
-        extractor,
-        12,
-        burst_from_env("REGISTER_RATE_LIMIT_BURST", 5),
-    )
-}
-
-/// Rate limit for token endpoints: one token every 2 s, burst of 30 per client.
-/// Override burst size with TOKEN_RATE_LIMIT_BURST env var (useful for e2e tests).
-pub fn token_limiter(extractor: &ClientIpKeyExtractor) -> ClientGovernorLayer {
-    limiter(extractor, 2, burst_from_env("TOKEN_RATE_LIMIT_BURST", 30))
-}
-
-/// Rate limit for MFA code verification: one token every 1 s, burst of 6 per client.
-pub fn mfa_verify_limiter(extractor: &ClientIpKeyExtractor) -> ClientGovernorLayer {
-    limiter(extractor, 1, 6)
 }
 
 #[cfg(test)]
@@ -367,7 +460,7 @@ mod tests {
         let burst = 3;
         let app = Router::new()
             .route("/", get(|| async { StatusCode::OK }))
-            .layer(limiter(&extractor(), 60, burst));
+            .layer(RateLimiters::new(extractor()).layer(Duration::from_secs(60), burst));
 
         async fn hit(app: &Router, peer: &str, forwarded_for: Option<&str>) -> StatusCode {
             app.clone()
@@ -399,5 +492,79 @@ mod tests {
         );
         // B's own bucket was not drained by the stranger.
         assert_eq!(hit(&app, PROXY, Some(CLIENT_B)).await, StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn sweep_evicts_idle_keys_and_keeps_active_ones() {
+        let mut limiters = RateLimiters::new(extractor());
+        // One token every 20 ms: a key is "fresh again" about 40 ms after its last hit.
+        let fast = Router::new()
+            .route("/", get(|| async { StatusCode::OK }))
+            .layer(limiters.layer(Duration::from_millis(20), 1));
+        // One token a minute: a key stays live for the whole test.
+        let slow = Router::new()
+            .route("/", get(|| async { StatusCode::OK }))
+            .layer(limiters.layer(Duration::from_secs(60), 1));
+        assert_eq!(limiters.live_keys(), 0);
+
+        for last in 1..=5u8 {
+            let client = format!("203.0.113.{last}");
+            fast.clone()
+                .oneshot(request(PROXY, Some(&client)))
+                .await
+                .unwrap();
+        }
+        slow.clone()
+            .oneshot(request(PROXY, Some(CLIENT_A)))
+            .await
+            .unwrap();
+        assert_eq!(limiters.live_keys(), 6);
+
+        // Nothing is stale yet: an immediate sweep keeps every key.
+        assert_eq!(limiters.sweep(), (6, 6));
+
+        tokio::time::sleep(Duration::from_millis(200)).await;
+        assert_eq!(limiters.sweep(), (6, 1));
+        assert_eq!(
+            limiters.live_keys(),
+            1,
+            "the slow limiter's key is still live"
+        );
+    }
+
+    #[tokio::test]
+    async fn sweeper_task_evicts_on_its_interval_and_stops_on_shutdown() {
+        let mut limiters = RateLimiters::new(extractor());
+        let app = Router::new()
+            .route("/", get(|| async { StatusCode::OK }))
+            .layer(limiters.layer(Duration::from_millis(20), 1));
+        for last in 1..=3u8 {
+            let client = format!("203.0.113.{last}");
+            app.clone()
+                .oneshot(request(PROXY, Some(&client)))
+                .await
+                .unwrap();
+        }
+        assert_eq!(limiters.live_keys(), 3);
+
+        let (shutdown_tx, shutdown_rx) = tokio::sync::watch::channel(false);
+        let sweeper = limiters.spawn_sweeper(Duration::from_millis(25), shutdown_rx);
+
+        // Several intervals pass; the keys go idle and the task evicts them.
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(2);
+        while limiters.live_keys() != 0 {
+            assert!(
+                tokio::time::Instant::now() < deadline,
+                "sweeper did not evict idle keys: {} live",
+                limiters.live_keys()
+            );
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+
+        shutdown_tx.send(true).unwrap();
+        tokio::time::timeout(Duration::from_secs(1), sweeper)
+            .await
+            .expect("sweeper must stop when shutdown is signalled")
+            .expect("sweeper must not panic");
     }
 }
