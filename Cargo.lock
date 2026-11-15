@@ -1289,6 +1289,7 @@ dependencies = [
  "governor",
  "hex",
  "hmac 0.12.1",
+ "ipnet",
  "jsonwebtoken",
  "lettre",
  "pem",

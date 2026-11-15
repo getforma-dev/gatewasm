@@ -39,6 +39,7 @@ ring = "0.17"
 pem = "3"
 governor = "0.10"
 tower_governor = "0.8"
+ipnet = "2"
 data-encoding = "2"
 qrcode = "0.14"
 lettre = { version = "0.11", default-features = false, features = ["builder", "smtp-transport", "tokio1-rustls-tls"] }

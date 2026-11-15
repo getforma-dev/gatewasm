@@ -342,6 +342,7 @@ These environment variables enable optional security hardening features. The ser
 |----------|---------|---------|
 | `SSF_SIGNING_KEY` | PEM-encoded Ed25519 private key used exclusively for signing Security Event Tokens (SSF/SET). Keeps SSF signatures independent of the main JWT signing key. | Contents of an Ed25519 PEM file |
 | `MAXMIND_DB_PATH` | Filesystem path to a MaxMind GeoIP `.mmdb` database. Used by the impossible-travel detection engine to geolocate login IPs. | `/data/GeoLite2-City.mmdb` |
+| `TRUSTED_PROXY_CIDRS` | IP networks of the reverse proxy in front of the server. Only a peer inside them may set the rate-limiter key through `X-Forwarded-For`; any other peer is keyed on its own address. Default: loopback plus Docker's local pool (`127.0.0.0/8,::1/128,172.16.0.0/12`). Set it to the proxy's exact network when the topology is known; an empty value trusts nobody. A malformed entry refuses startup. | `172.18.0.0/16` |
 
 To configure on AWS, add the values to App Runner environment variables (see Section 12 — "Adding Environment Variables") or store them in Secrets Manager and reference the ARNs in `infra/lib/constructs/service.ts`.
 

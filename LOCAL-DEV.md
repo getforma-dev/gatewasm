@@ -514,7 +514,7 @@ gatewasm/
 │   │   │   ├── auth.rs           # JWT extraction
 │   │   │   ├── cors.rs           # Dynamic per-tenant CORS
 │   │   │   ├── csp.rs            # CSP headers (via forma-server)
-│   │   │   ├── rate_limit.rs     # IP-based rate limiting
+│   │   │   ├── rate_limit.rs     # Per-client rate limiting (trusted-proxy aware)
 │   │   │   ├── entitlements.rs   # Plan enforcement
 │   │   │   ├── fingerprint.rs    # Client fingerprinting
 │   │   │   ├── dpop.rs           # DPoP proof validation
@@ -579,6 +579,10 @@ After production launch, new migrations start at version 2 and are additive (nev
 | `GITHUB_CLIENT_SECRET` | — | GitHub OAuth client secret |
 | `ED25519_PRIVATE_KEY` | — | PEM key for JWT signing (auto-generated if missing) |
 | `CSRF_SECRET` | auto-generated | HMAC secret for CSRF tokens |
+| `TRUSTED_PROXY_CIDRS` | `127.0.0.0/8,::1/128,172.16.0.0/12` | Peers whose `X-Forwarded-For` the rate limiters trust (comma-separated networks). Set to the proxy's exact network in production; empty trusts nobody |
+| `LOGIN_RATE_LIMIT_BURST` | `10` | Login/authorize/PAR/WebAuthn-login burst per client address |
+| `REGISTER_RATE_LIMIT_BURST` | `5` | Register/verify-email/password-reset burst per client address |
+| `TOKEN_RATE_LIMIT_BURST` | `30` | Token endpoint burst per client address |
 
 ---
 
